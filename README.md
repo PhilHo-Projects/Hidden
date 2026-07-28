@@ -70,5 +70,5 @@ Production configuration:
 | `MAX_PAYLOAD_BYTES` | `16384` |
 | `HEARTBEAT_INTERVAL_MS` | `30000` |
 
-The live application is intended for
+The live application is available at
 [`https://hidden.philippeho.dev`](https://hidden.philippeho.dev).
