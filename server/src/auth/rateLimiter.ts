@@ -12,6 +12,8 @@ export class FixedWindowRateLimiter {
   private readonly entries = new Map<string, WindowEntry>()
   private nextCleanupAt = 0
 
+  constructor(private readonly maxEntries = 10_000) {}
+
   get entryCount() {
     return this.entries.size
   }
@@ -32,6 +34,15 @@ export class FixedWindowRateLimiter {
     }
 
     const existing = this.entries.get(key)
+    if (!existing && this.entries.size >= this.maxEntries) {
+      return {
+        allowed: false,
+        retryAfterSeconds: Math.max(
+          1,
+          Math.ceil(Math.min(windowMs, 60_000) / 1_000),
+        ),
+      }
+    }
     const entry =
       !existing || existing.expiresAt <= now
         ? { count: 0, expiresAt: now + windowMs }

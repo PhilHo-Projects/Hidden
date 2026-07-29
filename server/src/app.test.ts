@@ -289,13 +289,30 @@ describe.sequential('Hidden server', () => {
       origin: ORIGIN,
       headers: { Cookie: `hidden_session=${VALID_SESSION_TOKEN}` },
     })
-    const firstOpened = new Promise<void>((resolve, reject) => {
-      firstSocket.once('open', resolve)
-      firstSocket.once('error', reject)
+    const firstRejected = new Promise<void>((resolve, reject) => {
+      firstSocket.once('unexpected-response', (_request, response) => {
+        try {
+          expect(response.statusCode).toBe(503)
+          resolve()
+        } catch (error) {
+          reject(error)
+        } finally {
+          response.destroy()
+        }
+      })
+      firstSocket.once('open', () =>
+        reject(new Error('Pending authenticated upgrade exceeded the limit.')),
+      )
+      firstSocket.once('error', () => undefined)
     })
 
     await lookupStarted
+    let guest: Probe | undefined
     try {
+      guest = await connectProbe(port)
+      await expect(
+        guest.waitFor(PacketType.ID_ASSIGN),
+      ).resolves.toBeDefined()
       await expectUpgradeStatus(
         port,
         503,
@@ -303,10 +320,69 @@ describe.sequential('Hidden server', () => {
         '/ws',
         `hidden_session=${VALID_SESSION_TOKEN}`,
       )
+      releaseFirstLookup?.()
+      await firstRejected
     } finally {
       releaseFirstLookup?.()
-      await firstOpened
-      firstSocket.close()
+      guest?.close()
+      firstSocket.terminate()
+    }
+  })
+
+  it('closes sockets whose session lookup is still pending during shutdown', async () => {
+    let markLookupStarted: (() => void) | undefined
+    let releaseLookup: (() => void) | undefined
+    const lookupStarted = new Promise<void>((resolve) => {
+      markLookupStarted = resolve
+    })
+    const blockedLookup = new Promise<void>((resolve) => {
+      releaseLookup = resolve
+    })
+    const authService = {
+      async getSession() {
+        markLookupStarted?.()
+        await blockedLookup
+        return undefined
+      },
+      async cleanupExpiredSessions() {
+        return 0
+      },
+      async logout() {},
+      async login(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+      async register(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+    } satisfies AuthServiceLike
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+      shutdownGraceMs: 25,
+    })
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      origin: ORIGIN,
+      headers: { Cookie: `hidden_session=${VALID_SESSION_TOKEN}` },
+    })
+    socket.on('error', () => undefined)
+    const socketClosed = new Promise<void>((resolve) => {
+      socket.once('close', () => resolve())
+    })
+
+    await lookupStarted
+    try {
+      await server?.close()
+      await expect(
+        Promise.race([
+          socketClosed.then(() => true),
+          new Promise<false>((resolve) =>
+            setTimeout(() => resolve(false), 200),
+          ),
+        ]),
+      ).resolves.toBe(true)
+    } finally {
+      releaseLookup?.()
+      socket.terminate()
     }
   })
 

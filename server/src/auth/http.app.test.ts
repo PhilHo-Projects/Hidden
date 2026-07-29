@@ -222,11 +222,31 @@ describe.sequential('Hidden auth HTTP API', () => {
         password: 'x'.repeat(5_000),
       }),
     )
+    const unsupportedCharset = await fetch(
+      `http://127.0.0.1:${port}/api/auth/login`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=madeup',
+          Origin: ORIGIN,
+        },
+        body: '{}',
+      },
+    )
 
     expect(badOrigin.status).toBe(403)
     expect(nonJson.status).toBe(415)
     expect(oversized.status).toBe(413)
-    for (const response of [badOrigin, nonJson, oversized]) {
+    expect(unsupportedCharset.status).toBe(415)
+    for (const response of [
+      badOrigin,
+      nonJson,
+      oversized,
+      unsupportedCharset,
+    ]) {
+      expect(response.headers.get('content-type')).toContain(
+        'application/json',
+      )
       expect((await response.json()).error.code).toBe('invalid_input')
     }
   })

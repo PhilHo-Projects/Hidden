@@ -316,6 +316,20 @@ export function createAuthRouter(options: AuthRouterOptions) {
         })
         return
       }
+      if (
+        error &&
+        typeof error === 'object' &&
+        'status' in error &&
+        typeof error.status === 'number' &&
+        error.status >= 400 &&
+        error.status < 500
+      ) {
+        sendError(response, error.status, {
+          code: 'invalid_input',
+          message: 'Request body could not be read as JSON.',
+        })
+        return
+      }
       next(error)
     },
   )

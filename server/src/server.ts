@@ -9,20 +9,16 @@ import {
 import { createDatabasePool } from './database'
 import { type LogLevel } from './logger'
 import { runMigrations } from './migrations'
-import { resolveDatabaseUrl } from './serverConfig'
+import { RuntimeLifecycle } from './runtimeLifecycle'
+import {
+  resolveAllowedOrigins,
+  resolveDatabaseUrl,
+} from './serverConfig'
 
 function parsePositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
-
-const allowedOrigins = (
-  process.env.ALLOWED_ORIGINS ??
-  'http://localhost:5173,http://127.0.0.1:5173'
-)
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean)
 
 let server: HiddenServer | undefined
 let databasePool: Pool | undefined
@@ -48,7 +44,11 @@ function writeRuntimeLog(
   }
 }
 
-async function start() {
+async function start(isStopping: () => boolean) {
+  const allowedOrigins = resolveAllowedOrigins(
+    process.env.NODE_ENV,
+    process.env.ALLOWED_ORIGINS,
+  )
   const databaseUrl = resolveDatabaseUrl(
     process.env.NODE_ENV,
     process.env.DATABASE_URL,
@@ -62,9 +62,15 @@ async function start() {
       })
     })
     await runMigrations(databasePool)
+    if (isStopping()) {
+      return
+    }
     authService = await AuthService.create(
       new PostgresAuthRepository(databasePool),
     )
+    if (isStopping()) {
+      return
+    }
   } else {
     writeRuntimeLog('warn', 'auth.disabled_guest_only')
   }
@@ -98,6 +104,13 @@ async function start() {
   await server.start()
 }
 
+async function stop() {
+  await server?.close()
+  await databasePool?.end()
+}
+
+const lifecycle = new RuntimeLifecycle(start, stop)
+
 async function shutdown(signal: NodeJS.Signals) {
   if (shuttingDown) {
     return
@@ -105,8 +118,7 @@ async function shutdown(signal: NodeJS.Signals) {
   shuttingDown = true
   writeRuntimeLog('info', 'server.shutdown_requested', { signal })
   try {
-    await server?.close()
-    await databasePool?.end()
+    await lifecycle.stop()
     process.exitCode = 0
   } catch (error) {
     writeRuntimeLog('error', 'server.shutdown_failed', {
@@ -123,10 +135,10 @@ process.once('SIGINT', () => {
   void shutdown('SIGINT')
 })
 
-void start().catch(async (error) => {
+void lifecycle.start().catch(async (error) => {
   writeRuntimeLog('error', 'server.start_failed', {
     error: error instanceof Error ? error.message : String(error),
   })
-  await databasePool?.end().catch(() => undefined)
+  await lifecycle.stop().catch(() => undefined)
   process.exitCode = 1
 })

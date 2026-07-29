@@ -35,4 +35,16 @@ describe('FixedWindowRateLimiter', () => {
 
     expect(limiter.entryCount).toBe(1)
   })
+
+  it('fails closed for new keys once its hard capacity is reached', () => {
+    const limiter = new FixedWindowRateLimiter(2)
+    limiter.consume('first', 1, 60_000, 1_000)
+    limiter.consume('second', 1, 60_000, 1_000)
+
+    expect(limiter.consume('third', 1, 60_000, 1_000)).toEqual({
+      allowed: false,
+      retryAfterSeconds: 60,
+    })
+    expect(limiter.entryCount).toBe(2)
+  })
 })

@@ -81,7 +81,7 @@ Production configuration:
 | `PORT` | `8080` |
 | `DATABASE_URL` | required in production; guest-only when absent in development |
 | `LOG_LEVEL` | `info` |
-| `ALLOWED_ORIGINS` | local Vite origins |
+| `ALLOWED_ORIGINS` | required in production; local Vite origins otherwise |
 | `MAX_CONNECTIONS` | `100` |
 | `MAX_MESSAGES_PER_SECOND` | `30` |
 | `MAX_PAYLOAD_BYTES` | `16384` |
