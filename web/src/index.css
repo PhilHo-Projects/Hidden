@@ -2,20 +2,20 @@
 
 @font-face {
   font-family: "Edo SZ";
-  src: url("/src/assets/fonts/edosz.ttf") format("truetype");
-  font-display: swap;
+  src: url("/src/assets/fonts/edosz.woff2") format("woff2");
+  font-display: block;
 }
 
 @font-face {
   font-family: "Street Soul";
-  src: url("/src/assets/fonts/street-soul.ttf") format("truetype");
+  src: url("/src/assets/fonts/street-soul.woff2") format("woff2");
   font-display: swap;
 }
 
 @font-face {
   font-family: "JetBrains Unity";
-  src: url("/src/assets/fonts/jetbrains-mono-bold.ttf") format("truetype");
-  font-display: swap;
+  src: url("/src/assets/fonts/jetbrains-mono-bold.woff2") format("woff2");
+  font-display: block;
 }
 
 :root {
