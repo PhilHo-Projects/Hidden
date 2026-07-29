@@ -14,6 +14,7 @@ import {
 import {
   clearSessionCookie,
   createSessionCookie,
+  hasSessionCookie,
   readSessionToken,
 } from './sessionToken'
 
@@ -154,13 +155,13 @@ export function createAuthRouter(options: AuthRouterOptions) {
       if (
         throttle(response, [
           {
-            key: `login-user:${ip}:${usernameKey}`,
-            limit: 10,
+            key: `login-ip:${ip}`,
+            limit: 30,
             windowMs: 15 * 60 * 1_000,
           },
           {
-            key: `login-ip:${ip}`,
-            limit: 30,
+            key: `login-user:${ip}:${usernameKey}`,
+            limit: 10,
             windowMs: 15 * 60 * 1_000,
           },
         ])
@@ -220,8 +221,22 @@ export function createAuthRouter(options: AuthRouterOptions) {
   }
 
   router.get('/session', async (request, response) => {
-    const token = sessionToken(request)
-    if (!options.authService || !token) {
+    const cookieHeader = request.get('cookie')
+    const token = readSessionToken(cookieHeader, options.secureCookie)
+    if (!options.authService) {
+      sendError(response, 503, {
+        code: 'account_service_unavailable',
+        message: 'Accounts are temporarily unavailable.',
+      })
+      return
+    }
+    if (!token) {
+      if (hasSessionCookie(cookieHeader, options.secureCookie)) {
+        response.setHeader(
+          'Set-Cookie',
+          clearSessionCookie(options.secureCookie),
+        )
+      }
       response.status(200).json({ user: null })
       return
     }

@@ -9,6 +9,7 @@ import { createHiddenServer, type HiddenServer } from './app'
 import { PacketType } from './protocol'
 
 const ORIGIN = 'http://localhost:5173'
+const VALID_SESSION_TOKEN = 'v'.repeat(43)
 
 class Probe {
   private readonly buffered: unknown[][] = []
@@ -245,10 +246,74 @@ describe.sequential('Hidden server', () => {
     expect(closeCode).toBe(1009)
   })
 
+  it('counts authenticated upgrades while their session lookup is pending', async () => {
+    let lookupCount = 0
+    let markLookupStarted: (() => void) | undefined
+    let releaseFirstLookup: (() => void) | undefined
+    const lookupStarted = new Promise<void>((resolve) => {
+      markLookupStarted = resolve
+    })
+    const firstLookupBlocked = new Promise<void>((resolve) => {
+      releaseFirstLookup = resolve
+    })
+    const user = {
+      id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+      username: 'Account_Player',
+    }
+    const authService = {
+      async getSession() {
+        lookupCount += 1
+        if (lookupCount === 1) {
+          markLookupStarted?.()
+          await firstLookupBlocked
+        }
+        return user
+      },
+      async cleanupExpiredSessions() {
+        return 0
+      },
+      async logout() {},
+      async login(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+      async register(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+    } satisfies AuthServiceLike
+    const { port } = await startServer({
+      authService,
+      maxConnections: 1,
+      sessionCookieSecure: false,
+    })
+    const firstSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      origin: ORIGIN,
+      headers: { Cookie: `hidden_session=${VALID_SESSION_TOKEN}` },
+    })
+    const firstOpened = new Promise<void>((resolve, reject) => {
+      firstSocket.once('open', resolve)
+      firstSocket.once('error', reject)
+    })
+
+    await lookupStarted
+    try {
+      await expectUpgradeStatus(
+        port,
+        503,
+        ORIGIN,
+        '/ws',
+        `hidden_session=${VALID_SESSION_TOKEN}`,
+      )
+    } finally {
+      releaseFirstLookup?.()
+      await firstOpened
+      firstSocket.close()
+    }
+  })
+
   it('binds an authenticated socket to the account username instead of client input', async () => {
     const authService = {
       async getSession(rawToken: string | undefined) {
-        return rawToken === 'valid-session'
+        return rawToken === VALID_SESSION_TOKEN
           ? {
               id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
               username: 'Account_Player',
@@ -274,7 +339,7 @@ describe.sequential('Hidden server', () => {
       port,
       ORIGIN,
       '/ws',
-      'hidden_session=valid-session',
+      `hidden_session=${VALID_SESSION_TOKEN}`,
     )
     const accountId = Number((await account.waitFor(PacketType.ID_ASSIGN))[2])
 
@@ -327,7 +392,7 @@ describe.sequential('Hidden server', () => {
       503,
       ORIGIN,
       '/ws',
-      'hidden_session=valid-session',
+      `hidden_session=${VALID_SESSION_TOKEN}`,
     )
     const guest = await connectProbe(port)
     await expect(guest.waitFor(PacketType.ID_ASSIGN)).resolves.toBeDefined()

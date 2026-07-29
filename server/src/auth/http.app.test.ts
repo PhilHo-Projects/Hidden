@@ -54,7 +54,7 @@ class HttpTestAuthService {
   }
 
   private issue(): AuthSession {
-    const rawToken = `test-token-${this.nextToken++}`
+    const rawToken = String(this.nextToken++).padStart(43, 'a')
     this.sessions.set(rawToken, USER)
     return {
       user: USER,
@@ -76,7 +76,10 @@ afterEach(async () => {
   }
 })
 
-async function startServer(authService?: HttpTestAuthService) {
+async function startServer(
+  authService?: HttpTestAuthService,
+  overrides: Partial<Parameters<typeof createHiddenServer>[0]> = {},
+) {
   staticRoot = await mkdtemp(path.join(tmpdir(), 'hidden-auth-static-'))
   await writeFile(path.join(staticRoot, 'index.html'), '<title>Hidden</title>')
   server = createHiddenServer({
@@ -87,6 +90,7 @@ async function startServer(authService?: HttpTestAuthService) {
     port: 0,
     sessionCookieSecure: false,
     staticRoot,
+    ...overrides,
   })
   return server.start()
 }
@@ -145,6 +149,13 @@ describe.sequential('Hidden auth HTTP API', () => {
       { headers: { Cookie: cookie } },
     )
     expect(await afterLogout.json()).toEqual({ user: null })
+
+    const malformed = await fetch(
+      `http://127.0.0.1:${port}/api/auth/session`,
+      { headers: { Cookie: 'hidden_session=too-short' } },
+    )
+    expect(malformed.headers.get('set-cookie')).toContain('Max-Age=0')
+    expect(await malformed.json()).toEqual({ user: null })
   })
 
   it('maps stable auth failures without exposing credential details', async () => {
@@ -243,7 +254,81 @@ describe.sequential('Hidden auth HTTP API', () => {
     })
   })
 
-  it('keeps guest session discovery available when accounts are disabled', async () => {
+  it('uses the trusted reverse-proxy address for per-IP limits', async () => {
+    const { port } = await startServer(new HttpTestAuthService(), {
+      trustProxy: 1,
+    })
+    let response: Response | undefined
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const request = authPost({
+        username: `Player_${attempt}`,
+        password: 'correct horse battery staple',
+      })
+      response = await fetch(
+        `http://127.0.0.1:${port}/api/auth/register`,
+        {
+          ...request,
+          headers: {
+            ...request.headers,
+            'X-Forwarded-For': '203.0.113.10',
+          },
+        },
+      )
+    }
+    expect(response?.status).toBe(429)
+
+    const otherIpRequest = authPost({
+      username: 'Other_Player',
+      password: 'correct horse battery staple',
+    })
+    const otherIp = await fetch(
+      `http://127.0.0.1:${port}/api/auth/register`,
+      {
+        ...otherIpRequest,
+        headers: {
+          ...otherIpRequest.headers,
+          'X-Forwarded-For': '203.0.113.11',
+        },
+      },
+    )
+    expect(otherIp.status).toBe(201)
+  })
+
+  it('throttles login per IP and username', async () => {
+    const { port } = await startServer(new HttpTestAuthService())
+    let response: Response | undefined
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      response = await fetch(
+        `http://127.0.0.1:${port}/api/auth/login`,
+        authPost({
+          username: 'Player_One',
+          password: 'wrong password',
+        }),
+      )
+    }
+
+    expect(response?.status).toBe(429)
+    expect(Number(response?.headers.get('retry-after'))).toBeGreaterThan(0)
+  })
+
+  it('throttles total login attempts from one IP across usernames', async () => {
+    const { port } = await startServer(new HttpTestAuthService())
+    let response: Response | undefined
+    for (let attempt = 0; attempt < 31; attempt += 1) {
+      response = await fetch(
+        `http://127.0.0.1:${port}/api/auth/login`,
+        authPost({
+          username: `Player_${attempt}`,
+          password: 'correct horse battery staple',
+        }),
+      )
+    }
+
+    expect(response?.status).toBe(429)
+    expect(Number(response?.headers.get('retry-after'))).toBeGreaterThan(0)
+  })
+
+  it('reports explicit guest-only mode when accounts are disabled', async () => {
     const { port } = await startServer()
     const session = await fetch(
       `http://127.0.0.1:${port}/api/auth/session`,
@@ -256,7 +341,13 @@ describe.sequential('Hidden auth HTTP API', () => {
       }),
     )
 
-    expect(await session.json()).toEqual({ user: null })
+    expect(session.status).toBe(503)
+    expect(await session.json()).toEqual({
+      error: {
+        code: 'account_service_unavailable',
+        message: 'Accounts are temporarily unavailable.',
+      },
+    })
     expect(register.status).toBe(503)
     expect(await register.json()).toEqual({
       error: {
@@ -293,7 +384,7 @@ describe.sequential('Hidden auth HTTP API', () => {
       expect(output).toContain('"event":"auth.registered"')
       expect(output).not.toContain('Secret_Player')
       expect(output).not.toContain('never log this password')
-      expect(output).not.toContain('test-token')
+      expect(output).not.toContain('aaaaaaaaaa')
     } finally {
       log.mockRestore()
     }

@@ -24,4 +24,15 @@ describe('FixedWindowRateLimiter', () => {
     expect(limiter.consume('first', 1, 1_000, 1_001).allowed).toBe(true)
     expect(limiter.consume('second', 1, 1_000, 1_001).allowed).toBe(false)
   })
+
+  it('periodically discards expired keys so attacker-controlled names do not accumulate', () => {
+    const limiter = new FixedWindowRateLimiter()
+    for (let index = 0; index < 300; index += 1) {
+      limiter.consume(`login:${index}`, 1, 1_000, index)
+    }
+
+    limiter.consume('current', 1, 1_000, 10_000)
+
+    expect(limiter.entryCount).toBe(1)
+  })
 })

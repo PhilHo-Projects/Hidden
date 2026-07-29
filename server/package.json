@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "dev": "tsc --watch --preserveWatchOutput",
     "test": "vitest run",
+    "test:integration": "vitest run src/auth/repository.integration.test.ts",
     "test:watch": "vitest"
   },
   "keywords": [],

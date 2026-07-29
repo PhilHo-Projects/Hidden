@@ -3,6 +3,13 @@ import paperIcon from './assets/icons/battle/move-paper.png'
 import rockIcon from './assets/icons/battle/move-rock.png'
 import scissorsIcon from './assets/icons/battle/move-scissors.png'
 import exitDoorIcon from './assets/icons/exit-door.png'
+import {
+  AuthApiError,
+  createAuthClient,
+  type AuthUser,
+} from './auth/authClient'
+import type { AccountMode } from './auth/accountValidation'
+import { AccountForm } from './components/AccountForm'
 import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
 import { PowerupTray } from './components/PowerupTray'
 import {
@@ -34,6 +41,7 @@ import {
   getBackTarget,
   getOpponentName,
   getScoreCountLabels,
+  resolvePlayerName,
   shouldShowOpponentBoard,
   type Screen,
 } from './game/viewModel'
@@ -46,6 +54,7 @@ const pieces = [
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 type DestructionEffectMap = Partial<Record<number, CellDestructionEffect>>
+const accountClient = createAuthClient()
 
 const wsUrl = () =>
   resolveWebSocketUrl({
@@ -136,7 +145,12 @@ function AdvancedSettings({
 
 function App() {
   const [screen, setScreen] = useState<Screen>('intro')
-  const [username] = useState(createGuestName)
+  const [guestUsername] = useState(createGuestName)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
+  const [authHydrated, setAuthHydrated] = useState(false)
+  const [authMode, setAuthMode] = useState<AccountMode>('register')
+  const [authBusy, setAuthBusy] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
   const [rounds, setRounds] = useState(6)
   const [turnSeconds, setTurnSeconds] = useState(10)
   const [blindMode, setBlindMode] = useState(true)
@@ -164,6 +178,35 @@ function App() {
   const destructionSequenceRef = useRef(0)
   const destructionTimeoutsRef = useRef<number[]>([])
   const countdownRunRef = useRef(0)
+  const username = resolvePlayerName(authUser?.username, guestUsername)
+
+  useEffect(() => {
+    let active = true
+
+    void accountClient
+      .getSession()
+      .then((user) => {
+        if (!active) return
+        setAuthUser(user)
+        if (user) {
+          setStatus({
+            tone: 'success',
+            label: 'ACCOUNT',
+            detail: `Signed in as ${user.username}.`,
+          })
+        }
+      })
+      .catch(() => {
+        // Account availability must never block guest or offline play.
+      })
+      .finally(() => {
+        if (active) setAuthHydrated(true)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     matchRef.current = match
@@ -262,7 +305,7 @@ function App() {
         setStatus({
           tone: 'working',
           label: 'CONNECTED',
-          detail: 'Syncing your guest profile…',
+          detail: 'Syncing your player profile…',
         })
         return
       }
@@ -295,7 +338,7 @@ function App() {
         setStatus({
           tone: 'working',
           label: 'CONNECTED',
-          detail: `Client #${event.clientId} assigned. Syncing guest profile…`,
+          detail: `Client #${event.clientId} assigned. Syncing player profile…`,
         })
         return
       }
@@ -398,6 +441,92 @@ function App() {
     clientRef.current = null
   }, [])
 
+  const openAccount = useCallback((mode: AccountMode) => {
+    countdownRunRef.current += 1
+    closeClient()
+    setMatch(null)
+    matchRef.current = null
+    setUsers([])
+    setReadyLocked(false)
+    setAuthMode(mode)
+    setAuthError(null)
+    setStatus({
+      tone: 'neutral',
+      label: 'ACCOUNT',
+      detail: mode === 'register' ? 'Create a permanent player name.' : 'Return to your account.',
+    })
+    setScreen('account')
+  }, [closeClient])
+
+  const submitAccount = useCallback(
+    async (submittedUsername: string, password: string) => {
+      setAuthBusy(true)
+      setAuthError(null)
+      try {
+        const user =
+          authMode === 'register'
+            ? await accountClient.register(submittedUsername, password)
+            : await accountClient.login(submittedUsername, password)
+        setAuthUser(user)
+        setStatus({
+          tone: 'success',
+          label: 'ACCOUNT',
+          detail: `Signed in as ${user.username}.`,
+        })
+        setScreen('mode-select')
+      } catch (cause) {
+        const message =
+          cause instanceof AuthApiError
+            ? cause.message
+            : 'Accounts are temporarily unavailable.'
+        setAuthError(message)
+        setStatus({
+          tone: 'error',
+          label: 'ACCOUNT ERROR',
+          detail: message,
+        })
+        throw cause
+      } finally {
+        setAuthBusy(false)
+      }
+    },
+    [authMode],
+  )
+
+  const logout = useCallback(async () => {
+    setAuthBusy(true)
+    setAuthError(null)
+    try {
+      await accountClient.logout()
+      closeClient()
+      setAuthUser(null)
+      setUsers([])
+      setReadyLocked(false)
+      setMatch(null)
+      matchRef.current = null
+      setStatus({
+        tone: 'neutral',
+        label: 'GUEST',
+        detail: `Playing as ${guestUsername}.`,
+      })
+      setAnnouncement('')
+      setScreen('intro')
+    } catch (cause) {
+      const message =
+        cause instanceof AuthApiError
+          ? cause.message
+          : 'Accounts are temporarily unavailable.'
+      setAuthError(message)
+      setStatus({
+        tone: 'error',
+        label: 'LOGOUT ERROR',
+        detail: message,
+      })
+    } finally {
+      setAuthBusy(false)
+    }
+  }, [closeClient, guestUsername])
+
   const backHome = useCallback(() => {
     countdownRunRef.current += 1
     closeClient()
@@ -413,12 +542,14 @@ function App() {
     setOpponentDestructionEffects({})
     setStatus({
       tone: 'neutral',
-      label: 'GUEST',
-      detail: 'Choose how you want to play.',
+      label: authUser ? 'ACCOUNT' : 'GUEST',
+      detail: authUser
+        ? `Signed in as ${username}.`
+        : 'Choose how you want to play.',
     })
     setAnnouncement('')
     setScreen('intro')
-  }, [closeClient])
+  }, [authUser, closeClient, username])
 
   const navigateBack = useCallback(() => {
     const current = screenRef.current
@@ -610,6 +741,12 @@ function App() {
   const opponentScoreCountLabels = match
     ? getScoreCountLabels(match.opponentGrid.cells)
     : {}
+  const accountChangeLocked =
+    screen === 'matchmaking' ||
+    screen === 'ready' ||
+    screen === 'countdown' ||
+    screen === 'battle' ||
+    screen === 'results'
 
   return (
     <main className={`unity-shell unity-${screen}`}>
@@ -629,11 +766,15 @@ function App() {
             <button
               type="button"
               className="nav-brush-button nav-account-button"
-              aria-label="Sign in, coming soon"
-              title="Coming soon"
-              disabled
+              aria-label={authUser ? `Log out ${authUser.username}` : 'Sign in'}
+              disabled={authBusy || accountChangeLocked || screen === 'account'}
+              onClick={
+                authUser
+                  ? () => void logout()
+                  : () => openAccount('login')
+              }
             >
-              SIGN IN
+              {authBusy ? 'WAIT...' : authUser ? 'LOG OUT' : 'SIGN IN'}
             </button>
           </nav>
         </header>
@@ -643,26 +784,70 @@ function App() {
         <section className="welcome-screen">
           <GameMasthead />
           <div className="action-grid welcome-actions">
-            <ActionChoice
-              label="PLAY AS GUEST"
-              description={`Jump in now as ${username}.`}
-              onClick={() => {
-                setStatus({
-                  tone: 'neutral',
-                  label: 'GUEST',
-                  detail: `Playing as ${username}.`,
-                })
-                setScreen('mode-select')
-              }}
-            />
-            <ActionChoice
-              label="SIGN IN"
-              description="Access your account."
-              badge="Coming soon"
-              tone="secondary"
-              disabled
-            />
+            {!authHydrated ? (
+              <ActionChoice
+                label="CHECKING SESSION"
+                description="Looking for a saved account."
+                disabled
+              />
+            ) : authUser ? (
+              <>
+                <ActionChoice
+                  label={`CONTINUE AS ${authUser.username}`}
+                  description="Use your permanent player identity."
+                  onClick={() => {
+                    setStatus({
+                      tone: 'success',
+                      label: 'ACCOUNT',
+                      detail: `Playing as ${authUser.username}.`,
+                    })
+                    setScreen('mode-select')
+                  }}
+                />
+                <ActionChoice
+                  label="LOG OUT"
+                  description="Return to guest play on this browser."
+                  tone="secondary"
+                  disabled={authBusy}
+                  onClick={() => void logout()}
+                />
+              </>
+            ) : (
+              <>
+                <ActionChoice
+                  label="PLAY AS GUEST"
+                  description={`Jump in now as ${guestUsername}.`}
+                  onClick={() => {
+                    setStatus({
+                      tone: 'neutral',
+                      label: 'GUEST',
+                      detail: `Playing as ${guestUsername}.`,
+                    })
+                    setScreen('mode-select')
+                  }}
+                />
+                <ActionChoice
+                  label="CREATE ACCOUNT"
+                  description="Claim a permanent player name."
+                  tone="secondary"
+                  onClick={() => openAccount('register')}
+                />
+              </>
+            )}
           </div>
+        </section>
+      ) : null}
+
+      {screen === 'account' ? (
+        <section className="setup-screen account-screen">
+          <GameMasthead compact />
+          <AccountForm
+            mode={authMode}
+            busy={authBusy}
+            error={authError}
+            onModeChange={openAccount}
+            onSubmit={submitAccount}
+          />
         </section>
       ) : null}
 

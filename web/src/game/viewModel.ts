@@ -3,6 +3,7 @@ import type { UserEntry } from './protocol'
 
 export type Screen =
   | 'intro'
+  | 'account'
   | 'mode-select'
   | 'online-menu'
   | 'offline-setup'
@@ -16,6 +17,7 @@ export type Screen =
 export function getScreenLabel(screen: Screen) {
   return {
     intro: 'Hidden',
+    account: 'Account',
     'mode-select': 'Play',
     'online-menu': 'Online',
     'offline-setup': 'Offline',
@@ -33,6 +35,10 @@ export function createGuestName(random: () => number = Math.random) {
   return `Guest#${suffix.toString().padStart(4, '0')}`
 }
 
+export function resolvePlayerName(accountUsername: string | undefined, guestUsername: string) {
+  return accountUsername ?? guestUsername
+}
+
 export function getScoreCountLabels(cells: CellState[]) {
   let count = 0
 
@@ -48,6 +54,7 @@ export function getBackTarget(screen: Screen, isOnlineMatch = false): Screen {
   const matchSetup: Screen = isOnlineMatch ? 'online-menu' : 'offline-setup'
   const targets: Record<Screen, Screen> = {
     intro: 'intro',
+    account: 'intro',
     'mode-select': 'intro',
     'online-menu': 'mode-select',
     'offline-setup': 'mode-select',

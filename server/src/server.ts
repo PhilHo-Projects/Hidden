@@ -88,6 +88,12 @@ async function start() {
     ),
     port: parsePositiveInteger(process.env.PORT, 8080),
     staticRoot: process.env.STATIC_ROOT ?? path.resolve(process.cwd(), 'public'),
+    trustProxy:
+      process.env.NODE_ENV === 'production'
+        ? parsePositiveInteger(process.env.TRUST_PROXY_HOPS, 1)
+        : process.env.TRUST_PROXY_HOPS
+          ? parsePositiveInteger(process.env.TRUST_PROXY_HOPS, 1)
+          : false,
   })
   await server.start()
 }

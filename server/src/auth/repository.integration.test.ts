@@ -32,6 +32,30 @@ describeDatabase('PostgreSQL auth repository', () => {
     expect(result.rows).toEqual([{ version: '001_accounts' }])
   })
 
+  it('serializes migration runners with the PostgreSQL advisory lock', async () => {
+    const blocker = await pool.connect()
+    await blocker.query(
+      `SELECT pg_advisory_lock(hashtext('hidden_schema_migrations'))`,
+    )
+    let finished = false
+    const pendingMigration = runMigrations(pool).then(() => {
+      finished = true
+    })
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(finished).toBe(false)
+    } finally {
+      await blocker.query(
+        `SELECT pg_advisory_unlock(hashtext('hidden_schema_migrations'))`,
+      )
+      blocker.release()
+    }
+
+    await pendingMigration
+    expect(finished).toBe(true)
+  })
+
   it('creates an account and rejects a case-insensitive duplicate', async () => {
     const expiresAt = new Date('2030-01-31T00:00:00.000Z')
     const created = await repository.createAccount({
@@ -156,5 +180,25 @@ describeDatabase('PostgreSQL auth repository', () => {
         new Date('2030-01-03T00:00:00.000Z'),
       ),
     ).resolves.toBeUndefined()
+  })
+
+  it('deletes every session when its owning account is deleted', async () => {
+    const account = await repository.createAccount({
+      id: randomUUID(),
+      username: 'Cascade_Player',
+      usernameKey: 'cascade_player',
+      passwordHash: 'encoded-hash',
+      sessionTokenHash: Buffer.alloc(32, 9),
+      expiresAt: new Date('2030-01-31T00:00:00.000Z'),
+      now: new Date('2030-01-01T00:00:00.000Z'),
+    })
+
+    await pool.query('DELETE FROM users WHERE id = $1', [account.id])
+    const result = await pool.query<{ count: string }>(
+      'SELECT count(*) FROM sessions WHERE user_id = $1',
+      [account.id],
+    )
+
+    expect(result.rows[0]?.count).toBe('0')
   })
 })

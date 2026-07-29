@@ -30,6 +30,7 @@ ENV STATIC_ROOT=/app/public
 WORKDIR /app
 COPY --from=server-production-dependencies --chown=node:node /build/server/node_modules ./node_modules
 COPY --from=server-build --chown=node:node /build/server/dist ./server/dist
+COPY --from=server-build --chown=node:node /build/server/migrations ./server/migrations
 COPY --from=web-build --chown=node:node /build/web/dist ./public
 USER node
 EXPOSE 8080

@@ -31,6 +31,7 @@ export interface HiddenServerOptions {
   shutdownGraceMs?: number
   sessionCookieSecure?: boolean
   staticRoot: string
+  trustProxy?: boolean | number
 }
 
 export interface HiddenServer {
@@ -65,8 +66,12 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
   let heartbeat: NodeJS.Timeout | undefined
   let authCleanup: NodeJS.Timeout | undefined
   let closePromise: Promise<void> | undefined
+  let pendingUpgradeCount = 0
 
   app.disable('x-powered-by')
+  if (options.trustProxy !== undefined) {
+    app.set('trust proxy', options.trustProxy)
+  }
   app.get('/healthz', (_request, response) => {
     response.status(200).json({ status: 'ok' })
   })
@@ -113,40 +118,48 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
       return
     }
 
-    if (gameHandler.connectionCount >= maxConnections) {
+    if (
+      gameHandler.connectionCount + pendingUpgradeCount >=
+      maxConnections
+    ) {
       logger('warn', 'upgrade.connection_limit', { maxConnections })
       rejectUpgrade(socket, 503, 'Service Unavailable')
       return
     }
 
-    const rawToken = readSessionToken(
-      request.headers.cookie,
-      secureCookie,
-    )
-    let identity: { accountId: string; username: string } | undefined
-    if (rawToken) {
-      if (!options.authService) {
-        rejectUpgrade(socket, 503, 'Service Unavailable')
-        return
-      }
-      try {
-        const user = await options.authService.getSession(rawToken)
-        if (user) {
-          identity = { accountId: user.id, username: user.username }
+    pendingUpgradeCount += 1
+    try {
+      const rawToken = readSessionToken(
+        request.headers.cookie,
+        secureCookie,
+      )
+      let identity: { accountId: string; username: string } | undefined
+      if (rawToken) {
+        if (!options.authService) {
+          rejectUpgrade(socket, 503, 'Service Unavailable')
+          return
         }
-      } catch {
-        logger('error', 'upgrade.session_lookup_failed')
-        rejectUpgrade(socket, 503, 'Service Unavailable')
+        try {
+          const user = await options.authService.getSession(rawToken)
+          if (user) {
+            identity = { accountId: user.id, username: user.username }
+          }
+        } catch {
+          logger('error', 'upgrade.session_lookup_failed')
+          rejectUpgrade(socket, 503, 'Service Unavailable')
+          return
+        }
+      }
+
+      if (socket.destroyed) {
         return
       }
+      webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+        gameHandler.add(webSocket, identity)
+      })
+    } finally {
+      pendingUpgradeCount -= 1
     }
-
-    if (socket.destroyed) {
-      return
-    }
-    webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-      gameHandler.add(webSocket, identity)
-    })
   }
 
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000

@@ -64,8 +64,7 @@ export function parseCredentials(value: unknown): Credentials {
   if (
     characterCount < MIN_PASSWORD_CHARACTERS ||
     characterCount > MAX_PASSWORD_CHARACTERS ||
-    byteCount > MAX_PASSWORD_BYTES ||
-    password.includes('\u0000')
+    byteCount > MAX_PASSWORD_BYTES
   ) {
     throw new CredentialValidationError(
       'password',

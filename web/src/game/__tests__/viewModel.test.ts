@@ -5,6 +5,7 @@ import {
   getOpponentName,
   getScoreCountLabels,
   getScreenLabel,
+  resolvePlayerName,
   shouldShowOpponentBoard,
 } from '../viewModel'
 import type { GameState } from '../types'
@@ -41,6 +42,7 @@ const makeMatch = (overrides: Partial<GameState> = {}): GameState => ({
 describe('view model helpers', () => {
   it('uses Hidden route labels', () => {
     expect(getScreenLabel('intro')).toBe('Hidden')
+    expect(getScreenLabel('account')).toBe('Account')
     expect(getScreenLabel('mode-select')).toBe('Play')
     expect(getScreenLabel('online-menu')).toBe('Online')
     expect(getScreenLabel('matchmaking')).toBe('Searching')
@@ -53,7 +55,13 @@ describe('view model helpers', () => {
     expect(createGuestName(() => 0.99999)).toBe('Guest#9999')
   })
 
+  it('uses a signed-in account name before the generated guest identity', () => {
+    expect(resolvePlayerName('HiddenPlayer', 'Guest#4821')).toBe('HiddenPlayer')
+    expect(resolvePlayerName(undefined, 'Guest#4821')).toBe('Guest#4821')
+  })
+
   it('returns to the previous pre-game decision without skipping home', () => {
+    expect(getBackTarget('account')).toBe('intro')
     expect(getBackTarget('mode-select')).toBe('intro')
     expect(getBackTarget('online-menu')).toBe('mode-select')
     expect(getBackTarget('offline-setup')).toBe('mode-select')

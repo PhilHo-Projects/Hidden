@@ -415,6 +415,134 @@ summary:focus-visible {
   width: 100%;
 }
 
+.account-screen {
+  grid-template-rows: auto auto;
+}
+
+.account-form {
+  display: grid;
+  width: min(31rem, 94vw);
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(215, 175, 19, 0.72);
+  background: rgba(3, 3, 3, 0.9);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.72);
+}
+
+.account-form-heading {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.account-form-heading p,
+.account-form-heading h2 {
+  margin: 0;
+}
+
+.account-form-heading p {
+  color: var(--unity-yellow);
+  font-size: 0.67rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.account-form-heading h2 {
+  color: #fff;
+  font-family: var(--font-brush);
+  font-size: clamp(2.25rem, 8vw, 3.25rem);
+  font-weight: 400;
+  line-height: 1;
+  text-shadow: 3px 3px 0 #000;
+}
+
+.account-fields {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.account-fields label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.account-fields label > span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.68rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.account-fields input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.68rem 0.75rem;
+  border: 2px solid rgba(255, 255, 255, 0.26);
+  border-radius: 0;
+  background: #0b0b0b;
+  color: #fff;
+  caret-color: var(--unity-yellow);
+}
+
+.account-fields input:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.48);
+}
+
+.account-fields input:focus {
+  border-color: var(--unity-yellow);
+}
+
+.account-fields input:disabled {
+  color: rgba(255, 255, 255, 0.52);
+  cursor: wait;
+}
+
+.account-recovery-note,
+.account-form-error {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.account-recovery-note {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.account-form-error {
+  padding-left: 0.65rem;
+  border-left: 3px solid var(--unity-red);
+  color: #ff8d93;
+}
+
+.account-submit {
+  width: 100%;
+  min-width: 0;
+  min-height: 4.25rem;
+}
+
+.account-mode-switch {
+  min-height: 3rem;
+  padding: 0.65rem;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  text-decoration: underline;
+  text-decoration-color: rgba(215, 175, 19, 0.72);
+  text-underline-offset: 0.28rem;
+  cursor: pointer;
+}
+
+.account-mode-switch:hover:not(:disabled) {
+  color: var(--unity-yellow);
+}
+
+.account-mode-switch:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .guest-identity {
   display: inline-flex;
   margin: -0.2rem 0 0.2rem;

@@ -20,11 +20,21 @@ describe('account credentials', () => {
     })
   })
 
+  it('accepts every password character without trimming or composition rules', () => {
+    const password = `  valid\u0000password  `
+
+    expect(
+      parseCredentials({
+        username: 'Player',
+        password,
+      }).password,
+    ).toBe(password)
+  })
+
   it.each([
     [{ username: 'ab', password: 'valid password' }, 'username'],
     [{ username: 'Player-One', password: 'valid password' }, 'username'],
     [{ username: 'Player', password: 'short' }, 'password'],
-    [{ username: 'Player', password: `valid\u0000password` }, 'password'],
   ])('rejects invalid credentials for %s', (input, field) => {
     expect(() => parseCredentials(input)).toThrowError(
       expect.objectContaining<Partial<CredentialValidationError>>({ field }),

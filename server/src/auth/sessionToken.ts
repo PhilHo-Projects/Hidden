@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 
 const PRODUCTION_COOKIE_NAME = '__Host-hidden_session'
 const DEVELOPMENT_COOKIE_NAME = 'hidden_session'
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/
+const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/
 
 function cookieName(secure: boolean) {
   return secure ? PRODUCTION_COOKIE_NAME : DEVELOPMENT_COOKIE_NAME
@@ -48,6 +48,19 @@ export function createSessionCookie(
 
 export function clearSessionCookie(secure: boolean) {
   return serializeSessionCookie('', secure, 0)
+}
+
+export function hasSessionCookie(
+  cookieHeader: string | undefined,
+  secure: boolean,
+) {
+  if (!cookieHeader) {
+    return false
+  }
+  const name = cookieName(secure)
+  return cookieHeader
+    .split(';')
+    .some((part) => part.trim().startsWith(`${name}=`))
 }
 
 export function readSessionToken(

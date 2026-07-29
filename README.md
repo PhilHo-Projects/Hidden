@@ -21,11 +21,12 @@ cd ..\server
 npm ci
 ```
 
-Start the server on port 8080, then start Vite on port 5173:
+Build and start the server on port 8080, then start Vite on port 5173:
 
 ```powershell
 cd server
-npm run dev
+npm run build
+npm start
 ```
 
 ```powershell
@@ -33,15 +34,27 @@ cd web
 npm run dev
 ```
 
-Vite proxies `/ws` to `ws://127.0.0.1:8080`. Set `VITE_WS_URL` to an explicit
-`ws://` or `wss://` endpoint when a local browser should use another server.
-Offline play does not require the server.
+Vite proxies `/api` and `/ws` to the local service. Set `VITE_WS_URL` to an
+explicit `ws://` or `wss://` endpoint when a local browser should use another
+server. Without `DATABASE_URL`, a non-production service starts in explicit
+guest-only mode and its account endpoints return `503`. Online guest play and
+offline play remain available.
+
+To enable local accounts, set `DATABASE_URL` to a PostgreSQL 16 database before
+starting the service. Migrations run automatically before HTTP begins:
+
+```powershell
+$env:DATABASE_URL='postgresql://hidden:password@127.0.0.1:5432/hidden'
+npm start
+```
 
 ## Verify
 
 ```powershell
 cd server
 npm test
+$env:TEST_DATABASE_URL='postgresql://hidden_test:password@127.0.0.1:5432/hidden_test'
+npm run test:integration
 npm run build
 
 cd ..\web
@@ -55,20 +68,25 @@ the single-page app, and accepts WebSocket upgrades only at `/ws`.
 
 ## Runtime model
 
-Matchmaking and active matches are intentionally held in memory. Run exactly one
-replica: there are no accounts, persistence, or reconnection sessions yet.
+Username/password accounts and browser sessions are stored in PostgreSQL.
+Accounts are optional: guests retain unrestricted online and offline play.
+Matchmaking and active matches are still intentionally held in memory, so run
+exactly one application replica. Match history, replay persistence, and
+reconnection sessions are not part of this release.
 
 Production configuration:
 
 | Variable | Default |
 | --- | --- |
 | `PORT` | `8080` |
+| `DATABASE_URL` | required in production; guest-only when absent in development |
 | `LOG_LEVEL` | `info` |
 | `ALLOWED_ORIGINS` | local Vite origins |
 | `MAX_CONNECTIONS` | `100` |
 | `MAX_MESSAGES_PER_SECOND` | `30` |
 | `MAX_PAYLOAD_BYTES` | `16384` |
 | `HEARTBEAT_INTERVAL_MS` | `30000` |
+| `TRUST_PROXY_HOPS` | `1` in production; disabled otherwise |
 
 The live application is available at
 [`https://hidden.philippeho.dev`](https://hidden.philippeho.dev).
