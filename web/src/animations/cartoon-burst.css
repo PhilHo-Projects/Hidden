@@ -1,0 +1,279 @@
+.cartoon-burst {
+  --burst-cycle: 1600ms;
+  position: relative;
+  display: block;
+  width: 6rem;
+  height: 6rem;
+  contain: layout paint;
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.cartoon-burst > span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+}
+
+.cartoon-burst__flash {
+  z-index: 4;
+  width: 4.8rem;
+  height: 4.8rem;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    #fff 0 15%,
+    #fff9a8 30%,
+    rgba(255, 184, 29, 0.78) 48%,
+    transparent 72%
+  );
+  filter: blur(0.7px);
+  opacity: 0;
+  animation: cartoon-burst-flash var(--burst-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.cartoon-burst__star {
+  opacity: 0;
+  transform-origin: center;
+}
+
+.cartoon-burst__star--outer {
+  z-index: 1;
+  width: 5.8rem;
+  height: 5.8rem;
+  background: conic-gradient(
+    from 18deg,
+    #ff2d00,
+    #ff8a00,
+    #ffe45c,
+    #ff6500,
+    #ff2d00
+  );
+  clip-path: polygon(
+    50% 0%,
+    61% 28%,
+    84% 12%,
+    75% 38%,
+    100% 50%,
+    72% 61%,
+    89% 86%,
+    61% 74%,
+    50% 100%,
+    39% 73%,
+    13% 88%,
+    27% 61%,
+    0% 50%,
+    28% 39%,
+    12% 14%,
+    39% 27%
+  );
+  filter: drop-shadow(0 0 0.6rem rgba(255, 77, 0, 0.7));
+  animation: cartoon-burst-outer var(--burst-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.cartoon-burst__star--inner {
+  z-index: 3;
+  width: 3.6rem;
+  height: 3.6rem;
+  background: #ffe85c;
+  clip-path: polygon(
+    50% 0%,
+    62% 31%,
+    91% 20%,
+    72% 46%,
+    100% 58%,
+    66% 62%,
+    72% 96%,
+    50% 71%,
+    26% 100%,
+    32% 65%,
+    0% 58%,
+    30% 45%,
+    11% 18%,
+    40% 31%
+  );
+  filter: drop-shadow(0 0 0.45rem rgba(255, 232, 92, 0.85));
+  animation: cartoon-burst-inner var(--burst-cycle) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.cartoon-burst__core {
+  z-index: 5;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 0 0.8rem #fff,
+    0 0 1.2rem #ffe85c;
+  opacity: 0;
+  animation: cartoon-burst-core var(--burst-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.cartoon-burst__ring {
+  z-index: 2;
+  width: 4.2rem;
+  height: 4.2rem;
+  border: 0.22rem solid rgba(255, 238, 104, 0.9);
+  border-radius: 999px;
+  opacity: 0;
+  animation: cartoon-burst-ring var(--burst-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.cartoon-burst__spark {
+  z-index: 2;
+  width: 0.42rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: linear-gradient(#fff, #ffe85c 38%, #ff5a00);
+  box-shadow: 0 0 0.45rem rgba(255, 196, 54, 0.9);
+  opacity: 0;
+  transform-origin: center;
+  animation: cartoon-burst-spark var(--burst-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: var(--burst-delay);
+}
+
+@keyframes cartoon-burst-flash {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.08);
+  }
+  4% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.48);
+  }
+  13% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+  26%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.38);
+  }
+}
+
+@keyframes cartoon-burst-outer {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-18deg) scale(0.08);
+  }
+  5% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-8deg) scale(0.52);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(7deg) scale(1.04);
+  }
+  32%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(18deg) scale(1.28);
+  }
+}
+
+@keyframes cartoon-burst-inner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(18deg) scale(0.05);
+  }
+  6% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(8deg) scale(0.62);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-8deg) scale(1.08);
+  }
+  29%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-18deg) scale(1.34);
+  }
+}
+
+@keyframes cartoon-burst-core {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.1);
+  }
+  4% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  18% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+  26%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes cartoon-burst-ring {
+  0%,
+  5% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  10% {
+    opacity: 0.9;
+  }
+  31%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.55);
+  }
+}
+
+@keyframes cartoon-burst-spark {
+  0%,
+  5% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--burst-rotate)) scale(0.2);
+  }
+  10% {
+    opacity: 1;
+  }
+  29% {
+    opacity: 1;
+    transform:
+      translate(
+        calc(-50% + var(--burst-x)),
+        calc(-50% + var(--burst-y))
+      )
+      rotate(var(--burst-rotate))
+      scale(1);
+  }
+  42%,
+  100% {
+    opacity: 0;
+    transform:
+      translate(
+        calc(-50% + var(--burst-x)),
+        calc(-50% + var(--burst-y))
+      )
+      rotate(var(--burst-rotate))
+      scale(0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cartoon-burst > span {
+    animation: none;
+    opacity: 0;
+  }
+
+  .cartoon-burst > .cartoon-burst__star--inner {
+    opacity: 0.72;
+    transform: translate(-50%, -50%) rotate(-8deg) scale(0.72);
+  }
+
+  .cartoon-burst > .cartoon-burst__core {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+}

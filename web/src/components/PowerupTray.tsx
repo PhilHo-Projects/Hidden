@@ -1,3 +1,6 @@
+import extraTurnIcon from '../assets/icons/battle/powerup-extra-turn.png'
+import immuneIcon from '../assets/icons/battle/powerup-immune.png'
+import revealIcon from '../assets/icons/battle/powerup-reveal.png'
 import type { PowerupKey, PowerupState } from '../game/types'
 
 interface PowerupTrayProps {
@@ -7,15 +10,15 @@ interface PowerupTrayProps {
 }
 
 const powerupArt: Record<PowerupKey, string> = {
-  shield: '/assets/shield.png',
-  reveal: '/assets/binoculars.png',
-  extraTurn: '/assets/play-button.png',
+  shield: immuneIcon,
+  reveal: revealIcon,
+  extraTurn: extraTurnIcon,
 }
 
 const powerupLabels: Record<PowerupKey, string> = {
   shield: 'Immune',
   reveal: 'Reveal',
-  extraTurn: 'Play again',
+  extraTurn: 'Extra turn',
 }
 
 export function PowerupTray({ powerups, disabled, onUse }: PowerupTrayProps) {

@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
-import { BoardGrid } from './components/BoardGrid'
+import paperIcon from './assets/icons/battle/move-paper.png'
+import rockIcon from './assets/icons/battle/move-rock.png'
+import scissorsIcon from './assets/icons/battle/move-scissors.png'
+import exitDoorIcon from './assets/icons/exit-door.png'
+import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
 import { PowerupTray } from './components/PowerupTray'
+import {
+  ActionChoice,
+  GameMasthead,
+  GuestIdentity,
+  StatusStrip,
+  type UiStatus,
+} from './components/PregameUi'
 import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './game/constants'
 import {
   activatePowerup,
@@ -19,46 +30,23 @@ import { NetworkClient, resolveWebSocketUrl, type ClientEvent } from './game/net
 import { LOBBY_ROOM_ID, type UserEntry } from './game/protocol'
 import type { EngineResult, GameState, MatchConfig, PaintColor, PowerupKey } from './game/types'
 import {
+  createGuestName,
+  getBackTarget,
   getOpponentName,
-  getScreenLabel,
-  normalizeUsername,
+  getScoreCountLabels,
   shouldShowOpponentBoard,
   type Screen,
 } from './game/viewModel'
 
-const ASSET = '/assets'
-
 const pieces = [
-  { color: COLOR_GREEN as PaintColor, label: 'Rock', icon: `${ASSET}/rock.png` },
-  { color: COLOR_BLUE as PaintColor, label: 'Paper', icon: `${ASSET}/paper.png` },
-  { color: COLOR_RED as PaintColor, label: 'Scissors', icon: `${ASSET}/scissors.png` },
-]
-
-const usernames = [
-  'CodeJunkie',
-  'ByteMaster',
-  'ScriptLord',
-  'DataMiner',
-  'NetSurfer',
-  'LogicBolt',
-  'ThreadWeaver',
-  'BinaryBard',
-  'AlgorithmGuy',
-  'SyntaxHero',
-  'ApexPredator',
-  'BlazeRunner',
-  'CipherBlade',
-  'DuskFang',
-  'EchoStrike',
-  'FrostNova',
-  'GhostHunter',
-  'HavocAgent',
-  'InfernoZero',
-  'JoltShock',
+  { color: COLOR_GREEN as PaintColor, label: 'Rock', icon: rockIcon },
+  { color: COLOR_BLUE as PaintColor, label: 'Paper', icon: paperIcon },
+  { color: COLOR_RED as PaintColor, label: 'Scissors', icon: scissorsIcon },
 ]
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
-const randomName = () => usernames[Math.floor(Math.random() * usernames.length)] ?? 'HiddenPlayer'
+type DestructionEffectMap = Partial<Record<number, CellDestructionEffect>>
+
 const wsUrl = () =>
   resolveWebSocketUrl({
     override: import.meta.env.VITE_WS_URL,
@@ -146,66 +134,36 @@ function AdvancedSettings({
   )
 }
 
-interface NamePlateProps {
-  username: string
-  confirmed: boolean
-  onUsernameChange: (value: string) => void
-  onRandomize: () => void
-  onConfirm: () => void
-}
-
-function NamePlate({ username, confirmed, onUsernameChange, onRandomize, onConfirm }: NamePlateProps) {
-  return (
-    <form
-      className="name-stack"
-      onSubmit={(event) => {
-        event.preventDefault()
-        onConfirm()
-      }}
-    >
-      <p className="brush-subtitle">USERNAME: {normalizeUsername(username) || '???'}</p>
-      <div className="name-row">
-        <input
-          value={username}
-          onChange={(event) => onUsernameChange(event.target.value)}
-          aria-label="Username"
-          autoComplete="off"
-        />
-        <button type="button" className="dice-button" aria-label="Randomize username" onClick={onRandomize}>
-          <img src={`${ASSET}/dice.png`} alt="" />
-        </button>
-      </div>
-      <BrushButton className="confirm-button" tone={confirmed ? 'white' : 'yellow'} type="submit">
-        {confirmed ? 'NAME LOCKED' : 'CONFIRM NAME'}
-      </BrushButton>
-    </form>
-  )
-}
-
 function App() {
   const [screen, setScreen] = useState<Screen>('intro')
-  const [username, setUsername] = useState(() => localStorage.getItem('hidden.username') ?? randomName())
+  const [username] = useState(createGuestName)
   const [rounds, setRounds] = useState(6)
   const [turnSeconds, setTurnSeconds] = useState(10)
   const [blindMode, setBlindMode] = useState(true)
   const [match, setMatch] = useState<GameState | null>(null)
-  const [status, setStatus] = useState('Hidden ready.')
-  const [announcement, setAnnouncement] = useState('Choose online or offline.')
-  const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<UiStatus>({
+    tone: 'neutral',
+    label: 'GUEST',
+    detail: 'Choose how you want to play.',
+  })
+  const [announcement, setAnnouncement] = useState('')
   const [users, setUsers] = useState<UserEntry[]>([])
-  const [roomId, setRoomId] = useState<string | null>(null)
   const [readyLocked, setReadyLocked] = useState(false)
   const [countdown, setCountdown] = useState('3')
   const [searchSeconds, setSearchSeconds] = useState(0)
   const [turnTimeLeft, setTurnTimeLeft] = useState(0)
-  const [onlineNameConfirmed, setOnlineNameConfirmed] = useState(false)
   const [clientId, setClientId] = useState<number | null>(null)
+  const [playerDestructionEffects, setPlayerDestructionEffects] = useState<DestructionEffectMap>({})
+  const [opponentDestructionEffects, setOpponentDestructionEffects] = useState<DestructionEffectMap>({})
 
   const clientRef = useRef<NetworkClient | null>(null)
   const matchRef = useRef<GameState | null>(null)
   const screenRef = useRef<Screen>('intro')
   const manualCloseRef = useRef(false)
   const settingsRef = useRef({ rounds, turnSeconds, blindMode })
+  const destructionSequenceRef = useRef(0)
+  const destructionTimeoutsRef = useRef<number[]>([])
+  const countdownRunRef = useRef(0)
 
   useEffect(() => {
     matchRef.current = match
@@ -231,6 +189,32 @@ function App() {
     return () => window.clearInterval(id)
   }, [screen])
 
+  useEffect(
+    () => () => {
+      for (const timeoutId of destructionTimeoutsRef.current) {
+        window.clearTimeout(timeoutId)
+      }
+    },
+    [],
+  )
+
+  const queueDestructionEffect = useCallback((board: 'player' | 'opponent', index: number) => {
+    const id = ++destructionSequenceRef.current
+    const setter = board === 'player' ? setPlayerDestructionEffects : setOpponentDestructionEffects
+    const tone: CellDestructionEffect['tone'] = board === 'player' ? 'loss' : 'victory'
+
+    setter((current) => ({ ...current, [index]: { id, tone } }))
+    const timeoutId = window.setTimeout(() => {
+      setter((current) => {
+        if (current[index]?.id !== id) return current
+        const next = { ...current }
+        delete next[index]
+        return next
+      })
+    }, 620)
+    destructionTimeoutsRef.current.push(timeoutId)
+  }, [])
+
   const applyEngineResult = useCallback((result: EngineResult) => {
     matchRef.current = result.state
     setMatch(result.state)
@@ -238,26 +222,32 @@ function App() {
     if (messages.length > 0) setAnnouncement(messages.join(' / '))
 
     for (const event of result.events) {
+      if (event.type === 'cell-destroyed') queueDestructionEffect(event.board, event.index)
       if (event.type === 'send-move') clientRef.current?.sendMove(event.index, event.color)
       if (event.type === 'send-moves') clientRef.current?.sendMoves(event.moves)
       if (event.type === 'send-immune') clientRef.current?.sendImmune(event.indices)
       if (event.type === 'game-over') setScreen('results')
     }
-  }, [])
+  }, [queueDestructionEffect])
 
   const beginCountdown = useCallback(
     async (config: MatchConfig, isMyTurn: boolean) => {
+      const runId = ++countdownRunRef.current
       const base = createInitialState(config)
       matchRef.current = base
       setMatch(base)
+      setPlayerDestructionEffects({})
+      setOpponentDestructionEffects({})
       setTurnTimeLeft(config.turnSeconds)
       setScreen('countdown')
 
       for (const value of ['3', '2', '1', 'GO!']) {
+        if (runId !== countdownRunRef.current) return
         setCountdown(value)
         await sleep(value === 'GO!' ? 520 : 700)
       }
 
+      if (runId !== countdownRunRef.current) return
       const started = startMatch(base, isMyTurn)
       applyEngineResult(started)
       setTurnTimeLeft(config.turnSeconds)
@@ -269,8 +259,11 @@ function App() {
   const onClientEvent = useCallback(
     (event: ClientEvent) => {
       if (event.type === 'open') {
-        setStatus('Socket open. Syncing profile...')
-        setError(null)
+        setStatus({
+          tone: 'working',
+          label: 'CONNECTED',
+          detail: 'Syncing your guest profile…',
+        })
         return
       }
 
@@ -279,21 +272,31 @@ function App() {
           manualCloseRef.current = false
           return
         }
-        setError(event.reason)
-        setStatus(event.reason)
+        setStatus({
+          tone: 'error',
+          label: 'CONNECTION LOST',
+          detail: event.reason,
+        })
         setScreen('disconnected')
         return
       }
 
       if (event.type === 'error') {
-        setError(event.message)
-        setStatus(event.message)
+        setStatus({
+          tone: 'error',
+          label: 'CONNECTION ERROR',
+          detail: event.message,
+        })
         return
       }
 
       if (event.type === 'assigned-id') {
         setClientId(event.clientId)
-        setStatus(`Connected as client #${event.clientId}.`)
+        setStatus({
+          tone: 'working',
+          label: 'CONNECTED',
+          detail: `Client #${event.clientId} assigned. Syncing guest profile…`,
+        })
         return
       }
 
@@ -303,16 +306,24 @@ function App() {
       }
 
       if (event.type === 'match-found') {
-        setRoomId(event.roomId)
         setReadyLocked(false)
-        setStatus(`Room ${event.roomId} locked.`)
-        setAnnouncement('Player found. Ready up.')
+        setStatus({
+          tone: 'success',
+          label: 'MATCH FOUND',
+          detail: 'Opponent connected. Ready up.',
+        })
+        setAnnouncement('')
         setScreen('ready')
         return
       }
 
       if (event.type === 'game-start') {
         const settings = settingsRef.current
+        setStatus({
+          tone: 'success',
+          label: 'STARTING',
+          detail: 'Both players are ready.',
+        })
         void beginCountdown(makeConfig(settings.rounds, settings.turnSeconds, settings.blindMode, true, false), event.isMyTurn)
         return
       }
@@ -332,8 +343,11 @@ function App() {
       }
 
       if (event.type === 'opponent-disconnected') {
-        setError('Opponent disconnected.')
-        setStatus('Opponent disconnected.')
+        setStatus({
+          tone: 'error',
+          label: 'OPPONENT LEFT',
+          detail: 'Your opponent disconnected.',
+        })
         setScreen('disconnected')
       }
     },
@@ -371,85 +385,108 @@ function App() {
   }, [screen, match, onAiTurn])
 
   const closeClient = useCallback(() => {
+    const client = clientRef.current
+    if (!client) return
+
     manualCloseRef.current = true
     try {
-      clientRef.current?.cancelMatchmaking()
+      client.cancelMatchmaking()
     } catch {
       // The socket may already be closed.
     }
-    clientRef.current?.close('Returning to Hidden')
+    client.close('Returning to Hidden')
     clientRef.current = null
   }, [])
 
   const backHome = useCallback(() => {
+    countdownRunRef.current += 1
     closeClient()
     setUsers([])
-    setRoomId(null)
     setReadyLocked(false)
     setMatch(null)
     matchRef.current = null
     setCountdown('3')
     setTurnTimeLeft(0)
     setSearchSeconds(0)
-    setError(null)
-    setOnlineNameConfirmed(false)
     setClientId(null)
-    setStatus('Hidden ready.')
-    setAnnouncement('Choose online or offline.')
+    setPlayerDestructionEffects({})
+    setOpponentDestructionEffects({})
+    setStatus({
+      tone: 'neutral',
+      label: 'GUEST',
+      detail: 'Choose how you want to play.',
+    })
+    setAnnouncement('')
     setScreen('intro')
   }, [closeClient])
 
-  const updateUsername = (value: string) => {
-    setUsername(value)
-    setOnlineNameConfirmed(false)
-  }
+  const navigateBack = useCallback(() => {
+    const current = screenRef.current
+    const currentMatch = matchRef.current
+    const isOnlineMatch = current === 'disconnected' || currentMatch?.config.isOnline === true
+    const target = getBackTarget(current, isOnlineMatch)
 
-  const randomizeUsername = () => updateUsername(randomName())
-
-  const confirmOnlineName = () => {
-    const trimmed = normalizeUsername(username)
-    if (!trimmed) {
-      setError('Please enter a username.')
+    if (target === 'intro') {
+      backHome()
       return
     }
-    localStorage.setItem('hidden.username', trimmed)
-    setUsername(trimmed)
-    setError(null)
-    setOnlineNameConfirmed(true)
-    setStatus(`Username locked: ${trimmed}`)
-    setAnnouncement('Quick match unlocked.')
-  }
+
+    const leavingActiveMatch =
+      current === 'countdown' ||
+      current === 'battle' ||
+      current === 'results' ||
+      current === 'disconnected'
+
+    if (leavingActiveMatch) {
+      countdownRunRef.current += 1
+      setMatch(null)
+      matchRef.current = null
+      setCountdown('3')
+      setTurnTimeLeft(0)
+      setPlayerDestructionEffects({})
+      setOpponentDestructionEffects({})
+    }
+
+    if (current === 'matchmaking' || current === 'ready' || isOnlineMatch) {
+      closeClient()
+      setUsers([])
+      setReadyLocked(false)
+      setSearchSeconds(0)
+      setClientId(null)
+    }
+
+    setAnnouncement('')
+    const nextStatus: UiStatus =
+      target === 'online-menu'
+        ? { tone: 'neutral', label: 'ONLINE', detail: `Ready to connect as ${username}.` }
+        : target === 'offline-setup'
+          ? { tone: 'success', label: 'OFFLINE', detail: 'Practice bot ready.' }
+          : { tone: 'neutral', label: 'GUEST', detail: `Playing as ${username}.` }
+
+    setStatus(nextStatus)
+    setScreen(target)
+  }, [backHome, closeClient, username])
 
   const startOffline = async () => {
-    const trimmed = normalizeUsername(username)
-    if (!trimmed) {
-      setError('Pick a username first.')
-      return
-    }
-    localStorage.setItem('hidden.username', trimmed)
-    setUsername(trimmed)
-    setError(null)
-    setStatus('Practice room open.')
+    setStatus({
+      tone: 'success',
+      label: 'OFFLINE',
+      detail: 'Practice bot ready.',
+    })
     setAnnouncement('Battle starting.')
     await beginCountdown(makeConfig(rounds, turnSeconds, blindMode, false, true), true)
   }
 
   const startOnline = async () => {
-    const trimmed = normalizeUsername(username)
-    if (!trimmed) {
-      setError('Pick a username first.')
-      return
-    }
-    localStorage.setItem('hidden.username', trimmed)
-    setUsername(trimmed)
-    setOnlineNameConfirmed(true)
     setUsers([])
-    setRoomId(null)
     setReadyLocked(false)
     setSearchSeconds(0)
-    setError(null)
-    setStatus('Dialing the server...')
-    setAnnouncement('Searching for an opponent.')
+    setStatus({
+      tone: 'working',
+      label: 'CONNECTING',
+      detail: 'Reaching the Hidden server…',
+    })
+    setAnnouncement('')
     setScreen('matchmaking')
 
     const client = new NetworkClient()
@@ -458,24 +495,45 @@ function App() {
 
     try {
       await client.connect(wsUrl())
-      const named = await client.sendUserName(trimmed)
+      setStatus({
+        tone: 'working',
+        label: 'CONNECTED',
+        detail: `Registering ${username}…`,
+      })
+      const named = await client.sendUserName(username)
       if (!named) throw new Error('Username rejected.')
+      setStatus({
+        tone: 'working',
+        label: 'JOINING',
+        detail: 'Entering the matchmaking lobby…',
+      })
       const joined = await client.joinRoom(LOBBY_ROOM_ID)
       if (!joined) throw new Error('Could not join the lobby.')
       client.startMatchmaking()
-      setStatus('Searching for an opponent...')
+      setStatus({
+        tone: 'working',
+        label: 'SEARCHING',
+        detail: 'Looking for an opponent · 00:00',
+      })
     } catch (cause) {
       closeClient()
-      setError(cause instanceof Error ? cause.message : 'Connection failed.')
-      setStatus('Connection failed.')
-      setScreen('online-name')
+      setStatus({
+        tone: 'error',
+        label: 'CONNECTION ERROR',
+        detail: cause instanceof Error ? cause.message : 'Connection failed.',
+      })
+      setScreen('online-menu')
     }
   }
 
   const onReady = () => {
     setReadyLocked(true)
-    setStatus('Ready and waiting...')
-    setAnnouncement('Ready and waiting...')
+    setStatus({
+      tone: 'working',
+      label: 'READY',
+      detail: 'Waiting for your opponent…',
+    })
+    setAnnouncement('')
     clientRef.current?.sendReady(true)
   }
 
@@ -505,7 +563,39 @@ function App() {
 
   const opponentName = getOpponentName(users, clientId, match)
   const showOpponent = shouldShowOpponentBoard(match, screen)
-  const routeLabel = getScreenLabel(screen)
+  const visiblePlayerDestructionEffects = {
+    ...opponentDestructionEffects,
+    ...playerDestructionEffects,
+  }
+  const searchClock = `${Math.floor(searchSeconds / 60).toString().padStart(2, '0')}:${(searchSeconds % 60)
+    .toString()
+    .padStart(2, '0')}`
+  const inlineStatus =
+    screen === 'matchmaking' && status.label === 'SEARCHING'
+      ? { ...status, detail: `Looking for an opponent · ${searchClock}` }
+      : status
+  const chromeStatus: UiStatus =
+    screen === 'results' && match?.result
+      ? {
+          tone: match.result.outcome === 'loss' ? 'error' : 'success',
+          label: 'MATCH COMPLETE',
+          detail: `${username} ${match.result.playerScore} · ${opponentName} ${match.result.opponentScore}`,
+        }
+      : screen === 'battle' && match
+        ? {
+            tone: match.isMyTurn ? 'success' : 'working',
+            label: match.config.isOnline ? 'ONLINE' : 'OFFLINE',
+            detail: match.config.isOnline
+              ? `Connected to ${opponentName}.`
+              : 'Practice bot connected.',
+          }
+        : screen === 'countdown'
+          ? {
+              tone: 'working',
+              label: 'STARTING',
+              detail: 'Battle begins now.',
+            }
+          : inlineStatus
   const statusText =
     screen === 'battle' && match
       ? match.isMyTurn
@@ -513,75 +603,143 @@ function App() {
           ? 'Choose a tile to shield.'
           : 'Your Turn'
         : `Waiting for ${opponentName}`
-      : status
+      : status.detail
+  const playerScoreCountLabels = match
+    ? getScoreCountLabels(match.playerGrid.cells)
+    : {}
+  const opponentScoreCountLabels = match
+    ? getScoreCountLabels(match.opponentGrid.cells)
+    : {}
 
   return (
     <main className={`unity-shell unity-${screen}`}>
-      <div className="paint-splatter paint-splatter-blue" />
-      <div className="paint-splatter paint-splatter-red" />
-      <div className="paint-splatter paint-splatter-purple" />
-
       {screen !== 'intro' ? (
-        <button type="button" className="back-button" onClick={backHome} aria-label="Back to Hidden">
-          <img src={`${ASSET}/cancel.png`} alt="" />
-        </button>
+        <header className="top-chrome">
+          <nav className="game-navbar" aria-label="Game navigation">
+            <button
+              type="button"
+              className="nav-brush-button nav-back-button"
+              onClick={navigateBack}
+              aria-label="Go back"
+            >
+              <span aria-hidden="true">←</span>
+              BACK
+            </button>
+            <StatusStrip status={chromeStatus} chrome />
+            <button
+              type="button"
+              className="nav-brush-button nav-account-button"
+              aria-label="Sign in, coming soon"
+              title="Coming soon"
+              disabled
+            >
+              SIGN IN
+            </button>
+          </nav>
+        </header>
       ) : null}
-
-      <aside className="status-banner">
-        <span>{routeLabel}</span>
-        <strong>{statusText}</strong>
-        {announcement ? <em>{announcement}</em> : null}
-      </aside>
-
-      {error ? <div className="error-banner">{error}</div> : null}
 
       {screen === 'intro' ? (
         <section className="welcome-screen">
-          <h1 className="game-title">HIDDEN</h1>
-          <div className="welcome-actions">
-            <BrushButton onClick={() => setScreen('online-name')}>ONLINE</BrushButton>
-            <BrushButton onClick={() => setScreen('offline-setup')}>OFFLINE</BrushButton>
+          <GameMasthead />
+          <div className="action-grid welcome-actions">
+            <ActionChoice
+              label="PLAY AS GUEST"
+              description={`Jump in now as ${username}.`}
+              onClick={() => {
+                setStatus({
+                  tone: 'neutral',
+                  label: 'GUEST',
+                  detail: `Playing as ${username}.`,
+                })
+                setScreen('mode-select')
+              }}
+            />
+            <ActionChoice
+              label="SIGN IN"
+              description="Access your account."
+              badge="Coming soon"
+              tone="secondary"
+              disabled
+            />
           </div>
         </section>
       ) : null}
 
-      {screen === 'online-name' ? (
-        <section className="setup-screen">
-          <h1 className="game-title">HIDDEN</h1>
-          <NamePlate
-            username={username}
-            confirmed={onlineNameConfirmed}
-            onUsernameChange={updateUsername}
-            onRandomize={randomizeUsername}
-            onConfirm={confirmOnlineName}
-          />
-          {onlineNameConfirmed ? (
-            <BrushButton className="big-action" onClick={() => void startOnline()}>
-              QUICK MATCH
-            </BrushButton>
-          ) : null}
+      {screen === 'mode-select' ? (
+        <section className="setup-screen pregame-screen mode-select-screen">
+          <GameMasthead compact />
+          <GuestIdentity name={username} />
+          <div className="action-grid action-grid-two mode-action-grid">
+            <ActionChoice
+              label="ONLINE"
+              description="Play against another person."
+              onClick={() => {
+                setStatus({
+                  tone: 'neutral',
+                  label: 'ONLINE',
+                  detail: `Ready to connect as ${username}.`,
+                })
+                setScreen('online-menu')
+              }}
+            />
+            <ActionChoice
+              label="OFFLINE"
+              description="Practice against the bot."
+              tone="secondary"
+              onClick={() => {
+                setStatus({
+                  tone: 'success',
+                  label: 'OFFLINE',
+                  detail: 'Practice bot ready.',
+                })
+                setScreen('offline-setup')
+              }}
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {screen === 'online-menu' ? (
+        <section className="setup-screen pregame-screen">
+          <GameMasthead compact />
+          <GuestIdentity name={username} />
+          <div className="action-grid online-action-grid">
+            <ActionChoice
+              label="QUICK MATCH"
+              description="Find any available opponent."
+              onClick={() => void startOnline()}
+            />
+            <ActionChoice
+              label="CREATE GAME"
+              description="Make a private match."
+              badge="Coming soon"
+              tone="secondary"
+              disabled
+            />
+            <ActionChoice
+              label="FIND GAME"
+              description="Join a private match."
+              badge="Coming soon"
+              tone="secondary"
+              disabled
+            />
+          </div>
         </section>
       ) : null}
 
       {screen === 'offline-setup' ? (
-        <section className="setup-screen offline-setup-screen">
-          <h1 className="game-title">HIDDEN</h1>
-          <NamePlate
-            username={username}
-            confirmed
-            onUsernameChange={updateUsername}
-            onRandomize={randomizeUsername}
-            onConfirm={() => {
-              const trimmed = normalizeUsername(username)
-              if (trimmed) {
-                localStorage.setItem('hidden.username', trimmed)
-                setUsername(trimmed)
-              }
-            }}
-          />
+        <section className="setup-screen pregame-screen offline-setup-screen">
+          <GameMasthead compact />
+          <GuestIdentity name={username} />
           <div className="offline-card">
-            <p>OFFLINE</p>
-            <h2>Hidden</h2>
+            <p className="practice-kicker">PRACTICE</p>
+            <p className="panel-description">
+              Learn the board or tune the rules before going online.
+            </p>
+            <BrushButton className="big-action" onClick={() => void startOffline()}>
+              START PRACTICE
+            </BrushButton>
             <AdvancedSettings
               rounds={rounds}
               turnSeconds={turnSeconds}
@@ -590,31 +748,33 @@ function App() {
               onTurnSecondsChange={setTurnSeconds}
               onBlindModeChange={setBlindMode}
             />
-            <BrushButton className="big-action" onClick={() => void startOffline()}>
-              START PRACTICE
-            </BrushButton>
           </div>
         </section>
       ) : null}
 
       {screen === 'matchmaking' ? (
-        <section className="single-panel">
-          <p className="brush-subtitle">MATCHMAKING</p>
-          <h1>Searching...</h1>
-          <strong>
-            {Math.floor(searchSeconds / 60).toString().padStart(2, '0')}:
-            {(searchSeconds % 60).toString().padStart(2, '0')}
-          </strong>
+        <section className="setup-screen pregame-screen pregame-single-panel">
+          <GameMasthead compact />
+          <GuestIdentity name={username} />
+          <div className="single-panel">
+            <p className="brush-subtitle">QUICK MATCH</p>
+            <h1>{status.label === 'SEARCHING' ? 'Finding a player' : 'Connecting'}</h1>
+            <strong>{status.label === 'SEARCHING' ? searchClock : '•••'}</strong>
+          </div>
         </section>
       ) : null}
 
       {screen === 'ready' ? (
-        <section className="single-panel">
-          <p className="brush-subtitle">ROOM</p>
-          <h1>{roomId}</h1>
-          <BrushButton disabled={readyLocked} onClick={onReady}>
-            {readyLocked ? 'READY...' : 'READY'}
-          </BrushButton>
+        <section className="setup-screen pregame-screen pregame-single-panel">
+          <GameMasthead compact />
+          <GuestIdentity name={username} />
+          <div className="single-panel">
+            <p className="brush-subtitle">QUICK MATCH</p>
+            <h1>Opponent found</h1>
+            <BrushButton disabled={readyLocked} onClick={onReady}>
+              {readyLocked ? 'READY...' : 'READY'}
+            </BrushButton>
+          </div>
         </section>
       ) : null}
 
@@ -629,41 +789,57 @@ function App() {
           <header className="battle-header">
             <h1>Current Round: {match.currentRound}</h1>
             <p>{statusText}</p>
+            {announcement ? (
+              <div className="battle-announcement" role="status" aria-live="polite">
+                {announcement}
+              </div>
+            ) : null}
             <div className="timer-track" aria-label={`${turnTimeLeft.toFixed(1)} seconds left`}>
               <span style={{ width: `${Math.max(0, Math.min(100, (turnTimeLeft / match.config.turnSeconds) * 100))}%` }} />
             </div>
           </header>
 
-          <div className={`battle-stage ${showOpponent ? 'battle-stage-split' : 'battle-stage-centered'}`}>
-            <PowerupTray powerups={match.playerPowerups} disabled={!match.isMyTurn} onUse={onPowerup} />
-            <div className="boards-wrap">
+          <div className="battle-stage">
+            <div className="battle-arena">
               <BoardGrid
                 title="Player Board"
                 subtitle={username.trim() || 'Player'}
                 grid={match.playerGrid}
                 interactive={match.isMyTurn}
                 selectedColor={match.selectedColor}
+                destructionEffects={visiblePlayerDestructionEffects}
                 onSelect={onCellSelect}
               />
               {showOpponent ? (
-                <BoardGrid title="Opponent Board" subtitle={opponentName} grid={match.opponentGrid} hidden={!showOpponent} />
+                <aside className="opponent-peek" aria-label={`${opponentName}'s revealed board`}>
+                  <p>REVEALED</p>
+                  <BoardGrid
+                    title="Opponent Board"
+                    subtitle={opponentName}
+                    grid={match.opponentGrid}
+                    compact
+                    destructionEffects={opponentDestructionEffects}
+                  />
+                </aside>
               ) : null}
             </div>
-          </div>
-
-          <div className="rps-dock" aria-label="Move loader">
-            {pieces.map((piece) => (
-              <button
-                key={piece.label}
-                type="button"
-                onClick={() => onSelectColor(piece.color)}
-                className={`rps-tile ${match.selectedColor === piece.color ? 'rps-tile-selected' : ''}`}
-                style={{ backgroundColor: piece.color }}
-              >
-                <img src={piece.icon} alt="" />
-                <span>{piece.label}</span>
-              </button>
-            ))}
+            <div className="battle-controls">
+              <PowerupTray powerups={match.playerPowerups} disabled={!match.isMyTurn} onUse={onPowerup} />
+              <div className="rps-dock" aria-label="Move loader">
+                {pieces.map((piece) => (
+                  <button
+                    key={piece.label}
+                    type="button"
+                    onClick={() => onSelectColor(piece.color)}
+                    className={`rps-tile ${match.selectedColor === piece.color ? 'rps-tile-selected' : ''}`}
+                    style={{ backgroundColor: piece.color }}
+                  >
+                    <img src={piece.icon} alt="" />
+                    <span>{piece.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
       ) : null}
@@ -678,26 +854,40 @@ function App() {
               <br />
               Opponent Score: {match.result.opponentScore}
             </p>
-            <BrushButton onClick={() => void beginCountdown(makeConfig(rounds, turnSeconds, blindMode, match.config.isOnline, match.config.hasAI), true)}>
-              AGAIN?
-            </BrushButton>
-            <BrushButton tone="white" onClick={backHome}>
-              HIDDEN
-            </BrushButton>
+            <div className="results-actions">
+              <BrushButton className="results-action" onClick={() => void beginCountdown(makeConfig(rounds, turnSeconds, blindMode, match.config.isOnline, match.config.hasAI), true)}>
+                AGAIN?
+              </BrushButton>
+            </div>
           </div>
           <div className="final-boards">
-            <BoardGrid title="Final Board" subtitle={username.trim() || 'Player'} grid={match.playerGrid} />
-            <BoardGrid title="Final Board" subtitle={opponentName} grid={match.opponentGrid} />
+            <BoardGrid
+              title=""
+              subtitle={username.trim() || 'Player'}
+              grid={match.playerGrid}
+              destructionEffects={playerDestructionEffects}
+              scoreCountLabels={playerScoreCountLabels}
+            />
+            <BoardGrid
+              title=""
+              subtitle={opponentName}
+              grid={match.opponentGrid}
+              destructionEffects={opponentDestructionEffects}
+              scoreCountLabels={opponentScoreCountLabels}
+            />
           </div>
         </section>
       ) : null}
 
       {screen === 'disconnected' ? (
-        <section className="single-panel">
-          <img src={`${ASSET}/exit-door.png`} alt="" className="single-panel-icon" />
-          <p className="brush-subtitle">DISCONNECTED</p>
-          <h1>The room went dark.</h1>
-          <BrushButton onClick={backHome}>HIDDEN</BrushButton>
+        <section className="setup-screen pregame-screen pregame-single-panel">
+          <GameMasthead compact />
+          <div className="single-panel">
+            <img src={exitDoorIcon} alt="" className="single-panel-icon" />
+            <p className="brush-subtitle">DISCONNECTED</p>
+            <h1>The room went dark.</h1>
+            <BrushButton onClick={backHome}>HIDDEN</BrushButton>
+          </div>
         </section>
       ) : null}
     </main>

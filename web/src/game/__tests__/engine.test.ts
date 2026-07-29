@@ -27,6 +27,31 @@ describe('hidden engine', () => {
 
     expect(result.state.playerGrid.cells[0].occupied).toBe(false)
     expect(result.state.opponentGrid.cells[0].occupied).toBe(false)
+    expect(result.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'cell-destroyed', board: 'player', index: 0 }),
+        expect.objectContaining({ type: 'cell-destroyed', board: 'opponent', index: 0 }),
+      ]),
+    )
+  })
+
+  it('reports whose cell was destroyed when the player wins a conflict', () => {
+    const state = createInitialState(baseConfig)
+    state.phase = 'battle'
+    state.opponentGrid.cells[3] = { occupied: true, color: COLOR_RED, immune: false }
+
+    const result = applyLocalMove(selectColor(state, COLOR_GREEN), 3)
+
+    expect(result.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'cell-destroyed', board: 'opponent', index: 3 }),
+      ]),
+    )
+    expect(result.events).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'cell-destroyed', board: 'player', index: 3 }),
+      ]),
+    )
   })
 
   it('consumes immunity and clears the opposing cell', () => {

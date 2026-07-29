@@ -1,0 +1,143 @@
+.cell-destruction {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cell-destruction__ring,
+.cell-destruction__core,
+.cell-destruction__shard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  pointer-events: none;
+}
+
+.cell-destruction__ring {
+  width: 28%;
+  aspect-ratio: 1;
+  border: max(2px, 0.12em) solid currentColor;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: cell-destruction-ring 480ms ease-out both;
+}
+
+.cell-destruction__core {
+  width: 32%;
+  aspect-ratio: 1;
+  clip-path: polygon(50% 0%, 63% 30%, 100% 18%, 76% 52%, 100% 80%, 64% 70%, 50% 100%, 38% 69%, 0% 83%, 24% 50%, 0% 18%, 36% 30%);
+  background: currentColor;
+  transform: translate(-50%, -50%);
+  animation: cell-destruction-core 420ms ease-out both;
+}
+
+.cell-destruction__shard {
+  width: 6%;
+  height: 29%;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: 50% 0;
+  animation: cell-destruction-shard 470ms ease-out both;
+  animation-delay: calc(var(--shard-index) * 12ms);
+}
+
+.cell-destruction-victory {
+  color: #ffd51d;
+  background: radial-gradient(circle, rgba(37, 206, 232, 0.48), transparent 62%);
+}
+
+.cell-destruction-victory .cell-destruction__shard:nth-of-type(even) {
+  color: #25cee8;
+}
+
+.cell-destruction-loss {
+  color: #ff4652;
+  background:
+    linear-gradient(115deg, transparent 37%, rgba(255, 255, 255, 0.95) 39% 43%, transparent 45%),
+    radial-gradient(circle, rgba(204, 57, 65, 0.72), transparent 68%);
+}
+
+.unity-cell-destroying-loss {
+  animation: cell-loss-impact 420ms ease-out both;
+}
+
+.unity-cell-destroying-victory {
+  animation: cell-victory-impact 420ms ease-out both;
+}
+
+@keyframes cell-destruction-ring {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3.1);
+  }
+}
+
+@keyframes cell-destruction-core {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25) rotate(-18deg);
+  }
+
+  34% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.25) rotate(4deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.8) rotate(14deg);
+  }
+}
+
+@keyframes cell-destruction-shard {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--shard-angle)) translateY(-10%) scaleY(0.25);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--shard-angle)) translateY(-190%) scaleY(1);
+  }
+}
+
+@keyframes cell-loss-impact {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  28% {
+    transform: translateX(-4px) rotate(-1deg);
+  }
+
+  52% {
+    transform: translateX(3px) rotate(1deg);
+  }
+
+  72% {
+    transform: translateX(-2px);
+  }
+}
+
+@keyframes cell-victory-impact {
+  0% {
+    filter: brightness(1);
+  }
+
+  32% {
+    filter: brightness(1.7) saturate(1.35);
+  }
+
+  100% {
+    filter: brightness(1);
+  }
+}

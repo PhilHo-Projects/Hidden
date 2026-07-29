@@ -193,6 +193,14 @@ function resolveConflict(state: GameState, index: number, events: EngineEvent[])
   if (shouldClearOpponent) {
     clearCell(state.opponentGrid, index)
   }
+
+  if (!state.playerGrid.cells[index].occupied) {
+    events.push({ type: 'cell-destroyed', board: 'player', index, color: playerColor })
+  }
+
+  if (!state.opponentGrid.cells[index].occupied) {
+    events.push({ type: 'cell-destroyed', board: 'opponent', index, color: opponentColor })
+  }
 }
 
 function maybeUnlockPowerup(state: GameState, events: EngineEvent[]) {

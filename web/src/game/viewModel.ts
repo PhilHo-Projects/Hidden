@@ -1,12 +1,23 @@
-import type { GameState } from './types'
+import type { CellState, GameState } from './types'
 import type { UserEntry } from './protocol'
 
-export type Screen = 'intro' | 'online-name' | 'offline-setup' | 'matchmaking' | 'ready' | 'countdown' | 'battle' | 'results' | 'disconnected'
+export type Screen =
+  | 'intro'
+  | 'mode-select'
+  | 'online-menu'
+  | 'offline-setup'
+  | 'matchmaking'
+  | 'ready'
+  | 'countdown'
+  | 'battle'
+  | 'results'
+  | 'disconnected'
 
 export function getScreenLabel(screen: Screen) {
   return {
     intro: 'Hidden',
-    'online-name': 'Online',
+    'mode-select': 'Play',
+    'online-menu': 'Online',
     'offline-setup': 'Offline',
     matchmaking: 'Searching',
     ready: 'Ready',
@@ -17,8 +28,38 @@ export function getScreenLabel(screen: Screen) {
   }[screen]
 }
 
-export function normalizeUsername(value: string) {
-  return value.trim()
+export function createGuestName(random: () => number = Math.random) {
+  const suffix = Math.min(9999, Math.floor(random() * 10_000))
+  return `Guest#${suffix.toString().padStart(4, '0')}`
+}
+
+export function getScoreCountLabels(cells: CellState[]) {
+  let count = 0
+
+  return cells.reduce<Record<number, number>>((labels, cell, index) => {
+    if (cell.occupied) {
+      labels[index] = ++count
+    }
+    return labels
+  }, {})
+}
+
+export function getBackTarget(screen: Screen, isOnlineMatch = false): Screen {
+  const matchSetup: Screen = isOnlineMatch ? 'online-menu' : 'offline-setup'
+  const targets: Record<Screen, Screen> = {
+    intro: 'intro',
+    'mode-select': 'intro',
+    'online-menu': 'mode-select',
+    'offline-setup': 'mode-select',
+    matchmaking: 'online-menu',
+    ready: 'online-menu',
+    countdown: matchSetup,
+    battle: matchSetup,
+    results: matchSetup,
+    disconnected: 'online-menu',
+  }
+
+  return targets[screen]
 }
 
 export function getOpponentName(users: UserEntry[], clientId: number | null | undefined, match: GameState | null) {
