@@ -9,6 +9,7 @@ import {
 } from './protocol'
 
 interface ClientSession {
+  accountId: string | undefined
   id: number
   socket: WebSocket
   username: string | undefined
@@ -21,6 +22,11 @@ interface ClientSession {
 interface Match {
   players: [number, number]
   ready: Set<number>
+}
+
+export interface ClientIdentity {
+  accountId: string
+  username: string
 }
 
 export interface GameHandlerOptions {
@@ -37,12 +43,13 @@ export class GameHandler {
 
   constructor(private readonly options: GameHandlerOptions) {}
 
-  add(socket: WebSocket) {
+  add(socket: WebSocket, identity?: ClientIdentity) {
     const id = this.nextClientId++
     const session: ClientSession = {
       id,
+      accountId: identity?.accountId,
       socket,
-      username: undefined,
+      username: identity?.username,
       roomId: undefined,
       alive: true,
       messageCount: 0,
@@ -159,7 +166,14 @@ export class GameHandler {
   private route(session: ClientSession, packet: ClientPacket) {
     switch (packet.type) {
       case PacketType.USER_INFO:
-        session.username = packet.username
+        if (!session.accountId) {
+          if (!/^Guest#\d{4}$/.test(packet.username)) {
+            throw new ProtocolError(
+              'Guest username must use the Guest#NNNN format.',
+            )
+          }
+          session.username = packet.username
+        }
         this.broadcastUsers()
         this.respond(session, true, packet.type)
         break
