@@ -1,8 +1,17 @@
 import express from 'express'
-import { createServer, type Server as HttpServer } from 'node:http'
+import {
+  createServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+} from 'node:http'
 import path from 'node:path'
 import { type Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
+import {
+  createAuthRouter,
+  type AuthServiceLike,
+} from './auth/http'
+import { readSessionToken } from './auth/sessionToken'
 import { GameHandler } from './gameHandler'
 import { createLogger, type LogLevel } from './logger'
 
@@ -10,6 +19,8 @@ const DEFAULT_MAX_PAYLOAD_BYTES = 16 * 1024
 
 export interface HiddenServerOptions {
   allowedOrigins: string[]
+  authCleanupIntervalMs?: number
+  authService?: AuthServiceLike
   heartbeatIntervalMs?: number
   host?: string
   logLevel?: LogLevel
@@ -18,7 +29,9 @@ export interface HiddenServerOptions {
   maxPayloadBytes?: number
   port?: number
   shutdownGraceMs?: number
+  sessionCookieSecure?: boolean
   staticRoot: string
+  trustProxy?: boolean | number
 }
 
 export interface HiddenServer {
@@ -48,13 +61,31 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
   const maxConnections = options.maxConnections ?? 100
   const port = options.port ?? 8080
   const shutdownGraceMs = options.shutdownGraceMs ?? 5_000
+  const secureCookie =
+    options.sessionCookieSecure ?? process.env.NODE_ENV === 'production'
   let heartbeat: NodeJS.Timeout | undefined
+  let authCleanup: NodeJS.Timeout | undefined
   let closePromise: Promise<void> | undefined
+  let closing = false
+  const pendingUpgradeSockets = new Set<Duplex>()
+  const pendingUpgradeTasks = new Set<Promise<void>>()
 
   app.disable('x-powered-by')
+  if (options.trustProxy !== undefined) {
+    app.set('trust proxy', options.trustProxy)
+  }
   app.get('/healthz', (_request, response) => {
     response.status(200).json({ status: 'ok' })
   })
+  app.use(
+    '/api/auth',
+    createAuthRouter({
+      allowedOrigins: options.allowedOrigins,
+      ...(options.authService ? { authService: options.authService } : {}),
+      logger,
+      secureCookie,
+    }),
+  )
   app.use(express.static(options.staticRoot, { index: false }))
   app.use((request, response, next) => {
     if (
@@ -68,6 +99,23 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
   })
 
   httpServer.on('upgrade', (request, socket, head) => {
+    if (closing) {
+      rejectUpgrade(socket, 503, 'Service Unavailable')
+      return
+    }
+    const task = handleUpgrade(request, socket, head).catch(() => {
+      logger('error', 'upgrade.unexpected_failure')
+      socket.destroy()
+    })
+    pendingUpgradeTasks.add(task)
+    void task.finally(() => pendingUpgradeTasks.delete(task))
+  })
+
+  async function handleUpgrade(
+    request: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+  ) {
     const pathname = new URL(request.url ?? '/', 'http://localhost').pathname
     if (pathname !== '/ws') {
       rejectUpgrade(socket, 404, 'Not Found')
@@ -81,20 +129,139 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
       return
     }
 
-    if (gameHandler.connectionCount >= maxConnections) {
+    const rawToken = readSessionToken(
+      request.headers.cookie,
+      secureCookie,
+    )
+    if (!rawToken) {
+      if (gameHandler.connectionCount >= maxConnections) {
+        logger('warn', 'upgrade.connection_limit', { maxConnections })
+        rejectUpgrade(socket, 503, 'Service Unavailable')
+        return
+      }
+      webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+        gameHandler.add(webSocket)
+      })
+      return
+    }
+
+    if (!options.authService) {
+      rejectUpgrade(socket, 503, 'Service Unavailable')
+      return
+    }
+    if (
+      gameHandler.connectionCount + pendingUpgradeSockets.size >=
+      maxConnections
+    ) {
       logger('warn', 'upgrade.connection_limit', { maxConnections })
       rejectUpgrade(socket, 503, 'Service Unavailable')
       return
     }
 
-    webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-      webSocketServer.emit('connection', webSocket, request)
-    })
-  })
+    pendingUpgradeSockets.add(socket)
+    let identity: { accountId: string; username: string } | undefined
+    try {
+      const user = await options.authService.getSession(rawToken)
+      if (user) {
+        identity = { accountId: user.id, username: user.username }
+      }
+    } catch {
+      logger('error', 'upgrade.session_lookup_failed')
+      if (!socket.destroyed) {
+        rejectUpgrade(socket, 503, 'Service Unavailable')
+      }
+      return
+    } finally {
+      pendingUpgradeSockets.delete(socket)
+    }
 
-  webSocketServer.on('connection', (socket) => {
-    gameHandler.add(socket)
-  })
+    if (closing || socket.destroyed) {
+      socket.destroy()
+      return
+    }
+    if (gameHandler.connectionCount >= maxConnections) {
+      logger('warn', 'upgrade.connection_limit', { maxConnections })
+      rejectUpgrade(socket, 503, 'Service Unavailable')
+      return
+    }
+    webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+      if (closing) {
+        webSocket.close(1012, 'Server restarting')
+        return
+      }
+      gameHandler.add(webSocket, identity)
+    })
+  }
+
+  async function waitForPendingUpgrades() {
+    if (pendingUpgradeTasks.size === 0) {
+      return
+    }
+    let timeout: NodeJS.Timeout | undefined
+    const graceExpired = new Promise<void>((resolve) => {
+      timeout = setTimeout(resolve, shutdownGraceMs)
+    })
+    await Promise.race([
+      Promise.allSettled([...pendingUpgradeTasks]).then(() => undefined),
+      graceExpired,
+    ])
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+  }
+
+  async function closeServer() {
+    closing = true
+    if (heartbeat) {
+      clearInterval(heartbeat)
+    }
+    if (authCleanup) {
+      clearInterval(authCleanup)
+    }
+    for (const socket of pendingUpgradeSockets) {
+      socket.destroy()
+    }
+    gameHandler.closeAll()
+
+    const forceClose = setTimeout(() => {
+      for (const socket of pendingUpgradeSockets) {
+        socket.destroy()
+      }
+      gameHandler.terminateAll()
+      httpServer.closeAllConnections()
+    }, shutdownGraceMs)
+    forceClose.unref()
+
+    const webSocketsClosed = new Promise<void>((resolve, reject) => {
+      webSocketServer.close((error) => {
+        if (error) {
+          reject(error)
+          return
+        }
+        resolve()
+      })
+    })
+    const httpClosed = new Promise<void>((resolve, reject) => {
+      httpServer.close((error) => {
+        if (error) {
+          reject(error)
+          return
+        }
+        resolve()
+      })
+    })
+
+    try {
+      await Promise.all([
+        httpClosed,
+        webSocketsClosed,
+        waitForPendingUpgrades(),
+      ])
+      logger('info', 'server.stopped')
+    } finally {
+      clearTimeout(forceClose)
+    }
+  }
 
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000
   if (heartbeatIntervalMs > 0) {
@@ -102,6 +269,17 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
       gameHandler.heartbeat()
     }, heartbeatIntervalMs)
     heartbeat.unref()
+  }
+
+  const authCleanupIntervalMs =
+    options.authCleanupIntervalMs ?? 6 * 60 * 60 * 1_000
+  if (options.authService && authCleanupIntervalMs > 0) {
+    authCleanup = setInterval(() => {
+      void options.authService
+        ?.cleanupExpiredSessions()
+        .catch(() => logger('error', 'auth.session_cleanup_failed'))
+    }, authCleanupIntervalMs)
+    authCleanup.unref()
   }
 
   return {
@@ -134,30 +312,7 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
       if (closePromise) {
         return closePromise
       }
-
-      closePromise = new Promise((resolve, reject) => {
-        if (heartbeat) {
-          clearInterval(heartbeat)
-        }
-        gameHandler.closeAll()
-
-        const forceClose = setTimeout(() => {
-          gameHandler.terminateAll()
-          httpServer.closeAllConnections()
-        }, shutdownGraceMs)
-        forceClose.unref()
-
-        webSocketServer.close()
-        httpServer.close((error) => {
-          clearTimeout(forceClose)
-          if (error) {
-            reject(error)
-            return
-          }
-          logger('info', 'server.stopped')
-          resolve()
-        })
-      })
+      closePromise = closeServer()
       return closePromise
     },
   }

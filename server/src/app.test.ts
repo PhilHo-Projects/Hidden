@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
+import type { AuthServiceLike } from './auth/http'
 import { createHiddenServer, type HiddenServer } from './app'
 import { PacketType } from './protocol'
 
 const ORIGIN = 'http://localhost:5173'
+const VALID_SESSION_TOKEN = 'v'.repeat(43)
 
 class Probe {
   private readonly buffered: unknown[][] = []
@@ -62,8 +64,16 @@ class Probe {
   }
 }
 
-async function connectProbe(port: number, origin = ORIGIN, pathname = '/ws') {
-  const socket = new WebSocket(`ws://127.0.0.1:${port}${pathname}`, { origin })
+async function connectProbe(
+  port: number,
+  origin = ORIGIN,
+  pathname = '/ws',
+  cookie?: string,
+) {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}${pathname}`, {
+    origin,
+    ...(cookie ? { headers: { Cookie: cookie } } : {}),
+  })
   const probe = new Probe(socket)
   await new Promise<void>((resolve, reject) => {
     socket.once('open', resolve)
@@ -77,8 +87,12 @@ async function expectUpgradeStatus(
   statusCode: number,
   origin = ORIGIN,
   pathname = '/ws',
+  cookie?: string,
 ) {
-  const socket = new WebSocket(`ws://127.0.0.1:${port}${pathname}`, { origin })
+  const socket = new WebSocket(`ws://127.0.0.1:${port}${pathname}`, {
+    origin,
+    ...(cookie ? { headers: { Cookie: cookie } } : {}),
+  })
   await new Promise<void>((resolve, reject) => {
     socket.once('unexpected-response', (_request, response) => {
       try {
@@ -150,8 +164,8 @@ describe.sequential('Hidden server', () => {
     const firstId = Number((await first.waitFor(PacketType.ID_ASSIGN))[2])
     const secondId = Number((await second.waitFor(PacketType.ID_ASSIGN))[2])
 
-    first.send([999, PacketType.USER_INFO, 'Alpha'])
-    second.send([999, PacketType.USER_INFO, 'Bravo'])
+    first.send([999, PacketType.USER_INFO, 'Guest#0001'])
+    second.send([999, PacketType.USER_INFO, 'Guest#0002'])
     await Promise.all([
       first.waitFor(PacketType.SERVER_RESPONSE),
       second.waitFor(PacketType.SERVER_RESPONSE),
@@ -230,5 +244,256 @@ describe.sequential('Hidden server', () => {
       first.socket.once('close', resolve),
     )
     expect(closeCode).toBe(1009)
+  })
+
+  it('counts authenticated upgrades while their session lookup is pending', async () => {
+    let lookupCount = 0
+    let markLookupStarted: (() => void) | undefined
+    let releaseFirstLookup: (() => void) | undefined
+    const lookupStarted = new Promise<void>((resolve) => {
+      markLookupStarted = resolve
+    })
+    const firstLookupBlocked = new Promise<void>((resolve) => {
+      releaseFirstLookup = resolve
+    })
+    const user = {
+      id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+      username: 'Account_Player',
+    }
+    const authService = {
+      async getSession() {
+        lookupCount += 1
+        if (lookupCount === 1) {
+          markLookupStarted?.()
+          await firstLookupBlocked
+        }
+        return user
+      },
+      async cleanupExpiredSessions() {
+        return 0
+      },
+      async logout() {},
+      async login(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+      async register(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+    } satisfies AuthServiceLike
+    const { port } = await startServer({
+      authService,
+      maxConnections: 1,
+      sessionCookieSecure: false,
+    })
+    const firstSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      origin: ORIGIN,
+      headers: { Cookie: `hidden_session=${VALID_SESSION_TOKEN}` },
+    })
+    const firstRejected = new Promise<void>((resolve, reject) => {
+      firstSocket.once('unexpected-response', (_request, response) => {
+        try {
+          expect(response.statusCode).toBe(503)
+          resolve()
+        } catch (error) {
+          reject(error)
+        } finally {
+          response.destroy()
+        }
+      })
+      firstSocket.once('open', () =>
+        reject(new Error('Pending authenticated upgrade exceeded the limit.')),
+      )
+      firstSocket.once('error', () => undefined)
+    })
+
+    await lookupStarted
+    let guest: Probe | undefined
+    try {
+      guest = await connectProbe(port)
+      await expect(
+        guest.waitFor(PacketType.ID_ASSIGN),
+      ).resolves.toBeDefined()
+      await expectUpgradeStatus(
+        port,
+        503,
+        ORIGIN,
+        '/ws',
+        `hidden_session=${VALID_SESSION_TOKEN}`,
+      )
+      releaseFirstLookup?.()
+      await firstRejected
+    } finally {
+      releaseFirstLookup?.()
+      guest?.close()
+      firstSocket.terminate()
+    }
+  })
+
+  it('closes sockets whose session lookup is still pending during shutdown', async () => {
+    let markLookupStarted: (() => void) | undefined
+    let releaseLookup: (() => void) | undefined
+    const lookupStarted = new Promise<void>((resolve) => {
+      markLookupStarted = resolve
+    })
+    const blockedLookup = new Promise<void>((resolve) => {
+      releaseLookup = resolve
+    })
+    const authService = {
+      async getSession() {
+        markLookupStarted?.()
+        await blockedLookup
+        return undefined
+      },
+      async cleanupExpiredSessions() {
+        return 0
+      },
+      async logout() {},
+      async login(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+      async register(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+    } satisfies AuthServiceLike
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+      shutdownGraceMs: 25,
+    })
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      origin: ORIGIN,
+      headers: { Cookie: `hidden_session=${VALID_SESSION_TOKEN}` },
+    })
+    socket.on('error', () => undefined)
+    const socketClosed = new Promise<void>((resolve) => {
+      socket.once('close', () => resolve())
+    })
+
+    await lookupStarted
+    try {
+      await server?.close()
+      await expect(
+        Promise.race([
+          socketClosed.then(() => true),
+          new Promise<false>((resolve) =>
+            setTimeout(() => resolve(false), 200),
+          ),
+        ]),
+      ).resolves.toBe(true)
+    } finally {
+      releaseLookup?.()
+      socket.terminate()
+    }
+  })
+
+  it('keeps the shutdown grace timer active for an unresponsive established socket', async () => {
+    const shutdownGraceMs = 25
+    const { port } = await startServer({ shutdownGraceMs })
+    const probe = await connectProbe(port)
+    const transport = (
+      probe.socket as WebSocket & {
+        _socket: { pause(): void }
+      }
+    )._socket
+    transport.pause()
+    const startedAt = Date.now()
+
+    try {
+      await server?.close()
+      const elapsedMs = Date.now() - startedAt
+      expect(elapsedMs).toBeGreaterThanOrEqual(shutdownGraceMs - 10)
+      expect(elapsedMs).toBeLessThan(500)
+    } finally {
+      probe.socket.terminate()
+    }
+  })
+
+  it('binds an authenticated socket to the account username instead of client input', async () => {
+    const authService = {
+      async getSession(rawToken: string | undefined) {
+        return rawToken === VALID_SESSION_TOKEN
+          ? {
+              id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+              username: 'Account_Player',
+            }
+          : undefined
+      },
+      async cleanupExpiredSessions() {
+        return 0
+      },
+      async logout() {},
+      async login(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+      async register(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+    } satisfies AuthServiceLike
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+    })
+    const account = await connectProbe(
+      port,
+      ORIGIN,
+      '/ws',
+      `hidden_session=${VALID_SESSION_TOKEN}`,
+    )
+    const accountId = Number((await account.waitFor(PacketType.ID_ASSIGN))[2])
+
+    account.send([999, PacketType.USER_INFO, 'Spoofed_Name'])
+    const users = await account.waitFor(PacketType.USER_INFO)
+
+    expect(users[2]).toContainEqual([accountId, 'Account_Player'])
+    await expect(
+      account.waitFor(PacketType.SERVER_RESPONSE),
+    ).resolves.toContain(true)
+    account.close()
+  })
+
+  it('rejects a guest that announces an account-shaped username', async () => {
+    const { port } = await startServer()
+    const guest = await connectProbe(port)
+    await guest.waitFor(PacketType.ID_ASSIGN)
+
+    guest.send([999, PacketType.USER_INFO, 'Account_Player'])
+    const closeCode = await new Promise<number>((resolve) =>
+      guest.socket.once('close', resolve),
+    )
+
+    expect(closeCode).toBe(1008)
+  })
+
+  it('rejects cookie-bearing upgrades when session validation fails but still admits cookie-less guests', async () => {
+    const authService = {
+      async getSession() {
+        throw new Error('database unavailable')
+      },
+      async cleanupExpiredSessions() {
+        return 0
+      },
+      async logout() {},
+      async login(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+      async register(): Promise<never> {
+        throw new Error('Not used by this test.')
+      },
+    } satisfies AuthServiceLike
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+    })
+
+    await expectUpgradeStatus(
+      port,
+      503,
+      ORIGIN,
+      '/ws',
+      `hidden_session=${VALID_SESSION_TOKEN}`,
+    )
+    const guest = await connectProbe(port)
+    await expect(guest.waitFor(PacketType.ID_ASSIGN)).resolves.toBeDefined()
+    guest.close()
   })
 })
