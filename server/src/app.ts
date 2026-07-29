@@ -232,7 +232,15 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
     }, shutdownGraceMs)
     forceClose.unref()
 
-    webSocketServer.close()
+    const webSocketsClosed = new Promise<void>((resolve, reject) => {
+      webSocketServer.close((error) => {
+        if (error) {
+          reject(error)
+          return
+        }
+        resolve()
+      })
+    })
     const httpClosed = new Promise<void>((resolve, reject) => {
       httpServer.close((error) => {
         if (error) {
@@ -244,7 +252,11 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
     })
 
     try {
-      await Promise.all([httpClosed, waitForPendingUpgrades()])
+      await Promise.all([
+        httpClosed,
+        webSocketsClosed,
+        waitForPendingUpgrades(),
+      ])
       logger('info', 'server.stopped')
     } finally {
       clearTimeout(forceClose)

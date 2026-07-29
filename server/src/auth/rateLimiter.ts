@@ -24,7 +24,11 @@ export class FixedWindowRateLimiter {
     windowMs: number,
     now = Date.now(),
   ): RateLimitResult {
-    if (this.entries.size >= 256 && now >= this.nextCleanupAt) {
+    const cleanupThreshold = Math.min(256, this.maxEntries)
+    if (
+      this.entries.size >= cleanupThreshold &&
+      now >= this.nextCleanupAt
+    ) {
       for (const [entryKey, entry] of this.entries) {
         if (entry.expiresAt <= now) {
           this.entries.delete(entryKey)

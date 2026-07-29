@@ -386,6 +386,28 @@ describe.sequential('Hidden server', () => {
     }
   })
 
+  it('keeps the shutdown grace timer active for an unresponsive established socket', async () => {
+    const shutdownGraceMs = 25
+    const { port } = await startServer({ shutdownGraceMs })
+    const probe = await connectProbe(port)
+    const transport = (
+      probe.socket as WebSocket & {
+        _socket: { pause(): void }
+      }
+    )._socket
+    transport.pause()
+    const startedAt = Date.now()
+
+    try {
+      await server?.close()
+      const elapsedMs = Date.now() - startedAt
+      expect(elapsedMs).toBeGreaterThanOrEqual(shutdownGraceMs - 10)
+      expect(elapsedMs).toBeLessThan(500)
+    } finally {
+      probe.socket.terminate()
+    }
+  })
+
   it('binds an authenticated socket to the account username instead of client input', async () => {
     const authService = {
       async getSession(rawToken: string | undefined) {

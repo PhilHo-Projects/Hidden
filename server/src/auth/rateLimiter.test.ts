@@ -47,4 +47,16 @@ describe('FixedWindowRateLimiter', () => {
     })
     expect(limiter.entryCount).toBe(2)
   })
+
+  it('recovers a small-capacity limiter after its entries expire', () => {
+    const limiter = new FixedWindowRateLimiter(2)
+    limiter.consume('first', 1, 1_000, 0)
+    limiter.consume('second', 1, 1_000, 0)
+
+    expect(limiter.consume('third', 1, 1_000, 1_001)).toEqual({
+      allowed: true,
+      retryAfterSeconds: 0,
+    })
+    expect(limiter.entryCount).toBe(1)
+  })
 })
