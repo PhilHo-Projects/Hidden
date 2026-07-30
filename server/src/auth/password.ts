@@ -6,9 +6,11 @@ import {
 } from 'node:crypto'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,24}$/
-const MIN_PASSWORD_CHARACTERS = 10
-const MAX_PASSWORD_CHARACTERS = 128
+export const MIN_PASSWORD_CHARACTERS = 8
+export const MAX_PASSWORD_CHARACTERS = 128
 const MAX_PASSWORD_BYTES = 512
+// Derived so the bound and the message it reports cannot drift apart.
+const PASSWORD_LENGTH_MESSAGE = `Password must contain ${MIN_PASSWORD_CHARACTERS}–${MAX_PASSWORD_CHARACTERS} characters.`
 const ARGON2_MEMORY_KIB = 19_456
 const ARGON2_PASSES = 2
 const ARGON2_PARALLELISM = 1
@@ -52,10 +54,7 @@ export function parseCredentials(value: unknown): Credentials {
   }
 
   if (typeof body.password !== 'string') {
-    throw new CredentialValidationError(
-      'password',
-      'Password must contain 10–128 characters.',
-    )
+    throw new CredentialValidationError('password', PASSWORD_LENGTH_MESSAGE)
   }
 
   const password = body.password
@@ -66,10 +65,7 @@ export function parseCredentials(value: unknown): Credentials {
     characterCount > MAX_PASSWORD_CHARACTERS ||
     byteCount > MAX_PASSWORD_BYTES
   ) {
-    throw new CredentialValidationError(
-      'password',
-      'Password must contain 10–128 characters.',
-    )
+    throw new CredentialValidationError('password', PASSWORD_LENGTH_MESSAGE)
   }
 
   return {
