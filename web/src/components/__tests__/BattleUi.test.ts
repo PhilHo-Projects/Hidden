@@ -76,4 +76,40 @@ describe('battle UI', () => {
     expect(markup).toContain('--score-order:1')
     expect(markup).toContain('--score-order:2')
   })
+
+  it('staggers the result count-up slowly enough to read one cell at a time', () => {
+    const scoredGrid: GridState = {
+      cells: emptyGrid.cells.map((cell, index) =>
+        index === 0 || index === 4
+          ? { occupied: true, color: '#4591DB', immune: false }
+          : cell,
+      ),
+    }
+    const markup = renderToStaticMarkup(
+      createElement(BoardGrid, {
+        title: '',
+        subtitle: 'Guest#1234',
+        grid: scoredGrid,
+        scoreCountLabels: { 0: 1, 4: 2 },
+      }),
+    )
+
+    expect(markup).toContain('--score-delay:500ms')
+    expect(markup).toContain('--score-badge-delay:590ms')
+    expect(markup).toContain('--score-delay:840ms')
+    expect(markup).toContain('--score-badge-delay:930ms')
+  })
+
+  it('leaves unscored cells without a count-up delay', () => {
+    const markup = renderToStaticMarkup(
+      createElement(BoardGrid, {
+        title: '',
+        subtitle: 'Guest#1234',
+        grid: emptyGrid,
+      }),
+    )
+
+    expect(markup).not.toContain('unity-cell-score-counted')
+    expect(markup).toContain('--score-delay:0ms')
+  })
 })

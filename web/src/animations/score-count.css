@@ -1,5 +1,18 @@
+/*
+ * Result count-up. Each scored cell lights in turn, then the whole walk replays
+ * on a slow loop so a late glance still gets to audit the final score.
+ *
+ * The keyframe percentages below are tied to `--score-cycle`: the visible pop
+ * occupies the first 750ms (5%) and the remainder of the cycle is the rest beat.
+ * Change the cycle length and the percentages have to move with it.
+ */
+.unity-cell-score-counted,
+.score-count-badge {
+  --score-cycle: 15s;
+}
+
 .unity-cell-score-counted {
-  animation: score-cell-pop 440ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: score-cell-pop var(--score-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
   animation-delay: var(--score-delay);
 }
 
@@ -20,18 +33,19 @@
   line-height: 1;
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.88);
   transform: translate(-50%, -50%);
-  animation: score-badge-pop 360ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: score-badge-pop var(--score-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
   animation-delay: var(--score-badge-delay);
 }
 
 @keyframes score-cell-pop {
   0%,
+  5%,
   100% {
     filter: brightness(1);
     transform: scale(1);
   }
 
-  46% {
+  2.4% {
     filter: brightness(1.85) saturate(1.22);
     transform: scale(1.045);
   }
@@ -39,11 +53,19 @@
 
 @keyframes score-badge-pop {
   0%,
+  5%,
   100% {
     transform: translate(-50%, -50%) scale(1);
   }
 
-  48% {
+  2.6% {
     transform: translate(-50%, -50%) scale(1.24);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unity-cell-score-counted,
+  .score-count-badge {
+    animation: none;
   }
 }

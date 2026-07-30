@@ -9,6 +9,12 @@ export interface CellDestructionEffect {
   tone: 'loss' | 'victory'
 }
 
+// The result count-up walks the scored cells one at a time. Keep the step long
+// enough to follow by eye; `score-count.css` replays the whole walk on a loop.
+const SCORE_STEP_MS = 340
+const SCORE_CELL_OFFSET_MS = 500
+const SCORE_BADGE_OFFSET_MS = 590
+
 interface BoardGridProps {
   title: string
   subtitle: string
@@ -84,8 +90,8 @@ export function BoardGrid({
               style={{
                 background: cellTone(cell.color, hidden, cell.occupied),
                 '--score-order': scoreCount ?? 0,
-                '--score-delay': `${scoreCount ? (scoreCount - 1) * 150 + 220 : 0}ms`,
-                '--score-badge-delay': `${scoreCount ? (scoreCount - 1) * 150 + 280 : 0}ms`,
+                '--score-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_CELL_OFFSET_MS : 0}ms`,
+                '--score-badge-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_BADGE_OFFSET_MS : 0}ms`,
               } as CSSProperties}
             >
               <span className="unity-cell-number">{index + 1}</span>
