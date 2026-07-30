@@ -1,0 +1,98 @@
+/*
+ * Turn focus. While the player owes a move but has not loaded one, the three
+ * move tiles ask to be looked at: a yellow ring breathes just outside each
+ * chunky black border and a gloss travels across the face.
+ *
+ * The three are staggered so the eye sweeps the whole choice left to right
+ * instead of fixating on one tile. The state lives on the dock rather than the
+ * tile, so it stops the instant a colour is loaded and attention should move up
+ * to the board.
+ */
+
+.rps-dock-awaiting .rps-tile {
+  animation: turn-focus-ring 1900ms ease-in-out infinite;
+}
+
+.rps-dock-awaiting .rps-tile::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  /*
+   * The sweep passes over the icon, not behind it, because an absolutely
+   * positioned pseudo-element paints above in-flow content. That is the look we
+   * want, so the band stays narrow and its peak stays below half opacity to
+   * avoid washing out the silhouette as it crosses.
+   */
+  background: linear-gradient(
+    104deg,
+    rgba(255, 255, 255, 0) 43%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0) 57%
+  );
+  background-repeat: no-repeat;
+  background-size: 260% 100%;
+  background-position: -80% 0;
+  animation: turn-focus-gloss 1900ms ease-in-out infinite;
+}
+
+.rps-dock-awaiting .rps-tile:nth-child(2),
+.rps-dock-awaiting .rps-tile:nth-child(2)::before {
+  animation-delay: 180ms;
+}
+
+.rps-dock-awaiting .rps-tile:nth-child(3),
+.rps-dock-awaiting .rps-tile:nth-child(3)::before {
+  animation-delay: 360ms;
+}
+
+/*
+ * Both rest keyframes carry all three shadows so the list interpolates by
+ * position instead of relying on the browser to pad the shorter list.
+ */
+@keyframes turn-focus-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 4px 0 #000,
+      0 0 0 0 rgba(246, 230, 0, 0),
+      0 0 0 rgba(246, 230, 0, 0);
+  }
+
+  50% {
+    box-shadow:
+      0 4px 0 #000,
+      0 0 0 3px rgba(246, 230, 0, 0.92),
+      0 0 20px rgba(246, 230, 0, 0.42);
+  }
+}
+
+/*
+ * The gloss sweeps across in the first half of the cycle and then holds off the
+ * right edge. It is fully transparent at both extremes, so the wrap back to the
+ * start position is never visible.
+ */
+@keyframes turn-focus-gloss {
+  0% {
+    background-position: -80% 0;
+  }
+
+  55%,
+  100% {
+    background-position: 180% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rps-dock-awaiting .rps-tile {
+    animation: none;
+    box-shadow:
+      0 4px 0 #000,
+      0 0 0 3px rgba(246, 230, 0, 0.92);
+  }
+
+  .rps-dock-awaiting .rps-tile::before {
+    animation: none;
+    background: none;
+  }
+}

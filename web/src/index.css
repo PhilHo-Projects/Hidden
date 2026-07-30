@@ -1163,8 +1163,14 @@ summary:focus-visible {
   opacity: 0.62;
 }
 
+/*
+ * `align-items` must stay explicit. The dock sits in a grid row that stretches
+ * to fill leftover height, and a stretched flex line overrides the tiles'
+ * `aspect-ratio`, which deformed them into tall rectangles on roomy viewports.
+ */
 .rps-dock {
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: clamp(0.45rem, 1.4vw, 0.8rem);
   padding: 0 0 0.65rem;

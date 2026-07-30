@@ -8,4 +8,5 @@ dist/
 Thumbs.db
 .vite/
 .playwright-cli/
+.playwright-mcp/
 .worktrees/

@@ -6,6 +6,7 @@ import {
   getScoreCountLabels,
   getScreenLabel,
   resolvePlayerName,
+  shouldPromptMoveChoice,
   shouldShowOpponentBoard,
 } from '../viewModel'
 import type { GameState } from '../types'
@@ -110,6 +111,17 @@ describe('view model helpers', () => {
     ).toBe(true)
     expect(shouldShowOpponentBoard(makeMatch(), 'results')).toBe(true)
     expect(shouldShowOpponentBoard(makeMatch({ config: { ...makeMatch().config, blindMode: false } }), 'battle')).toBe(true)
+  })
+
+  it('prompts the move choice only while the player owes an unloaded move', () => {
+    expect(shouldPromptMoveChoice(makeMatch(), 'battle')).toBe(true)
+
+    expect(shouldPromptMoveChoice(null, 'battle')).toBe(false)
+    expect(shouldPromptMoveChoice(makeMatch(), 'results')).toBe(false)
+    expect(shouldPromptMoveChoice(makeMatch({ isMyTurn: false }), 'battle')).toBe(false)
+    expect(shouldPromptMoveChoice(makeMatch({ selectedColor: '#4591DB' }), 'battle')).toBe(false)
+    expect(shouldPromptMoveChoice(makeMatch({ shieldSelectionMode: true }), 'battle')).toBe(false)
+    expect(shouldPromptMoveChoice(makeMatch({ phase: 'results' }), 'battle')).toBe(false)
   })
 
   it('assigns sequential score labels only to occupied cells', () => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import './animations/turn-focus.css'
 import paperIcon from './assets/icons/battle/move-paper.png'
 import rockIcon from './assets/icons/battle/move-rock.png'
 import scissorsIcon from './assets/icons/battle/move-scissors.png'
@@ -42,6 +43,7 @@ import {
   getOpponentName,
   getScoreCountLabels,
   resolvePlayerName,
+  shouldPromptMoveChoice,
   shouldShowOpponentBoard,
   type Screen,
 } from './game/viewModel'
@@ -735,6 +737,7 @@ function App() {
           : 'Your Turn'
         : `Waiting for ${opponentName}`
       : status.detail
+  const awaitingMoveChoice = shouldPromptMoveChoice(match, screen)
   const playerScoreCountLabels = match
     ? getScoreCountLabels(match.playerGrid.cells)
     : {}
@@ -1010,7 +1013,10 @@ function App() {
             </div>
             <div className="battle-controls">
               <PowerupTray powerups={match.playerPowerups} disabled={!match.isMyTurn} onUse={onPowerup} />
-              <div className="rps-dock" aria-label="Move loader">
+              <div
+                className={`rps-dock ${awaitingMoveChoice ? 'rps-dock-awaiting' : ''}`}
+                aria-label="Move loader"
+              >
                 {pieces.map((piece) => (
                   <button
                     key={piece.label}
