@@ -13,6 +13,7 @@ import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
 import { PowerupTray } from './components/PowerupTray'
+import { ProfileMenu } from './components/ProfileMenu'
 import {
   ActionChoice,
   GameMasthead,
@@ -766,19 +767,24 @@ function App() {
               BACK
             </button>
             <StatusStrip status={chromeStatus} chrome />
-            <button
-              type="button"
-              className="nav-brush-button nav-account-button"
-              aria-label={authUser ? `Log out ${authUser.username}` : 'Sign in'}
-              disabled={authBusy || accountChangeLocked || screen === 'account'}
-              onClick={
-                authUser
-                  ? () => void logout()
-                  : () => openAccount('login')
-              }
-            >
-              {authBusy ? 'WAIT...' : authUser ? 'LOG OUT' : 'SIGN IN'}
-            </button>
+            {authUser ? (
+              <ProfileMenu
+                username={authUser.username}
+                busy={authBusy}
+                disabled={accountChangeLocked || screen === 'account'}
+                onSignOut={() => void logout()}
+              />
+            ) : (
+              <button
+                type="button"
+                className="nav-brush-button nav-account-button"
+                aria-label="Sign in"
+                disabled={authBusy || accountChangeLocked || screen === 'account'}
+                onClick={() => openAccount('login')}
+              >
+                {authBusy ? 'WAIT...' : 'SIGN IN'}
+              </button>
+            )}
           </nav>
         </header>
       ) : null}
