@@ -5,10 +5,10 @@ import express, {
 } from 'express'
 import type { Logger } from '../logger'
 import { FixedWindowRateLimiter } from './rateLimiter'
-import type { AuthUser } from './repository'
 import {
   AuthServiceError,
   SESSION_DURATION_MS,
+  type AuthenticatedUser,
   type AuthSession,
 } from './service'
 import {
@@ -21,7 +21,9 @@ import {
 export interface AuthServiceLike {
   register(value: unknown, previousRawToken?: string): Promise<AuthSession>
   login(value: unknown, previousRawToken?: string): Promise<AuthSession>
-  getSession(rawToken: string | undefined): Promise<AuthUser | undefined>
+  getSession(
+    rawToken: string | undefined,
+  ): Promise<AuthenticatedUser | undefined>
   logout(rawToken: string | undefined): Promise<void>
   cleanupExpiredSessions(): Promise<number>
 }

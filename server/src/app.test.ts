@@ -5,11 +5,16 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { AuthServiceLike } from './auth/http'
+import type { AuthenticatedUser } from './auth/service'
 import { createHiddenServer, type HiddenServer } from './app'
+import { DEFAULT_MATCH_RULES } from './matchRules'
 import { PacketType } from './protocol'
 
 const ORIGIN = 'http://localhost:5173'
 const VALID_SESSION_TOKEN = 'v'.repeat(43)
+const PLAYER_SESSION_TOKEN = 'p'.repeat(43)
+const ADMIN_SESSION_TOKEN = 'a'.repeat(43)
+const SECOND_ADMIN_SESSION_TOKEN = 'b'.repeat(43)
 
 class Probe {
   private readonly buffered: unknown[][] = []
@@ -109,6 +114,58 @@ async function expectUpgradeStatus(
   })
 }
 
+function authServiceForSessions(
+  sessions: ReadonlyMap<string, AuthenticatedUser>,
+): AuthServiceLike {
+  return {
+    async getSession(rawToken) {
+      return rawToken ? sessions.get(rawToken) : undefined
+    },
+    async cleanupExpiredSessions() {
+      return 0
+    },
+    async logout() {},
+    async login(): Promise<never> {
+      throw new Error('Not used by this test.')
+    },
+    async register(): Promise<never> {
+      throw new Error('Not used by this test.')
+    },
+  }
+}
+
+async function queueProbe(
+  port: number,
+  options: {
+    cookie?: string
+    guestUsername?: string
+    proposedRules?: unknown
+  } = {},
+) {
+  const probe = await connectProbe(
+    port,
+    ORIGIN,
+    '/ws',
+    options.cookie,
+  )
+  await probe.waitFor(PacketType.ID_ASSIGN)
+
+  if (options.guestUsername) {
+    probe.send([999, PacketType.USER_INFO, options.guestUsername])
+    await probe.waitFor(PacketType.SERVER_RESPONSE)
+  }
+
+  probe.send([999, PacketType.ROOM_JOIN, 'lobby'])
+  await probe.waitFor(PacketType.SERVER_RESPONSE)
+  probe.send([
+    999,
+    PacketType.MATCHMAKING_REQUEST,
+    true,
+    ...(options.proposedRules === undefined ? [] : [options.proposedRules]),
+  ])
+  return probe
+}
+
 let server: HiddenServer | undefined
 let staticRoot: string | undefined
 
@@ -195,6 +252,15 @@ describe.sequential('Hidden server', () => {
     expect([firstId, secondId]).toContain(Number(firstStart[2]))
     expect(firstStart[2]).toBe(secondStart[2])
 
+    first.send([999, PacketType.READY_STATE, true])
+    second.send([999, PacketType.READY_STATE, true])
+    const [firstRematch, secondRematch] = await Promise.all([
+      first.waitFor(PacketType.GAME_START),
+      second.waitFor(PacketType.GAME_START),
+    ])
+    expect([firstId, secondId]).toContain(Number(firstRematch[2]))
+    expect(firstRematch[2]).toBe(secondRematch[2])
+
     first.send([999, PacketType.GAME_MOVE, 4, 'green'])
     expect(await second.waitFor(PacketType.GAME_MOVE)).toEqual([
       firstId,
@@ -210,6 +276,192 @@ describe.sequential('Hidden server', () => {
       true,
     ])
     second.close()
+  })
+
+  it('ignores a non-admin rules proposal and sends defaults to both players', async () => {
+    const authService = authServiceForSessions(
+      new Map([
+        [
+          PLAYER_SESSION_TOKEN,
+          {
+            id: 'c227de2f-1fd1-4830-ac54-4d9f4daaecc5',
+            role: 'player',
+            username: 'Regular_Player',
+          },
+        ],
+      ]),
+    )
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+    })
+    const player = await queueProbe(port, {
+      cookie: `hidden_session=${PLAYER_SESSION_TOKEN}`,
+      proposedRules: { rounds: 3, turnSeconds: 30, blindMode: false },
+    })
+    const guest = await queueProbe(port, { guestUsername: 'Guest#1001' })
+
+    const [playerMatch, guestMatch] = await Promise.all([
+      player.waitFor(PacketType.MATCH_FOUND),
+      guest.waitFor(PacketType.MATCH_FOUND),
+    ])
+
+    expect(playerMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    expect(guestMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    player.close()
+    guest.close()
+  })
+
+  it('applies and clamps an admin proposal identically for both players', async () => {
+    const authService = authServiceForSessions(
+      new Map([
+        [
+          ADMIN_SESSION_TOKEN,
+          {
+            id: 'a229d266-4c67-47d2-b6e3-f4e169a59f1f',
+            role: 'admin',
+            username: 'Ecco',
+          },
+        ],
+      ]),
+    )
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+    })
+    const admin = await queueProbe(port, {
+      cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
+      proposedRules: { rounds: 999, turnSeconds: 0, blindMode: false },
+    })
+    const guest = await queueProbe(port, { guestUsername: 'Guest#1002' })
+
+    const [adminMatch, guestMatch] = await Promise.all([
+      admin.waitFor(PacketType.MATCH_FOUND),
+      guest.waitFor(PacketType.MATCH_FOUND),
+    ])
+
+    const expected = { rounds: 20, turnSeconds: 2, blindMode: false }
+    expect(adminMatch[3]).toEqual(expected)
+    expect(guestMatch[3]).toEqual(expected)
+    admin.close()
+    guest.close()
+  })
+
+  it('defaults a malformed admin proposal without closing the socket', async () => {
+    const authService = authServiceForSessions(
+      new Map([
+        [
+          ADMIN_SESSION_TOKEN,
+          {
+            id: '0e5b79b4-9150-4aaa-af9b-c9565d619bd9',
+            role: 'admin',
+            username: 'Ecco',
+          },
+        ],
+      ]),
+    )
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+    })
+    const admin = await queueProbe(port, {
+      cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
+      proposedRules: { rounds: 4, turnSeconds: 'bad', blindMode: true },
+    })
+    const guest = await queueProbe(port, { guestUsername: 'Guest#1003' })
+
+    const [adminMatch, guestMatch] = await Promise.all([
+      admin.waitFor(PacketType.MATCH_FOUND),
+      guest.waitFor(PacketType.MATCH_FOUND),
+    ])
+
+    expect(adminMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    expect(guestMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    expect(admin.socket.readyState).toBe(WebSocket.OPEN)
+    admin.close()
+    guest.close()
+  })
+
+  it('uses the earlier queue entry when two admins propose different rules', async () => {
+    const authService = authServiceForSessions(
+      new Map([
+        [
+          ADMIN_SESSION_TOKEN,
+          {
+            id: '83bad335-2d79-48ab-8900-94d04a2cc50a',
+            role: 'admin',
+            username: 'First_Admin',
+          },
+        ],
+        [
+          SECOND_ADMIN_SESSION_TOKEN,
+          {
+            id: '349b555d-bf52-434c-92c7-4797b4dac3a7',
+            role: 'admin',
+            username: 'Second_Admin',
+          },
+        ],
+      ]),
+    )
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+    })
+    const first = await queueProbe(port, {
+      cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
+      proposedRules: { rounds: 4, turnSeconds: 12, blindMode: false },
+    })
+    const second = await queueProbe(port, {
+      cookie: `hidden_session=${SECOND_ADMIN_SESSION_TOKEN}`,
+      proposedRules: { rounds: 9, turnSeconds: 30, blindMode: true },
+    })
+
+    const [firstMatch, secondMatch] = await Promise.all([
+      first.waitFor(PacketType.MATCH_FOUND),
+      second.waitFor(PacketType.MATCH_FOUND),
+    ])
+
+    const expected = { rounds: 4, turnSeconds: 12, blindMode: false }
+    expect(firstMatch[3]).toEqual(expected)
+    expect(secondMatch[3]).toEqual(expected)
+    first.close()
+    second.close()
+  })
+
+  it('clears an admin proposal when matchmaking is cancelled', async () => {
+    const authService = authServiceForSessions(
+      new Map([
+        [
+          ADMIN_SESSION_TOKEN,
+          {
+            id: 'ce8495b2-b61a-47b7-9eed-21d253536474',
+            role: 'admin',
+            username: 'Ecco',
+          },
+        ],
+      ]),
+    )
+    const { port } = await startServer({
+      authService,
+      sessionCookieSecure: false,
+    })
+    const admin = await queueProbe(port, {
+      cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
+      proposedRules: { rounds: 4, turnSeconds: 20, blindMode: false },
+    })
+    admin.send([999, PacketType.MATCHMAKING_REQUEST, false])
+    admin.send([999, PacketType.MATCHMAKING_REQUEST, true])
+    const guest = await queueProbe(port, { guestUsername: 'Guest#1004' })
+
+    const [adminMatch, guestMatch] = await Promise.all([
+      admin.waitFor(PacketType.MATCH_FOUND),
+      guest.waitFor(PacketType.MATCH_FOUND),
+    ])
+
+    expect(adminMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    expect(guestMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    admin.close()
+    guest.close()
   })
 
   it('closes clients that send malformed packets or exceed the message rate', async () => {
@@ -258,6 +510,7 @@ describe.sequential('Hidden server', () => {
     })
     const user = {
       id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+      role: 'player' as const,
       username: 'Account_Player',
     }
     const authService = {
@@ -414,6 +667,7 @@ describe.sequential('Hidden server', () => {
         return rawToken === VALID_SESSION_TOKEN
           ? {
               id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+              role: 'player' as const,
               username: 'Account_Player',
             }
           : undefined

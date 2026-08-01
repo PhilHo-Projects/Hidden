@@ -1,5 +1,11 @@
 import { decode, encode } from '@msgpack/msgpack'
 import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './constants'
+import {
+  clampMatchRules,
+  decodeMatchRules,
+  DEFAULT_MATCH_RULES,
+  type MatchRules,
+} from './matchRules'
 import type { PaintColor, QueuedMove } from './types'
 
 export const LOBBY_ROOM_ID = 'lobby'
@@ -55,7 +61,7 @@ export type DecodedPacket =
   | { type: PacketType.TIME_SYNC; sequence: number; serverTime: number }
   | { type: PacketType.SERVER_RESPONSE; success: boolean; originalPacketType?: PacketType }
   | { type: PacketType.USER_INFO; users: UserEntry[] }
-  | { type: PacketType.MATCH_FOUND; roomId: string }
+  | { type: PacketType.MATCH_FOUND; roomId: string; rules: MatchRules }
   | { type: PacketType.GAME_START; firstPlayerId: number }
   | { type: PacketType.GAME_MOVE; senderId: number; index: number; color: PaintColor }
   | { type: PacketType.IMMUNE_UPDATE; senderId: number; indices: number[] }
@@ -132,6 +138,9 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
       return {
         type: packetType,
         roomId: String(decoded[2]),
+        rules: clampMatchRules(
+          decodeMatchRules(decoded[3]) ?? DEFAULT_MATCH_RULES,
+        ),
       }
     case PacketType.GAME_START:
       return {
@@ -201,8 +210,17 @@ export function encodeRoomLeavePacket(senderId: number, roomId: string) {
   return encode([senderId, PacketType.ROOM_LEAVE, roomId])
 }
 
-export function encodeMatchmakingPacket(senderId: number, isSearching: boolean) {
-  return encode([senderId, PacketType.MATCHMAKING_REQUEST, isSearching])
+export function encodeMatchmakingPacket(
+  senderId: number,
+  isSearching: boolean,
+  proposedRules?: MatchRules,
+) {
+  return encode([
+    senderId,
+    PacketType.MATCHMAKING_REQUEST,
+    isSearching,
+    ...(proposedRules ? [proposedRules] : []),
+  ])
 }
 
 export function encodeReadyPacket(senderId: number, isReady: boolean) {

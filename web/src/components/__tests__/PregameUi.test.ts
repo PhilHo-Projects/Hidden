@@ -5,6 +5,8 @@ import {
   ActionChoice,
   GameMasthead,
   GuestIdentity,
+  MatchRulesSummary,
+  OnlineAdminSettings,
   StatusStrip,
 } from '../PregameUi'
 
@@ -82,5 +84,48 @@ describe('pre-game UI', () => {
     expect(errorMarkup).toContain('role="alert"')
     expect(identityMarkup).toContain('Playing as')
     expect(identityMarkup).toContain('Guest#4821')
+  })
+
+  it('shows the server-resolved rules before players ready', () => {
+    const markup = renderToStaticMarkup(
+      createElement(MatchRulesSummary, {
+        rules: { rounds: 8, turnSeconds: 15, blindMode: false },
+      }),
+    )
+
+    expect(markup).toContain('8 rounds')
+    expect(markup).toContain('15s turns')
+    expect(markup).toContain('Open boards')
+  })
+
+  it('hides online advanced settings from guests and non-admin accounts', () => {
+    const settings = {
+      rounds: 6,
+      turnSeconds: 10,
+      blindMode: true,
+      onRoundsChange: () => undefined,
+      onTurnSecondsChange: () => undefined,
+      onBlindModeChange: () => undefined,
+    }
+    const guestMarkup = renderToStaticMarkup(
+      createElement(OnlineAdminSettings, { ...settings, user: null }),
+    )
+    const playerMarkup = renderToStaticMarkup(
+      createElement(OnlineAdminSettings, {
+        ...settings,
+        user: { id: 'player-id', role: 'player', username: 'Player' },
+      }),
+    )
+    const adminMarkup = renderToStaticMarkup(
+      createElement(OnlineAdminSettings, {
+        ...settings,
+        user: { id: 'admin-id', role: 'admin', username: 'Admin' },
+      }),
+    )
+
+    expect(guestMarkup).toBe('')
+    expect(playerMarkup).toBe('')
+    expect(adminMarkup).toContain('Advanced')
+    expect(adminMarkup).toContain('Rounds')
   })
 })

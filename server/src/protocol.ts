@@ -1,4 +1,5 @@
 import { decode, encode } from '@msgpack/msgpack'
+import { decodeMatchRules, type MatchRules } from './matchRules'
 
 export enum PacketType {
   ID_ASSIGN = 2,
@@ -22,7 +23,11 @@ export type ClientPacket =
   | { type: PacketType.USER_INFO; username: string }
   | { type: PacketType.ROOM_JOIN; roomId: 'lobby' }
   | { type: PacketType.ROOM_LEAVE; roomId: string }
-  | { type: PacketType.MATCHMAKING_REQUEST; searching: boolean }
+  | {
+      type: PacketType.MATCHMAKING_REQUEST
+      searching: boolean
+      proposedRules?: MatchRules
+    }
   | { type: PacketType.READY_STATE; ready: boolean }
   | { type: PacketType.GAME_MOVE; index: number; color: PaintColor }
   | {
@@ -108,11 +113,14 @@ export function decodeClientPacket(bytes: Uint8Array): ClientPacket {
     }
     case PacketType.ROOM_LEAVE:
       return { type, roomId: assertRoomId(packet[2]) }
-    case PacketType.MATCHMAKING_REQUEST:
+    case PacketType.MATCHMAKING_REQUEST: {
+      const proposedRules = decodeMatchRules(packet[3])
       return {
         type,
         searching: assertBoolean(packet[2], 'Searching state'),
+        ...(proposedRules ? { proposedRules } : {}),
       }
+    }
     case PacketType.READY_STATE:
       return { type, ready: assertBoolean(packet[2], 'Ready state') }
     case PacketType.GAME_MOVE:
