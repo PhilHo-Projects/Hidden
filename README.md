@@ -22,6 +22,7 @@ Build and start the server on port 8080, then start Vite on port 5173:
 
 ```powershell
 cd server
+npm run build
 npm start
 ```
 
