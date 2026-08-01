@@ -4,9 +4,11 @@
   "private": true,
   "main": "dist/server.js",
   "scripts": {
+    "prebuild": "npm run build --workspace=@hidden/game-core",
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsc --watch --preserveWatchOutput",
+    "pretest": "npm run build --workspace=@hidden/game-core",
     "test": "vitest run",
     "test:integration": "vitest run src/auth/repository.integration.test.ts",
     "test:watch": "vitest"

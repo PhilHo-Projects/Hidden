@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run build --workspace=@hidden/game-core",
     "build": "tsc -b && vite build",
+    "pretest": "npm run build --workspace=@hidden/game-core",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

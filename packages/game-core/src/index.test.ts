@@ -288,6 +288,52 @@ describe('classic conflict and turn behavior', () => {
 })
 
 describe('classic power-ups and results', () => {
+  it('allows other unlocked power-ups while shield target selection remains pending', () => {
+    let state = createGame(baseSpec({ rules: { ...DEFAULT_MATCH_RULES, rounds: 20 } }))
+    state = play(state, 0, 0, 'rock').state
+    state = play(state, 1, 3, 'rock').state
+    state = play(state, 0, 1, 'rock').state
+    state = play(state, 1, 4, 'rock').state
+    state = play(state, 0, 2, 'rock').state
+    state = play(state, 1, 5, 'rock').state
+    state = play(state, 0, 3, 'paper').state
+    state = play(state, 1, 3, 'rock').state
+    state = play(state, 0, 4, 'paper').state
+    state = play(state, 1, 3, 'rock').state
+    state = play(state, 0, 5, 'paper').state
+    state = play(state, 1, 0, 'paper').state
+    state = play(state, 0, 6, 'scissors').state
+    state = play(state, 1, 1, 'paper').state
+    state = play(state, 0, 7, 'scissors').state
+    state = play(state, 1, 2, 'paper').state
+    state = play(state, 0, 8, 'scissors').state
+    state = play(state, 1, 3, 'rock').state
+
+    const shield = accepted(state, 0, {
+      type: 'activate-powerup',
+      powerup: 'shield',
+    })
+    const reveal = accepted(shield.state, 0, {
+      type: 'activate-powerup',
+      powerup: 'reveal',
+    })
+    const extraTurn = accepted(reveal.state, 0, {
+      type: 'activate-powerup',
+      powerup: 'extraTurn',
+    })
+
+    assert.equal(extraTurn.state.powerups[0].shieldSelectionPending, true)
+    assert.equal(extraTurn.state.powerups[0].revealActive, true)
+    assert.equal(extraTurn.state.powerups[0].extraTurnArmed, true)
+
+    const repeatedShield = applyCommand(extraTurn.state, 0, {
+      type: 'activate-powerup',
+      powerup: 'shield',
+    })
+    assert.equal(repeatedShield.accepted, false)
+    assert.equal(repeatedShield.rejection?.reason, 'powerup-used')
+  })
+
   it('unlocks, activates, and resolves reveal plus an extra-turn pair as one counted turn', () => {
     let state = createGame(baseSpec({ rules: { ...DEFAULT_MATCH_RULES, rounds: 10 } }))
     state = play(state, 0, 0, 'scissors').state

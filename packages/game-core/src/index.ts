@@ -520,7 +520,6 @@ function activatePowerup(
   const current = state.powerups[seat]
   if (!current.unlocked[powerup]) return reject(state, 'powerup-locked')
   if (current.used[powerup]) return reject(state, 'powerup-used')
-  if (current.shieldSelectionPending) return reject(state, 'shield-selection-pending')
 
   const next = cloneState(state)
   const nextPowerups = next.powerups[seat] as Mutable<PlayerPowerups>
