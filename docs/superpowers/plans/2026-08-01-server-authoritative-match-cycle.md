@@ -39,12 +39,12 @@ MessagePack 3, Vitest 4, Docker
 
 ### Task 2: Establish workspace and characterization baseline
 
-- [ ] Add failing characterization tests for current conflicts, immunity,
+- [x] Add failing characterization tests for current conflicts, immunity,
   power-ups, extra turns, reveal reset, timeouts, turns, scoring, and ties.
-- [ ] Add the private root workspace for `web`, `server`, and
+- [x] Add the private root workspace for `web`, `server`, and
   `packages/game-core`, with one root lockfile and coordinated scripts.
-- [ ] Configure the core to emit CommonJS JavaScript and declarations.
-- [ ] Update the Docker build/runtime stages for workspace dependencies and
+- [x] Configure the core to emit CommonJS JavaScript and declarations.
+- [x] Update the Docker build/runtime stages for workspace dependencies and
   verify existing web/server behavior before moving gameplay.
 
 ### Task 3: Extract `classic-v1` and migrate offline play
@@ -91,4 +91,3 @@ MessagePack 3, Vitest 4, Docker
 - [ ] Complete independent review and resolve all Critical/Important findings.
 - [ ] Push `codex/server-authoritative-match-cycle` and open a draft PR; do not
   merge or deploy it.
-
