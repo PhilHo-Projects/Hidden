@@ -197,6 +197,7 @@ export type DomainEvent =
   | { readonly type: 'game-finished'; readonly scores: readonly [number, number]; readonly winner: Seat | null }
 
 export type RejectionReason =
+  | 'invalid-command'
   | 'not-active-seat'
   | 'game-finished'
   | 'unknown-location'
@@ -291,6 +292,39 @@ function cloneState(state: GameState): GameState {
 
 function reject(state: GameState, reason: RejectionReason): ApplyResult {
   return { accepted: false, state, events: [], rejection: { reason } }
+}
+
+function isSeat(value: unknown): value is Seat {
+  return value === 0 || value === 1
+}
+
+function isLocationId(value: unknown): value is LocationId {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isClassicSymbol(value: unknown): value is ClassicSymbol {
+  return value === 'rock' || value === 'paper' || value === 'scissors'
+}
+
+function isPowerupKey(value: unknown): value is PowerupKey {
+  return value === 'shield' || value === 'reveal' || value === 'extraTurn'
+}
+
+function isGameCommand(value: unknown): value is GameCommand {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const candidate = value as Record<string, unknown>
+  switch (candidate.type) {
+    case 'place':
+      return isLocationId(candidate.locationId) && isClassicSymbol(candidate.symbol)
+    case 'activate-powerup':
+      return isPowerupKey(candidate.powerup)
+    case 'select-shield-target':
+      return isLocationId(candidate.locationId)
+    case 'timeout':
+      return true
+    default:
+      return false
+  }
 }
 
 function otherSeat(seat: Seat): Seat {
@@ -530,6 +564,7 @@ export function applyCommand(
   actor: Seat,
   command: GameCommand,
 ): ApplyResult {
+  if (!isSeat(actor) || !isGameCommand(command)) return reject(state, 'invalid-command')
   if (state.phase === 'finished') return reject(state, 'game-finished')
   if (actor !== state.activeSeat) return reject(state, 'not-active-seat')
   if (command.type === 'timeout') return applyTimeout(state)

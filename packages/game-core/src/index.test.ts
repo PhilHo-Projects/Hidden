@@ -182,6 +182,32 @@ describe('deterministic immutable command handling', () => {
     assert.equal(locked.state, initial)
   })
 
+  it('rejects malformed runtime command inputs without mutating canonical state', () => {
+    const initial = createGame(baseSpec())
+    const malformedInputs = [
+      { actor: 0, command: { type: 'place', locationId: 0, symbol: 'lizard' } },
+      { actor: 0, command: { type: 'activate-powerup', powerup: 'teleport' } },
+      { actor: 0, command: { type: 'select-shield-target', locationId: '0' } },
+      { actor: 0, command: { type: 'unknown-command' } },
+      { actor: 2, command: { type: 'timeout' } },
+      { actor: 0, command: null },
+    ] as const
+
+    for (const input of malformedInputs) {
+      const result = applyCommand(
+        initial,
+        input.actor as Seat,
+        input.command as unknown as GameCommand,
+      )
+      assert.equal(result.accepted, false)
+      assert.equal(result.rejection?.reason, 'invalid-command')
+      assert.equal(result.state, initial)
+      assert.deepEqual(result.events, [])
+    }
+
+    assert.deepEqual(initial, createGame(baseSpec()))
+  })
+
   it('resolves the same command stream symmetrically for either first seat', () => {
     let zeroFirst = createGame(baseSpec({ firstSeat: 0 }))
     zeroFirst = play(zeroFirst, 0, 0, 'rock').state
