@@ -24,6 +24,22 @@ describe('AccountForm', () => {
     expect(markup).toContain('Log in')
   })
 
+  it('does not enforce a stricter password length than the server accepts', () => {
+    const markup = renderToStaticMarkup(
+      createElement(AccountForm, {
+        mode: 'register',
+        busy: false,
+        error: null,
+        onModeChange: () => undefined,
+        onSubmit: async () => undefined,
+      }),
+    )
+
+    // Both the password and the confirmation field carry the bound.
+    expect(markup.match(/minLength="8"/g)).toHaveLength(2)
+    expect(markup).not.toContain('minLength="10"')
+  })
+
   it('renders login without a confirmation field and exposes pending state', () => {
     const markup = renderToStaticMarkup(
       createElement(AccountForm, {

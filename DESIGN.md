@@ -34,6 +34,12 @@ Create Game and Find Game remain visible as clearly unavailable future modes.
   landing screen.
 - Navigation actions use the yellow brush voice while status copy stays compact
   and utilitarian.
+- The brush face carries every display heading: the masthead, panel titles, the
+  round callout, and the game-over verdict. The block face is reserved for
+  status copy, labels, descriptions, player names, scores, and clocks. A single
+  panel never runs both faces at headline size.
+- The persistent bar owns no surface of its own. Its status panel is
+  transparent, so the bar reads as one black strip rather than a box on a strip.
 - Status copy reflects the actual phase: connecting, syncing, joining,
   searching, match found, ready, or failed.
 - Gameplay turn state and temporary announcements belong in the battle header.
@@ -45,6 +51,11 @@ Create Game and Find Game remain visible as clearly unavailable future modes.
 - Respect device safe areas and use `100dvh` where viewport height matters.
 - Interactive targets must be at least 48 px tall.
 - Fixed controls must not cover actions, status, or form fields.
+- Phone chrome shows the phase label alone. Detail copy is dropped rather than
+  ellipsed, because the screen below already restates it; wider viewports keep
+  the full line. Error detail is the exception and always stays visible.
+- Screens shorter than the viewport centre in the leftover height instead of
+  sitting under the bar, and fall back to top alignment once they overflow.
 - Keep the battle interaction in one vertical sequence: board, powerups, then
   rock/paper/scissors. The three powerups and three move choices remain visible
   as compact rows instead of becoming detached edge controls.

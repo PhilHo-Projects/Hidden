@@ -164,6 +164,158 @@ summary:focus-visible {
   cursor: not-allowed;
 }
 
+/*
+ * Account slot. The trigger keeps the navigation brush voice; everything inside
+ * the panel is UI copy and stays in the block face.
+ */
+.profile-menu {
+  position: relative;
+  justify-self: end;
+  min-width: 0;
+}
+
+.profile-menu-trigger {
+  max-width: min(11rem, 34vw);
+}
+
+.profile-menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-menu-caret {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-top: 0.34rem solid currentColor;
+  border-right: 0.3rem solid transparent;
+  border-left: 0.3rem solid transparent;
+  transition: transform 160ms ease;
+}
+
+.profile-menu-trigger[aria-expanded="true"] .profile-menu-caret {
+  transform: rotate(180deg);
+}
+
+.profile-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 1;
+  width: min(17rem, calc(100vw - 1.5rem));
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: rgba(215, 175, 19, 0.72);
+  background: #060606;
+  box-shadow: 6px 7px 0 rgba(0, 0, 0, 0.82);
+}
+
+.profile-menu-heading {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.profile-menu-heading > span {
+  color: var(--unity-yellow);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.profile-menu-heading strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.95rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-menu-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-menu-item {
+  display: grid;
+  width: 100%;
+  min-height: 3rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 0.5rem;
+  align-items: center;
+  padding: 0.55rem 0.85rem;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.profile-menu-item-label {
+  color: #fff;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.profile-menu-item-detail {
+  grid-column: 1 / -1;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.62rem;
+  line-height: 1.3;
+}
+
+/*
+ * Placed explicitly. Auto-placement pushed the badge onto a third row inside
+ * the 1fr column, where it stretched the full width of the item.
+ */
+.profile-menu-badge {
+  grid-row: 1;
+  grid-column: 2;
+  justify-self: end;
+  align-self: center;
+  padding: 0.16rem 0.34rem;
+  border: 1px solid rgba(215, 175, 19, 0.5);
+  color: var(--unity-yellow);
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.profile-menu-item:not(:disabled):hover,
+.profile-menu-item:not(:disabled):focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.profile-menu-item:disabled {
+  cursor: not-allowed;
+}
+
+.profile-menu-item:disabled .profile-menu-item-label {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.profile-menu-item:disabled .profile-menu-item-detail {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.profile-menu-signout {
+  border-bottom: 0;
+}
+
+.profile-menu-signout .profile-menu-item-label {
+  color: #ff8d93;
+}
+
+/*
+ * The chrome status panel must read as part of the bar, not as a box sitting on
+ * it. Any tinted fill here banded visibly against #050505 on wide-gamut phone
+ * displays, so the panel carries no surface of its own.
+ */
 .game-navbar > .status-strip {
   display: flex;
   width: 100%;
@@ -173,7 +325,8 @@ summary:focus-visible {
   overflow: hidden;
   padding: 0.3rem clamp(0.35rem, 1vw, 0.75rem);
   border: 0;
-  background: rgba(255, 255, 255, 0.025);
+  background: transparent;
+  box-shadow: none;
 }
 
 .status-strip-chrome .status-indicator {
@@ -595,6 +748,7 @@ summary:focus-visible {
 }
 
 .status-copy {
+  position: relative;
   display: grid;
   min-width: 0;
   gap: 0.15rem;
@@ -670,14 +824,21 @@ summary:focus-visible {
   text-transform: uppercase;
 }
 
+/*
+ * Display headings speak in the brush voice. The block face is reserved for
+ * status copy, labels, and numbers, so a panel never mixes both at headline size.
+ */
 .offline-card h2,
 .single-panel h1,
 .results-copy h1 {
   margin: 0;
   color: #fff;
-  font-family: var(--font-block);
-  font-size: clamp(2rem, 7vw, 4rem);
-  line-height: 0.98;
+  font-family: var(--font-brush);
+  font-size: clamp(2.6rem, 9vw, 4.75rem);
+  font-weight: 400;
+  line-height: 0.9;
+  text-shadow: 4px 4px 0 #000;
+  text-wrap: balance;
 }
 
 .offline-card .panel-description {
@@ -795,9 +956,21 @@ summary:focus-visible {
   transform: none;
 }
 
+/*
+ * The search clock speaks in the brush voice like the heading above it. Brush
+ * digits are proportional, so the clock is centred on a fixed track to stop it
+ * shuffling sideways as the seconds tick over.
+ */
 .single-panel strong {
+  display: grid;
+  min-width: 5ch;
+  place-items: center;
   color: var(--unity-yellow);
-  font-size: clamp(2rem, 8vw, 5rem);
+  font-family: var(--font-brush);
+  font-size: clamp(2.6rem, 9vw, 5.5rem);
+  font-weight: 400;
+  line-height: 1;
+  text-shadow: 4px 4px 0 #000;
 }
 
 .single-panel-icon {
@@ -843,9 +1016,10 @@ summary:focus-visible {
 .battle-header h1 {
   margin: 0;
   color: #22f28a;
-  font-family: var(--font-block);
-  font-size: clamp(1.55rem, 3.6vw, 2.8rem);
-  line-height: 0.95;
+  font-family: var(--font-brush);
+  font-size: clamp(1.9rem, 4.4vw, 3.3rem);
+  font-weight: 400;
+  line-height: 0.92;
   text-shadow: 4px 4px 0 #000;
 }
 
@@ -1148,8 +1322,14 @@ summary:focus-visible {
   opacity: 0.62;
 }
 
+/*
+ * `align-items` must stay explicit. The dock sits in a grid row that stretches
+ * to fill leftover height, and a stretched flex line overrides the tiles'
+ * `aspect-ratio`, which deformed them into tall rectangles on roomy viewports.
+ */
 .rps-dock {
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: clamp(0.45rem, 1.4vw, 0.8rem);
   padding: 0 0 0.65rem;
@@ -1291,11 +1471,22 @@ summary:focus-visible {
   .results-screen {
     width: min(44rem, 100%);
     grid-template-columns: 1fr;
-    align-content: start;
+    /*
+     * Centre the stacked summary in the leftover height instead of pinning it
+     * under the chrome. `safe` falls back to start-alignment when the summary
+     * and both boards are taller than the viewport, so nothing overflows off
+     * the top where it could not be scrolled back into view.
+     */
+    align-content: safe center;
   }
 }
 
 @media (max-width: 680px) {
+  :root {
+    /* Matches the 48px nav touch target, so the shell reserves no dead gap. */
+    --chrome-height: 3rem;
+  }
+
   .unity-shell {
     padding:
       max(0.65rem, env(safe-area-inset-top))
@@ -1305,7 +1496,7 @@ summary:focus-visible {
   }
 
   .unity-shell:not(.unity-intro) {
-    padding-top: calc(var(--chrome-height) + 0.45rem + env(safe-area-inset-top));
+    padding-top: calc(var(--chrome-height) + 0.3rem + env(safe-area-inset-top));
   }
 
   .game-navbar {
@@ -1323,11 +1514,27 @@ summary:focus-visible {
   }
 
   .status-strip-chrome .status-copy > span {
-    font-size: 0.54rem;
+    font-size: 0.6rem;
     letter-spacing: 0.1em;
   }
 
-  .status-strip-chrome .status-copy strong {
+  /*
+   * Phone chrome carries the phase label only. Every non-error detail is already
+   * restated by the screen underneath it, so the bar drops the duplicate rather
+   * than ellipsing it into noise. Errors keep their detail: nothing else says it.
+   */
+  .status-strip-chrome:not(.status-strip-error) .status-copy strong {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .status-strip-chrome.status-strip-error .status-copy strong {
     font-size: 0.54rem;
   }
 
@@ -1418,7 +1625,7 @@ summary:focus-visible {
 
   .battle-header h1 {
     padding-top: 0;
-    font-size: clamp(1.4rem, 7vw, 2rem);
+    font-size: clamp(1.75rem, 8.5vw, 2.5rem);
   }
 
   .battle-header p {
@@ -1519,7 +1726,7 @@ summary:focus-visible {
   }
 
   .results-copy h1 {
-    font-size: clamp(1.85rem, 10vw, 2.55rem);
+    font-size: clamp(2.4rem, 12.5vw, 3.4rem);
   }
 
   .results-copy p:last-of-type {
@@ -1623,7 +1830,7 @@ summary:focus-visible {
 
   .battle-header h1 {
     padding-top: 0;
-    font-size: 1.18rem;
+    font-size: 1.5rem;
   }
 
   .battle-header p {

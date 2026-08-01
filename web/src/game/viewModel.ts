@@ -80,3 +80,18 @@ export function shouldShowOpponentBoard(match: GameState | null, screen: Screen)
   if (!match) return false
   return !match.config.blindMode || match.playerPowerups.revealActive || screen === 'results'
 }
+
+/**
+ * Whether the move tiles should call for attention. True only while the player
+ * owes a move and has not loaded one; shield selection wants the board looked
+ * at instead, so it suppresses the prompt.
+ */
+export function shouldPromptMoveChoice(match: GameState | null, screen: Screen) {
+  if (!match || screen !== 'battle') return false
+  return (
+    match.phase === 'battle' &&
+    match.isMyTurn &&
+    !match.shieldSelectionMode &&
+    !match.selectedColor
+  )
+}

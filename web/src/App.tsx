@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import './animations/turn-focus.css'
 import paperIcon from './assets/icons/battle/move-paper.png'
 import rockIcon from './assets/icons/battle/move-rock.png'
 import scissorsIcon from './assets/icons/battle/move-scissors.png'
@@ -12,6 +13,7 @@ import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
 import { PowerupTray } from './components/PowerupTray'
+import { ProfileMenu } from './components/ProfileMenu'
 import {
   ActionChoice,
   GameMasthead,
@@ -42,6 +44,7 @@ import {
   getOpponentName,
   getScoreCountLabels,
   resolvePlayerName,
+  shouldPromptMoveChoice,
   shouldShowOpponentBoard,
   type Screen,
 } from './game/viewModel'
@@ -735,6 +738,7 @@ function App() {
           : 'Your Turn'
         : `Waiting for ${opponentName}`
       : status.detail
+  const awaitingMoveChoice = shouldPromptMoveChoice(match, screen)
   const playerScoreCountLabels = match
     ? getScoreCountLabels(match.playerGrid.cells)
     : {}
@@ -763,19 +767,24 @@ function App() {
               BACK
             </button>
             <StatusStrip status={chromeStatus} chrome />
-            <button
-              type="button"
-              className="nav-brush-button nav-account-button"
-              aria-label={authUser ? `Log out ${authUser.username}` : 'Sign in'}
-              disabled={authBusy || accountChangeLocked || screen === 'account'}
-              onClick={
-                authUser
-                  ? () => void logout()
-                  : () => openAccount('login')
-              }
-            >
-              {authBusy ? 'WAIT...' : authUser ? 'LOG OUT' : 'SIGN IN'}
-            </button>
+            {authUser ? (
+              <ProfileMenu
+                username={authUser.username}
+                busy={authBusy}
+                disabled={accountChangeLocked || screen === 'account'}
+                onSignOut={() => void logout()}
+              />
+            ) : (
+              <button
+                type="button"
+                className="nav-brush-button nav-account-button"
+                aria-label="Sign in"
+                disabled={authBusy || accountChangeLocked || screen === 'account'}
+                onClick={() => openAccount('login')}
+              >
+                {authBusy ? 'WAIT...' : 'SIGN IN'}
+              </button>
+            )}
           </nav>
         </header>
       ) : null}
@@ -1010,7 +1019,10 @@ function App() {
             </div>
             <div className="battle-controls">
               <PowerupTray powerups={match.playerPowerups} disabled={!match.isMyTurn} onUse={onPowerup} />
-              <div className="rps-dock" aria-label="Move loader">
+              <div
+                className={`rps-dock ${awaitingMoveChoice ? 'rps-dock-awaiting' : ''}`}
+                aria-label="Move loader"
+              >
                 {pieces.map((piece) => (
                   <button
                     key={piece.label}

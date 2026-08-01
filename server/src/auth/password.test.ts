@@ -41,6 +41,41 @@ describe('account credentials', () => {
     )
   })
 
+  it('accepts a password at the eight character minimum', () => {
+    expect(
+      parseCredentials({ username: 'Player', password: '12345678' }).password,
+    ).toBe('12345678')
+  })
+
+  it('rejects a password one character below the minimum and says the real bound', () => {
+    expect(() =>
+      parseCredentials({ username: 'Player', password: '1234567' }),
+    ).toThrowError(
+      expect.objectContaining<Partial<CredentialValidationError>>({
+        field: 'password',
+        message: 'Password must contain 8–128 characters.',
+      }),
+    )
+  })
+
+  it('reports the same bound when the password is missing entirely', () => {
+    expect(() => parseCredentials({ username: 'Player' })).toThrowError(
+      expect.objectContaining<Partial<CredentialValidationError>>({
+        field: 'password',
+        message: 'Password must contain 8–128 characters.',
+      }),
+    )
+  })
+
+  it('counts the minimum in characters rather than bytes', () => {
+    // Eight code points, but well over eight UTF-8 bytes.
+    const password = '🎮🎯🎲🃏🎰🎪🎨🎭'
+
+    expect(
+      parseCredentials({ username: 'Player', password }).password,
+    ).toBe(password)
+  })
+
   it('hashes with the approved Argon2id parameters and verifies without exposing the password', async () => {
     const password = 'correct horse battery staple'
     const encoded = await hashPassword(password)

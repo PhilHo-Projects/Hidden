@@ -3,6 +3,8 @@ import {
   type FormEvent,
 } from 'react'
 import {
+  MAX_PASSWORD_CHARACTERS,
+  MIN_PASSWORD_CHARACTERS,
   validateAccountSubmission,
   type AccountMode,
 } from '../auth/accountValidation'
@@ -92,8 +94,8 @@ export function AccountForm({
             name="password"
             type="password"
             value={password}
-            minLength={10}
-            maxLength={128}
+            minLength={MIN_PASSWORD_CHARACTERS}
+            maxLength={MAX_PASSWORD_CHARACTERS}
             autoComplete={isRegistering ? 'new-password' : 'current-password'}
             required
             disabled={busy}
@@ -108,8 +110,8 @@ export function AccountForm({
               name="password-confirmation"
               type="password"
               value={confirmation}
-              minLength={10}
-              maxLength={128}
+              minLength={MIN_PASSWORD_CHARACTERS}
+              maxLength={MAX_PASSWORD_CHARACTERS}
               autoComplete="new-password"
               required
               disabled={busy}
