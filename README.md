@@ -12,12 +12,9 @@ The repository contains only the browser game and its multiplayer service:
 
 ## Run locally
 
-Install both packages:
+Install the root workspace once:
 
 ```powershell
-cd web
-npm ci
-cd ..\server
 npm ci
 ```
 
@@ -51,16 +48,28 @@ npm start
 ## Verify
 
 ```powershell
-cd server
-npm test
-$env:TEST_DATABASE_URL='postgresql://hidden_test:password@127.0.0.1:5432/hidden_test'
-npm run test:integration
-npm run build
-
-cd ..\web
 npm test
 npm run lint
 npm run build
+
+$env:TEST_DATABASE_URL='postgresql://hidden_test:password@127.0.0.1:5432/hidden_test'
+npm run test:integration --workspace=hidden-server
+```
+
+The package-specific gates remain available when iterating on one package:
+
+```powershell
+npm run test --workspace=@hidden/game-core
+npm run build --workspace=@hidden/game-core
+
+npm run test --workspace=hidden-web
+npm run lint --workspace=hidden-web
+npm run build --workspace=hidden-web
+
+npm run test --workspace=hidden-server
+$env:TEST_DATABASE_URL='postgresql://hidden_test:password@127.0.0.1:5432/hidden_test'
+npm run test:integration --workspace=hidden-server
+npm run build --workspace=hidden-server
 ```
 
 The production container listens on port 8080, responds to `GET /healthz`, serves

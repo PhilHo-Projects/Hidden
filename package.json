@@ -1,0 +1,25 @@
+{
+  "name": "hidden",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "web",
+    "server",
+    "packages/game-core"
+  ],
+  "scripts": {
+    "test": "npm run test:lockfile && npm run test:core && npm run test:web && npm run test:server",
+    "test:lockfile": "node scripts/verify-lockfile-platforms.cjs",
+    "test:core": "npm run test --workspace=@hidden/game-core",
+    "test:web": "npm run test --workspace=hidden-web",
+    "test:server": "npm run test --workspace=hidden-server",
+    "build": "npm run build:core && npm run build:web && npm run build:server",
+    "build:core": "npm run build --workspace=@hidden/game-core",
+    "build:web": "npm run build --workspace=hidden-web",
+    "build:server": "npm run build --workspace=hidden-server",
+    "lint": "npm run lint --workspace=hidden-web"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

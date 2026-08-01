@@ -26,6 +26,15 @@ import {
 } from './components/PregameUi'
 import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './game/constants'
 import {
+  applyOfflineLocalMove,
+  applyOfflinePowerup,
+  applyOfflineShieldSelection,
+  createOfflineState,
+  forceOfflineTimeout,
+  playOfflineBotTurn,
+  startOfflineMatch,
+} from './game/coreAdapter'
+import {
   activatePowerup,
   applyLocalMove,
   applyRemoteImmuneStatus,
@@ -34,7 +43,6 @@ import {
   applyShieldSelection,
   createInitialState,
   forceTimeoutAction,
-  pickAiMove,
   selectColor,
   startMatch,
 } from './game/engine'
@@ -230,7 +238,13 @@ function App() {
   const beginCountdown = useCallback(
     async (config: MatchConfig, isMyTurn: boolean) => {
       const runId = ++countdownRunRef.current
-      const base = createInitialState(config)
+      const base = config.isOnline
+        ? createInitialState(config)
+        : createOfflineState(
+            config,
+            isMyTurn,
+            crypto.getRandomValues(new Uint32Array(1))[0] ?? 0,
+          )
       matchRef.current = base
       setMatch(base)
       setPlayerDestructionEffects({})
@@ -245,7 +259,9 @@ function App() {
       }
 
       if (runId !== countdownRunRef.current) return
-      const started = startMatch(base, isMyTurn)
+      const started = config.isOnline
+        ? startMatch(base, isMyTurn)
+        : startOfflineMatch(base)
       applyEngineResult(started)
       setTurnTimeLeft(config.turnSeconds)
       setScreen('battle')
@@ -362,13 +378,17 @@ function App() {
   )
 
   const onTimeout = useCallback(() => {
-    if (matchRef.current) applyEngineResult(forceTimeoutAction(matchRef.current))
+    if (!matchRef.current) return
+    applyEngineResult(
+      matchRef.current.config.isOnline
+        ? forceTimeoutAction(matchRef.current)
+        : forceOfflineTimeout(matchRef.current),
+    )
   }, [applyEngineResult])
 
   const onAiTurn = useCallback(() => {
     if (!matchRef.current) return
-    const move = pickAiMove(matchRef.current)
-    if (move) applyEngineResult(applyRemoteMove(matchRef.current, move.index, move.color))
+    applyEngineResult(playOfflineBotTurn(matchRef.current))
   }, [applyEngineResult])
 
   useEffect(() => {
@@ -670,18 +690,31 @@ function App() {
   const onCellSelect = (index: number) => {
     if (!matchRef.current) return
     if (matchRef.current.shieldSelectionMode) {
-      applyEngineResult(applyShieldSelection(matchRef.current, index))
+      applyEngineResult(
+        matchRef.current.config.isOnline
+          ? applyShieldSelection(matchRef.current, index)
+          : applyOfflineShieldSelection(matchRef.current, index),
+      )
       return
     }
     if (!matchRef.current.selectedColor) {
       setAnnouncement('Pick rock, paper, or scissors first.')
       return
     }
-    applyEngineResult(applyLocalMove(matchRef.current, index))
+    applyEngineResult(
+      matchRef.current.config.isOnline
+        ? applyLocalMove(matchRef.current, index)
+        : applyOfflineLocalMove(matchRef.current, index),
+    )
   }
 
   const onPowerup = (powerup: PowerupKey) => {
-    if (matchRef.current) applyEngineResult(activatePowerup(matchRef.current, powerup))
+    if (!matchRef.current) return
+    applyEngineResult(
+      matchRef.current.config.isOnline
+        ? activatePowerup(matchRef.current, powerup)
+        : applyOfflinePowerup(matchRef.current, powerup),
+    )
   }
 
   const opponentName = getOpponentName(users, clientId, match)
