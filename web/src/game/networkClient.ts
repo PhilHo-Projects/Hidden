@@ -13,6 +13,7 @@ import {
   type UserEntry,
 } from './protocol'
 import type { PaintColor, QueuedMove } from './types'
+import type { MatchRules } from './matchRules'
 
 export type ClientEvent =
   | { type: 'open' }
@@ -20,7 +21,7 @@ export type ClientEvent =
   | { type: 'error'; message: string }
   | { type: 'assigned-id'; clientId: number }
   | { type: 'users'; users: UserEntry[] }
-  | { type: 'match-found'; roomId: string }
+  | { type: 'match-found'; roomId: string; rules: MatchRules }
   | { type: 'game-start'; firstPlayerId: number; isMyTurn: boolean }
   | { type: 'hidden-move'; senderId: number; index: number; color: PaintColor }
   | { type: 'hidden-moves'; senderId: number; moves: QueuedMove[] }
@@ -178,8 +179,14 @@ export class NetworkClient {
     )
   }
 
-  startMatchmaking() {
-    this.send(encodeMatchmakingPacket(this.clientId ?? 0, true))
+  startMatchmaking(proposedRules?: MatchRules) {
+    this.send(
+      encodeMatchmakingPacket(
+        this.clientId ?? 0,
+        true,
+        proposedRules,
+      ),
+    )
   }
 
   cancelMatchmaking() {
@@ -233,7 +240,11 @@ export class NetworkClient {
         this.emit({ type: 'users', users: packet.users })
         break
       case PacketType.MATCH_FOUND:
-        this.emit({ type: 'match-found', roomId: packet.roomId })
+        this.emit({
+          type: 'match-found',
+          roomId: packet.roomId,
+          rules: packet.rules,
+        })
         break
       case PacketType.GAME_START:
         this.emit({

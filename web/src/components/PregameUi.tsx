@@ -1,4 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react'
+import type { AuthUser } from '../auth/authClient'
+import type { MatchRules } from '../game/matchRules'
 
 export type StatusTone = 'neutral' | 'working' | 'success' | 'error'
 
@@ -61,6 +63,88 @@ export function GuestIdentity({ name }: GuestIdentityProps) {
       <span>Playing as</span>
       <strong>{name}</strong>
     </p>
+  )
+}
+
+export interface AdvancedSettingsProps {
+  rounds: number
+  turnSeconds: number
+  blindMode: boolean
+  onRoundsChange: (rounds: number) => void
+  onTurnSecondsChange: (turnSeconds: number) => void
+  onBlindModeChange: (blindMode: boolean) => void
+}
+
+export function AdvancedSettings({
+  rounds,
+  turnSeconds,
+  blindMode,
+  onRoundsChange,
+  onTurnSecondsChange,
+  onBlindModeChange,
+}: AdvancedSettingsProps) {
+  return (
+    <details className="advanced-panel">
+      <summary>Advanced</summary>
+      <div className="advanced-grid">
+        <label>
+          <span>Rounds</span>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={rounds}
+            onChange={(event) =>
+              onRoundsChange(Math.max(1, Number(event.target.value) || 1))
+            }
+          />
+        </label>
+        <label>
+          <span>Timer</span>
+          <input
+            type="number"
+            min={2}
+            max={60}
+            value={turnSeconds}
+            onChange={(event) =>
+              onTurnSecondsChange(Math.max(2, Number(event.target.value) || 2))
+            }
+          />
+        </label>
+        <div className="toggle-row">
+          <span>Blind</span>
+          <button
+            type="button"
+            className={`unity-toggle ${blindMode ? 'unity-toggle-on' : ''}`}
+            aria-pressed={blindMode}
+            onClick={() => onBlindModeChange(!blindMode)}
+          >
+            <span />
+          </button>
+        </div>
+      </div>
+    </details>
+  )
+}
+
+interface OnlineAdminSettingsProps extends AdvancedSettingsProps {
+  user: AuthUser | null
+}
+
+export function OnlineAdminSettings({
+  user,
+  ...settings
+}: OnlineAdminSettingsProps) {
+  return user?.role === 'admin' ? <AdvancedSettings {...settings} /> : null
+}
+
+export function MatchRulesSummary({ rules }: { rules: MatchRules }) {
+  return (
+    <div className="match-rules-summary" aria-label="Match rules">
+      <span>{rules.rounds} rounds</span>
+      <span>{rules.turnSeconds}s turns</span>
+      <span>{rules.blindMode ? 'Blind boards' : 'Open boards'}</span>
+    </div>
   )
 }
 

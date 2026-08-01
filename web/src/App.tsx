@@ -16,8 +16,11 @@ import { PowerupTray } from './components/PowerupTray'
 import { ProfileMenu } from './components/ProfileMenu'
 import {
   ActionChoice,
+  AdvancedSettings,
   GameMasthead,
   GuestIdentity,
+  MatchRulesSummary,
+  OnlineAdminSettings,
   StatusStrip,
   type UiStatus,
 } from './components/PregameUi'
@@ -36,6 +39,14 @@ import {
   startMatch,
 } from './game/engine'
 import { NetworkClient, resolveWebSocketUrl, type ClientEvent } from './game/networkClient'
+import {
+  DEFAULT_MATCH_RULES,
+  type MatchRules,
+} from './game/matchRules'
+import {
+  beginOnlineMatch,
+  restartMatch,
+} from './game/onlineMatch'
 import { LOBBY_ROOM_ID, type UserEntry } from './game/protocol'
 import type { EngineResult, GameState, MatchConfig, PaintColor, PowerupKey } from './game/types'
 import {
@@ -89,63 +100,6 @@ function BrushButton({ children, className = '', tone = 'yellow', type = 'button
   )
 }
 
-interface AdvancedSettingsProps {
-  rounds: number
-  turnSeconds: number
-  blindMode: boolean
-  onRoundsChange: (rounds: number) => void
-  onTurnSecondsChange: (turnSeconds: number) => void
-  onBlindModeChange: (blindMode: boolean) => void
-}
-
-function AdvancedSettings({
-  rounds,
-  turnSeconds,
-  blindMode,
-  onRoundsChange,
-  onTurnSecondsChange,
-  onBlindModeChange,
-}: AdvancedSettingsProps) {
-  return (
-    <details className="advanced-panel">
-      <summary>Advanced</summary>
-      <div className="advanced-grid">
-        <label>
-          <span>Rounds</span>
-          <input
-            type="number"
-            min={1}
-            max={20}
-            value={rounds}
-            onChange={(event) => onRoundsChange(Math.max(1, Number(event.target.value) || 1))}
-          />
-        </label>
-        <label>
-          <span>Timer</span>
-          <input
-            type="number"
-            min={2}
-            max={60}
-            value={turnSeconds}
-            onChange={(event) => onTurnSecondsChange(Math.max(2, Number(event.target.value) || 2))}
-          />
-        </label>
-        <div className="toggle-row">
-          <span>Blind</span>
-          <button
-            type="button"
-            className={`unity-toggle ${blindMode ? 'unity-toggle-on' : ''}`}
-            aria-pressed={blindMode}
-            onClick={() => onBlindModeChange(!blindMode)}
-          >
-            <span />
-          </button>
-        </div>
-      </div>
-    </details>
-  )
-}
-
 function App() {
   const [screen, setScreen] = useState<Screen>('intro')
   const [guestUsername] = useState(createGuestName)
@@ -157,6 +111,7 @@ function App() {
   const [rounds, setRounds] = useState(6)
   const [turnSeconds, setTurnSeconds] = useState(10)
   const [blindMode, setBlindMode] = useState(true)
+  const [onlineRules, setOnlineRules] = useState<MatchRules | null>(null)
   const [match, setMatch] = useState<GameState | null>(null)
   const [status, setStatus] = useState<UiStatus>({
     tone: 'neutral',
@@ -177,7 +132,7 @@ function App() {
   const matchRef = useRef<GameState | null>(null)
   const screenRef = useRef<Screen>('intro')
   const manualCloseRef = useRef(false)
-  const settingsRef = useRef({ rounds, turnSeconds, blindMode })
+  const onlineRulesRef = useRef<MatchRules | null>(null)
   const destructionSequenceRef = useRef(0)
   const destructionTimeoutsRef = useRef<number[]>([])
   const countdownRunRef = useRef(0)
@@ -218,10 +173,6 @@ function App() {
   useEffect(() => {
     screenRef.current = screen
   }, [screen])
-
-  useEffect(() => {
-    settingsRef.current = { rounds, turnSeconds, blindMode }
-  }, [rounds, turnSeconds, blindMode])
 
   useEffect(() => {
     if (!announcement) return
@@ -352,6 +303,8 @@ function App() {
       }
 
       if (event.type === 'match-found') {
+        onlineRulesRef.current = event.rules
+        setOnlineRules(event.rules)
         setReadyLocked(false)
         setStatus({
           tone: 'success',
@@ -364,13 +317,18 @@ function App() {
       }
 
       if (event.type === 'game-start') {
-        const settings = settingsRef.current
         setStatus({
           tone: 'success',
           label: 'STARTING',
           detail: 'Both players are ready.',
         })
-        void beginCountdown(makeConfig(settings.rounds, settings.turnSeconds, settings.blindMode, true, false), event.isMyTurn)
+        beginOnlineMatch(
+          onlineRulesRef.current ?? DEFAULT_MATCH_RULES,
+          event.isMyTurn,
+          (config, isMyTurn) => {
+            void beginCountdown(config, isMyTurn)
+          },
+        )
         return
       }
 
@@ -621,6 +579,8 @@ function App() {
       detail: 'Reaching the Hidden server…',
     })
     setAnnouncement('')
+    onlineRulesRef.current = null
+    setOnlineRules(null)
     setScreen('matchmaking')
 
     const client = new NetworkClient()
@@ -643,7 +603,11 @@ function App() {
       })
       const joined = await client.joinRoom(LOBBY_ROOM_ID)
       if (!joined) throw new Error('Could not join the lobby.')
-      client.startMatchmaking()
+      client.startMatchmaking(
+        authUser?.role === 'admin'
+          ? { rounds, turnSeconds, blindMode }
+          : undefined,
+      )
       setStatus({
         tone: 'working',
         label: 'SEARCHING',
@@ -669,6 +633,28 @@ function App() {
     })
     setAnnouncement('')
     clientRef.current?.sendReady(true)
+  }
+
+  const onAgain = () => {
+    if (!match) return
+
+    restartMatch({
+      config: match.config,
+      sendReady: (ready) => clientRef.current?.sendReady(ready),
+      showReady: () => {
+        setReadyLocked(true)
+        setStatus({
+          tone: 'working',
+          label: 'READY',
+          detail: 'Waiting for your opponent…',
+        })
+        setAnnouncement('')
+        setScreen('ready')
+      },
+      beginLocalMatch: (config) => {
+        void beginCountdown(config, true)
+      },
+    })
   }
 
   const onSelectColor = (color: PaintColor) => {
@@ -919,6 +905,15 @@ function App() {
               disabled
             />
           </div>
+          <OnlineAdminSettings
+            user={authUser}
+            rounds={rounds}
+            turnSeconds={turnSeconds}
+            blindMode={blindMode}
+            onRoundsChange={setRounds}
+            onTurnSecondsChange={setTurnSeconds}
+            onBlindModeChange={setBlindMode}
+          />
         </section>
       ) : null}
 
@@ -965,6 +960,9 @@ function App() {
           <div className="single-panel">
             <p className="brush-subtitle">QUICK MATCH</p>
             <h1>Opponent found</h1>
+            <MatchRulesSummary
+              rules={onlineRules ?? DEFAULT_MATCH_RULES}
+            />
             <BrushButton disabled={readyLocked} onClick={onReady}>
               {readyLocked ? 'READY...' : 'READY'}
             </BrushButton>
@@ -1052,7 +1050,7 @@ function App() {
               Opponent Score: {match.result.opponentScore}
             </p>
             <div className="results-actions">
-              <BrushButton className="results-action" onClick={() => void beginCountdown(makeConfig(rounds, turnSeconds, blindMode, match.config.isOnline, match.config.hasAI), true)}>
+              <BrushButton className="results-action" onClick={onAgain}>
                 AGAIN?
               </BrushButton>
             </div>
