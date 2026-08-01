@@ -49,12 +49,12 @@ MessagePack 3, Vitest 4, Docker
 
 ### Task 3: Extract `classic-v1` and migrate offline play
 
-- [ ] Write failing core tests for determinism, immutability, seat symmetry,
+- [x] Write failing core tests for determinism, immutability, seat symmetry,
   invalid commands, passing, and topology-driven construction.
-- [ ] Implement seat-neutral classic boards, conflicts, power-ups, extra
+- [x] Implement seat-neutral classic boards, conflicts, power-ups, extra
   placements, seeded timeouts, passing, scoring, and results.
-- [ ] Move `MatchRules` into the core and remove mirrored definitions.
-- [ ] Add the web presentation adapter and migrate offline/bot play while
+- [x] Move `MatchRules` into the core and remove mirrored definitions.
+- [x] Add the web presentation adapter and migrate offline/bot play while
   keeping online relay behavior unchanged.
 - [ ] Verify all packages and Docker, review, push, merge, deploy, and smoke the
   shared-core PR; then branch `codex/server-authoritative-match-cycle`.
