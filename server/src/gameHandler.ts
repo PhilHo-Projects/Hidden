@@ -2,6 +2,11 @@ import WebSocket from 'ws'
 import { type UserRole } from './auth/service'
 import { type Logger } from './logger'
 import {
+  clampMatchRules,
+  DEFAULT_MATCH_RULES,
+  type MatchRules,
+} from './matchRules'
+import {
   decodeClientPacket,
   encodePacket,
   PacketType,
@@ -17,6 +22,7 @@ interface ClientSession {
   roomId: string | undefined
   alive: boolean
   messageCount: number
+  proposedRules?: MatchRules
   role: UserRole
   rateWindowStartedAt: number
 }
@@ -24,6 +30,7 @@ interface ClientSession {
 interface Match {
   players: [number, number]
   ready: Set<number>
+  rules: MatchRules
 }
 
 export interface ClientIdentity {
@@ -188,7 +195,11 @@ export class GameHandler {
         this.leaveRoom(session, packet.roomId, packet.type)
         break
       case PacketType.MATCHMAKING_REQUEST:
-        this.updateMatchmaking(session, packet.searching)
+        this.updateMatchmaking(
+          session,
+          packet.searching,
+          packet.proposedRules,
+        )
         break
       case PacketType.READY_STATE:
         this.updateReadyState(session, packet.ready)
@@ -245,10 +256,26 @@ export class GameHandler {
     this.respond(session, true, responseType)
   }
 
-  private updateMatchmaking(session: ClientSession, searching: boolean) {
+  private updateMatchmaking(
+    session: ClientSession,
+    searching: boolean,
+    proposedRules?: MatchRules,
+  ) {
+    delete session.proposedRules
+
     if (!searching) {
       this.matchmakingQueue.delete(session.id)
       return
+    }
+
+    if (proposedRules) {
+      if (session.role === 'admin') {
+        session.proposedRules = proposedRules
+      } else {
+        this.options.logger('debug', 'matchmaking.rules_ignored', {
+          clientId: session.id,
+        })
+      }
     }
 
     if (!session.username || session.roomId !== 'lobby') {
@@ -273,9 +300,14 @@ export class GameHandler {
     const first = this.sessionsById.get(firstId)!
     const second = this.sessionsById.get(secondId)!
     const roomId = `match_${Date.now()}_${firstId}_${secondId}`
+    const rules = clampMatchRules(
+      first.proposedRules ?? second.proposedRules ?? DEFAULT_MATCH_RULES,
+    )
 
     this.matchmakingQueue.delete(firstId)
     this.matchmakingQueue.delete(secondId)
+    delete first.proposedRules
+    delete second.proposedRules
     this.lobby.delete(firstId)
     this.lobby.delete(secondId)
     first.roomId = roomId
@@ -283,13 +315,15 @@ export class GameHandler {
     this.matches.set(roomId, {
       players: [firstId, secondId],
       ready: new Set(),
+      rules,
     })
 
-    this.send(first, [0, PacketType.MATCH_FOUND, roomId])
-    this.send(second, [0, PacketType.MATCH_FOUND, roomId])
+    this.send(first, [0, PacketType.MATCH_FOUND, roomId, rules])
+    this.send(second, [0, PacketType.MATCH_FOUND, roomId, rules])
     this.options.logger('info', 'match.created', {
       roomId,
       playerIds: [firstId, secondId],
+      rules,
     })
   }
 
@@ -383,6 +417,7 @@ export class GameHandler {
 
   private detachFromRoom(session: ClientSession, notifyOpponent: boolean) {
     this.matchmakingQueue.delete(session.id)
+    delete session.proposedRules
     this.lobby.delete(session.id)
 
     const roomId = session.roomId
