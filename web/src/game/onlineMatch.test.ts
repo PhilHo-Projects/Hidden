@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { MatchConfig } from './types'
 import {
-  beginOnlineMatch,
   createOnlineMatchConfig,
   restartMatch,
+  transitionOnlineMatchEvent,
 } from './onlineMatch'
 
 const ONLINE_CONFIG: MatchConfig = {
@@ -25,20 +25,38 @@ describe('online match flow', () => {
     ).toEqual(ONLINE_CONFIG)
   })
 
-  it('starts from the received rules and the server-assigned turn', () => {
-    let started:
-      | { config: MatchConfig; isMyTurn: boolean }
-      | undefined
-
-    beginOnlineMatch(
-      { rounds: 4, turnSeconds: 18, blindMode: true },
-      false,
-      (config, isMyTurn) => {
-        started = { config, isMyTurn }
+  it('carries server rules from match-found into game-start instead of local settings', () => {
+    const persistedLocalConfig: MatchConfig = {
+      rounds: 20,
+      turnSeconds: 60,
+      blindMode: false,
+      isOnline: false,
+      hasAI: true,
+    }
+    const matchFound = transitionOnlineMatchEvent(
+      { rules: null },
+      {
+        type: 'match-found',
+        rules: { rounds: 4, turnSeconds: 18, blindMode: true },
       },
     )
+    if (matchFound.type !== 'match-found') {
+      throw new Error('Expected a match-found transition.')
+    }
 
-    expect(started).toEqual({
+    const gameStart = transitionOnlineMatchEvent(matchFound.state, {
+      type: 'game-start',
+      isMyTurn: false,
+    })
+    if (gameStart.type !== 'game-start') {
+      throw new Error('Expected a game-start transition.')
+    }
+
+    expect(gameStart).toEqual({
+      type: 'game-start',
+      state: {
+        rules: { rounds: 4, turnSeconds: 18, blindMode: true },
+      },
       config: {
         rounds: 4,
         turnSeconds: 18,
@@ -48,6 +66,7 @@ describe('online match flow', () => {
       },
       isMyTurn: false,
     })
+    expect(gameStart.config).not.toEqual(persistedLocalConfig)
   })
 
   it('sends ready and returns to ready instead of starting online locally', () => {

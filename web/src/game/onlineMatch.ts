@@ -1,4 +1,7 @@
-import type { MatchRules } from './matchRules'
+import {
+  DEFAULT_MATCH_RULES,
+  type MatchRules,
+} from './matchRules'
 import type { MatchConfig } from './types'
 
 export function createOnlineMatchConfig(rules: MatchRules): MatchConfig {
@@ -11,12 +14,40 @@ export function createOnlineMatchConfig(rules: MatchRules): MatchConfig {
   }
 }
 
-export function beginOnlineMatch(
-  rules: MatchRules,
-  isMyTurn: boolean,
-  beginCountdown: (config: MatchConfig, isMyTurn: boolean) => void,
-) {
-  beginCountdown(createOnlineMatchConfig(rules), isMyTurn)
+export interface OnlineMatchEventState {
+  rules: MatchRules | null
+}
+
+type OnlineMatchEvent =
+  | { type: 'match-found'; rules: MatchRules }
+  | { type: 'game-start'; isMyTurn: boolean }
+
+export type OnlineMatchEventTransition =
+  | { type: 'match-found'; state: OnlineMatchEventState }
+  | {
+      type: 'game-start'
+      state: OnlineMatchEventState
+      config: MatchConfig
+      isMyTurn: boolean
+    }
+
+export function transitionOnlineMatchEvent(
+  state: OnlineMatchEventState,
+  event: OnlineMatchEvent,
+): OnlineMatchEventTransition {
+  if (event.type === 'match-found') {
+    return {
+      type: event.type,
+      state: { rules: event.rules },
+    }
+  }
+
+  return {
+    type: event.type,
+    state,
+    config: createOnlineMatchConfig(state.rules ?? DEFAULT_MATCH_RULES),
+    isMyTurn: event.isMyTurn,
+  }
 }
 
 interface RestartMatchOptions {

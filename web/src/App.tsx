@@ -44,8 +44,8 @@ import {
   type MatchRules,
 } from './game/matchRules'
 import {
-  beginOnlineMatch,
   restartMatch,
+  transitionOnlineMatchEvent,
 } from './game/onlineMatch'
 import { LOBBY_ROOM_ID, type UserEntry } from './game/protocol'
 import type { EngineResult, GameState, MatchConfig, PaintColor, PowerupKey } from './game/types'
@@ -303,8 +303,12 @@ function App() {
       }
 
       if (event.type === 'match-found') {
-        onlineRulesRef.current = event.rules
-        setOnlineRules(event.rules)
+        const transition = transitionOnlineMatchEvent(
+          { rules: onlineRulesRef.current },
+          event,
+        )
+        onlineRulesRef.current = transition.state.rules
+        setOnlineRules(transition.state.rules)
         setReadyLocked(false)
         setStatus({
           tone: 'success',
@@ -317,18 +321,17 @@ function App() {
       }
 
       if (event.type === 'game-start') {
+        const transition = transitionOnlineMatchEvent(
+          { rules: onlineRulesRef.current },
+          event,
+        )
+        if (transition.type !== 'game-start') return
         setStatus({
           tone: 'success',
           label: 'STARTING',
           detail: 'Both players are ready.',
         })
-        beginOnlineMatch(
-          onlineRulesRef.current ?? DEFAULT_MATCH_RULES,
-          event.isMyTurn,
-          (config, isMyTurn) => {
-            void beginCountdown(config, isMyTurn)
-          },
-        )
+        void beginCountdown(transition.config, transition.isMyTurn)
         return
       }
 
