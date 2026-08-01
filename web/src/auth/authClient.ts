@@ -1,5 +1,6 @@
 export interface AuthUser {
   id: string
+  role: 'player' | 'admin'
   username: string
 }
 

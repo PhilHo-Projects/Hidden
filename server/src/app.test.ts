@@ -258,6 +258,7 @@ describe.sequential('Hidden server', () => {
     })
     const user = {
       id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+      role: 'player' as const,
       username: 'Account_Player',
     }
     const authService = {
@@ -414,6 +415,7 @@ describe.sequential('Hidden server', () => {
         return rawToken === VALID_SESSION_TOKEN
           ? {
               id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+              role: 'player' as const,
               username: 'Account_Player',
             }
           : undefined

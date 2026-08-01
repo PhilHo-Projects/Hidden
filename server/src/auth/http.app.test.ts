@@ -3,18 +3,22 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createHiddenServer, type HiddenServer } from '../app'
-import type { AuthUser } from './repository'
-import { AuthServiceError, type AuthSession } from './service'
+import {
+  AuthServiceError,
+  type AuthenticatedUser,
+  type AuthSession,
+} from './service'
 
 const ORIGIN = 'http://localhost:5173'
-const USER: AuthUser = {
+const USER: AuthenticatedUser = {
   id: '9133d041-fdae-48fc-969d-c9e868c94b79',
+  role: 'player',
   username: 'Player_One',
 }
 
 class HttpTestAuthService {
   private nextToken = 1
-  private readonly sessions = new Map<string, AuthUser>()
+  private readonly sessions = new Map<string, AuthenticatedUser>()
 
   async register(input: unknown): Promise<AuthSession> {
     const body = input as Record<string, unknown>

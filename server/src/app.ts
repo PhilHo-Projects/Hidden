@@ -12,7 +12,7 @@ import {
   type AuthServiceLike,
 } from './auth/http'
 import { readSessionToken } from './auth/sessionToken'
-import { GameHandler } from './gameHandler'
+import { GameHandler, type ClientIdentity } from './gameHandler'
 import { createLogger, type LogLevel } from './logger'
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 16 * 1024
@@ -159,11 +159,15 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
     }
 
     pendingUpgradeSockets.add(socket)
-    let identity: { accountId: string; username: string } | undefined
+    let identity: ClientIdentity | undefined
     try {
       const user = await options.authService.getSession(rawToken)
       if (user) {
-        identity = { accountId: user.id, username: user.username }
+        identity = {
+          accountId: user.id,
+          role: user.role,
+          username: user.username,
+        }
       }
     } catch {
       logger('error', 'upgrade.session_lookup_failed')

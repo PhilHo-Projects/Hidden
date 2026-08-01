@@ -92,10 +92,14 @@ class MemoryAuthRepository implements AuthRepository {
 
 const NOW = new Date('2030-01-01T00:00:00.000Z')
 
-async function createService(repository = new MemoryAuthRepository()) {
+async function createService(
+  repository = new MemoryAuthRepository(),
+  adminUsernames: ReadonlySet<string> = new Set(),
+) {
   return {
     repository,
     service: await AuthService.create(repository, {
+      adminUsernames,
       now: () => new Date(NOW),
       createUserId: () => 'd4a30a54-ca74-4b38-ac7f-e82e6e9e2510',
     }),
@@ -114,6 +118,7 @@ describe('AuthService', () => {
     expect(result.user).toEqual({
       id: 'd4a30a54-ca74-4b38-ac7f-e82e6e9e2510',
       username: 'Player_One',
+      role: 'player',
     })
     expect(result.rawToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(result.expiresAt.getTime() - NOW.getTime()).toBe(
@@ -146,6 +151,28 @@ describe('AuthService', () => {
         field: 'username',
       }),
     )
+  })
+
+  it('derives the same case-insensitive administrator role for every auth path', async () => {
+    const { service } = await createService(
+      new MemoryAuthRepository(),
+      new Set(['player_one']),
+    )
+    const registration = await service.register({
+      username: 'Player_One',
+      password: 'correct horse battery staple',
+    })
+    const login = await service.login({
+      username: 'player_one',
+      password: 'correct horse battery staple',
+    })
+
+    expect(registration.user.role).toBe('admin')
+    expect(login.user.role).toBe('admin')
+    await expect(service.getSession(login.rawToken)).resolves.toMatchObject({
+      username: 'Player_One',
+      role: 'admin',
+    })
   })
 
   it('uses the same invalid_credentials error for unknown users and bad passwords', async () => {

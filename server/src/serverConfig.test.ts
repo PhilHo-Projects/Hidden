@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   resolveAllowedOrigins,
+  resolveAdminUsernames,
   resolveDatabaseUrl,
 } from './serverConfig'
 
@@ -44,5 +45,18 @@ describe('resolveAllowedOrigins', () => {
       'https://hidden.philippeho.dev',
       'https://preview.example',
     ])
+  })
+})
+
+describe('resolveAdminUsernames', () => {
+  it('defaults absent or empty configuration to no administrators', () => {
+    expect(resolveAdminUsernames(undefined)).toEqual(new Set())
+    expect(resolveAdminUsernames('  , ')).toEqual(new Set())
+  })
+
+  it('normalizes configured usernames like credential login', () => {
+    expect(resolveAdminUsernames(' Ecco,PLAYER_two, ecco ')).toEqual(
+      new Set(['ecco', 'player_two']),
+    )
   })
 })

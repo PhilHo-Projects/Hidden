@@ -12,6 +12,7 @@ import { runMigrations } from './migrations'
 import { RuntimeLifecycle } from './runtimeLifecycle'
 import {
   resolveAllowedOrigins,
+  resolveAdminUsernames,
   resolveDatabaseUrl,
 } from './serverConfig'
 
@@ -67,6 +68,9 @@ async function start(isStopping: () => boolean) {
     }
     authService = await AuthService.create(
       new PostgresAuthRepository(databasePool),
+      {
+        adminUsernames: resolveAdminUsernames(process.env.ADMIN_USERNAMES),
+      },
     )
     if (isStopping()) {
       return

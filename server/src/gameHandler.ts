@@ -1,4 +1,5 @@
 import WebSocket from 'ws'
+import { type UserRole } from './auth/service'
 import { type Logger } from './logger'
 import {
   decodeClientPacket,
@@ -16,6 +17,7 @@ interface ClientSession {
   roomId: string | undefined
   alive: boolean
   messageCount: number
+  role: UserRole
   rateWindowStartedAt: number
 }
 
@@ -26,6 +28,7 @@ interface Match {
 
 export interface ClientIdentity {
   accountId: string
+  role: UserRole
   username: string
 }
 
@@ -53,6 +56,7 @@ export class GameHandler {
       roomId: undefined,
       alive: true,
       messageCount: 0,
+      role: identity?.role ?? 'player',
       rateWindowStartedAt: Date.now(),
     }
 

@@ -14,6 +14,9 @@ import { createSessionToken, hashSessionToken } from './sessionToken'
 
 export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1_000
 
+export type UserRole = 'player' | 'admin'
+export type AuthenticatedUser = AuthUser & { role: UserRole }
+
 export type AuthServiceErrorCode =
   | 'invalid_input'
   | 'username_taken'
@@ -31,12 +34,13 @@ export class AuthServiceError extends Error {
 }
 
 export interface AuthSession {
-  user: AuthUser
+  user: AuthenticatedUser
   rawToken: string
   expiresAt: Date
 }
 
 interface AuthServiceOptions {
+  adminUsernames?: ReadonlySet<string>
   now?: () => Date
   createUserId?: () => string
 }
@@ -47,6 +51,7 @@ export class AuthService {
     private readonly dummyPasswordHash: string,
     private readonly now: () => Date,
     private readonly createUserId: () => string,
+    private readonly adminUsernames: ReadonlySet<string>,
   ) {}
 
   static async create(
@@ -61,6 +66,7 @@ export class AuthService {
       dummyPasswordHash,
       options.now ?? (() => new Date()),
       options.createUserId ?? randomUUID,
+      options.adminUsernames ?? new Set(),
     )
   }
 
@@ -93,7 +99,11 @@ export class AuthService {
         now,
         expiresAt,
       })
-      return { user, rawToken: session.rawToken, expiresAt }
+      return {
+        user: this.withRole(user),
+        rawToken: session.rawToken,
+        expiresAt,
+      }
     } catch (error) {
       if (error instanceof UsernameTakenError) {
         throw new AuthServiceError(
@@ -144,17 +154,21 @@ export class AuthService {
       expiresAt,
     })
     return {
-      user: { id: existing.id, username: existing.username },
+      user: this.withRole({ id: existing.id, username: existing.username }),
       rawToken: session.rawToken,
       expiresAt,
     }
   }
 
-  getSession(rawToken: string | undefined) {
+  async getSession(rawToken: string | undefined) {
     if (!rawToken) {
-      return Promise.resolve(undefined)
+      return undefined
     }
-    return this.repository.findSession(hashSessionToken(rawToken), this.now())
+    const user = await this.repository.findSession(
+      hashSessionToken(rawToken),
+      this.now(),
+    )
+    return user ? this.withRole(user) : undefined
   }
 
   async logout(rawToken: string | undefined) {
@@ -165,6 +179,15 @@ export class AuthService {
 
   cleanupExpiredSessions() {
     return this.repository.deleteExpiredSessions(this.now())
+  }
+
+  private withRole(user: AuthUser): AuthenticatedUser {
+    return {
+      ...user,
+      role: this.adminUsernames.has(user.username.trim().toLowerCase())
+        ? 'admin'
+        : 'player',
+    }
   }
 
   private mapValidationError(error: unknown) {

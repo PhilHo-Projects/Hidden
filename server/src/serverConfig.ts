@@ -33,3 +33,12 @@ export function resolveAllowedOrigins(
   }
   return [...LOCAL_ALLOWED_ORIGINS]
 }
+
+export function resolveAdminUsernames(value: string | undefined) {
+  return new Set(
+    value
+      ?.split(',')
+      .map((username) => username.trim().toLowerCase())
+      .filter(Boolean) ?? [],
+  )
+}

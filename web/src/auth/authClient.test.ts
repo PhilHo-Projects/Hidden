@@ -8,6 +8,7 @@ import {
 const USER: AuthUser = {
   id: '9133d041-fdae-48fc-969d-c9e868c94b79',
   username: 'Player_One',
+  role: 'player',
 }
 
 function jsonResponse(body: unknown, status = 200) {
