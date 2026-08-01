@@ -30,6 +30,30 @@ describe('protocol', () => {
     expect(PacketType.GAME_START).toBe(15)
   })
 
+  it('keeps decoding the legacy first-player position when game start appends a descriptor', () => {
+    expect(
+      decodePacket(
+        encode([
+          0,
+          PacketType.GAME_START,
+          7,
+          {
+            matchId: '78bd46ff-cc07-46df-949a-eea9c543fdac',
+            mode: { id: 'classic', revision: 1 },
+            rules: DEFAULT_MATCH_RULES,
+            seed: 42,
+            firstSeat: 0,
+            revision: 0,
+            turnTimeRemainingMs: 10_000,
+          },
+        ]),
+      ),
+    ).toEqual({
+      type: PacketType.GAME_START,
+      firstPlayerId: 7,
+    })
+  })
+
   it('encodes proposed rules as a keyed trailing map', () => {
     expect(
       decode(

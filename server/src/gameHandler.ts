@@ -1,11 +1,8 @@
 import WebSocket from 'ws'
 import { type UserRole } from './auth/service'
 import { type Logger } from './logger'
-import {
-  clampMatchRules,
-  DEFAULT_MATCH_RULES,
-  type MatchRules,
-} from './matchRules'
+import { MatchCoordinator } from './matchCoordinator'
+import { type MatchRules } from './matchRules'
 import {
   decodeClientPacket,
   encodePacket,
@@ -22,15 +19,8 @@ interface ClientSession {
   roomId: string | undefined
   alive: boolean
   messageCount: number
-  proposedRules?: MatchRules
   role: UserRole
   rateWindowStartedAt: number
-}
-
-interface Match {
-  players: [number, number]
-  ready: Set<number>
-  rules: MatchRules
 }
 
 export interface ClientIdentity {
@@ -42,16 +32,18 @@ export interface ClientIdentity {
 export interface GameHandlerOptions {
   maxMessagesPerSecond: number
   logger: Logger
+  matchCoordinator?: MatchCoordinator
 }
 
 export class GameHandler {
   private readonly sessionsById = new Map<number, ClientSession>()
   private readonly lobby = new Set<number>()
-  private readonly matchmakingQueue = new Set<number>()
-  private readonly matches = new Map<string, Match>()
+  private readonly matchCoordinator: MatchCoordinator
   private nextClientId = 1
 
-  constructor(private readonly options: GameHandlerOptions) {}
+  constructor(private readonly options: GameHandlerOptions) {
+    this.matchCoordinator = options.matchCoordinator ?? new MatchCoordinator()
+  }
 
   add(socket: WebSocket, identity?: ClientIdentity) {
     const id = this.nextClientId++
@@ -261,16 +253,15 @@ export class GameHandler {
     searching: boolean,
     proposedRules?: MatchRules,
   ) {
-    delete session.proposedRules
-
     if (!searching) {
-      this.matchmakingQueue.delete(session.id)
+      this.matchCoordinator.cancelQuickMatch(session.id)
       return
     }
 
+    let trustedRules: MatchRules | undefined
     if (proposedRules) {
       if (session.role === 'admin') {
-        session.proposedRules = proposedRules
+        trustedRules = proposedRules
       } else {
         this.options.logger('debug', 'matchmaking.rules_ignored', {
           clientId: session.id,
@@ -282,92 +273,82 @@ export class GameHandler {
       return
     }
 
-    this.matchmakingQueue.add(session.id)
-    this.tryCreateMatch()
-  }
-
-  private tryCreateMatch() {
-    const eligible = [...this.matchmakingQueue].filter((id) => {
-      const session = this.sessionsById.get(id)
-      return Boolean(session?.username && session.roomId === 'lobby')
-    })
-    if (eligible.length < 2) {
+    const room = this.matchCoordinator.enqueueQuickMatch(
+      {
+        ...(session.accountId ? { accountId: session.accountId } : {}),
+        connectionId: session.id,
+        username: session.username,
+      },
+      trustedRules,
+    )
+    if (!room) {
       return
     }
 
-    const firstId = eligible[0]!
-    const secondId = eligible[1]!
-    const first = this.sessionsById.get(firstId)!
-    const second = this.sessionsById.get(secondId)!
-    const roomId = `match_${Date.now()}_${firstId}_${secondId}`
-    const rules = clampMatchRules(
-      first.proposedRules ?? second.proposedRules ?? DEFAULT_MATCH_RULES,
+    const playerIds = room.participants.map(
+      (participant) => participant.connectionId,
     )
-
-    this.matchmakingQueue.delete(firstId)
-    this.matchmakingQueue.delete(secondId)
-    delete first.proposedRules
-    delete second.proposedRules
-    this.lobby.delete(firstId)
-    this.lobby.delete(secondId)
-    first.roomId = roomId
-    second.roomId = roomId
-    this.matches.set(roomId, {
-      players: [firstId, secondId],
-      ready: new Set(),
-      rules,
-    })
-
-    this.send(first, [0, PacketType.MATCH_FOUND, roomId, rules])
-    this.send(second, [0, PacketType.MATCH_FOUND, roomId, rules])
+    for (const playerId of playerIds) {
+      const player = this.sessionsById.get(playerId)
+      if (!player) {
+        continue
+      }
+      this.lobby.delete(playerId)
+      player.roomId = room.id
+      this.send(player, [0, PacketType.MATCH_FOUND, room.id, room.rules])
+    }
     this.options.logger('info', 'match.created', {
-      roomId,
-      playerIds: [firstId, secondId],
-      rules,
+      roomId: room.id,
+      playerIds,
+      rules: room.rules,
     })
   }
 
   private updateReadyState(session: ClientSession, ready: boolean) {
-    const match = session.roomId ? this.matches.get(session.roomId) : undefined
-    if (!match || !match.players.includes(session.id)) {
+    const room = this.matchCoordinator.getRoomForConnection(session.id)
+    if (!room || session.roomId !== room.id) {
       throw new ProtocolError('Client is not a member of an active match.')
     }
 
-    if (ready) {
-      match.ready.add(session.id)
-    } else {
-      match.ready.delete(session.id)
+    const transition = this.matchCoordinator.setReady(session.id, ready)
+    for (const opponentId of transition.opponentConnectionIds) {
+      const opponent = this.sessionsById.get(opponentId)
+      if (opponent) {
+        this.send(opponent, [session.id, PacketType.READY_STATE, ready])
+      }
     }
 
-    this.relayToOpponent(session, [session.id, PacketType.READY_STATE, ready])
-
-    if (match.ready.size === match.players.length) {
-      const firstPlayerId =
-        match.players[Math.floor(Math.random() * match.players.length)]!
-      for (const playerId of match.players) {
+    if (transition.start) {
+      const { descriptor, firstConnectionId } = transition.start
+      for (const participant of room.participants) {
+        const playerId = participant.connectionId
         const player = this.sessionsById.get(playerId)
         if (player) {
-          this.send(player, [0, PacketType.GAME_START, firstPlayerId])
+          this.send(player, [
+            0,
+            PacketType.GAME_START,
+            firstConnectionId,
+            descriptor,
+          ])
         }
       }
-      match.ready.clear()
       this.options.logger('info', 'match.started', {
-        roomId: session.roomId,
-        firstPlayerId,
+        roomId: room.id,
+        matchId: descriptor.matchId,
+        firstPlayerId: firstConnectionId,
       })
     }
   }
 
   private relayToOpponent(session: ClientSession, packet: unknown[]) {
-    const match = session.roomId ? this.matches.get(session.roomId) : undefined
-    if (!match || !match.players.includes(session.id)) {
+    const room = this.matchCoordinator.getRoomForConnection(session.id)
+    if (!room || session.roomId !== room.id) {
       throw new ProtocolError('Client is not a member of an active match.')
     }
 
-    for (const playerId of match.players) {
-      if (playerId === session.id) {
-        continue
-      }
+    for (const playerId of this.matchCoordinator.getOpponentConnectionIds(
+      session.id,
+    )) {
       const recipient = this.sessionsById.get(playerId)
       if (recipient) {
         this.send(recipient, packet)
@@ -416,8 +397,7 @@ export class GameHandler {
   }
 
   private detachFromRoom(session: ClientSession, notifyOpponent: boolean) {
-    this.matchmakingQueue.delete(session.id)
-    delete session.proposedRules
+    this.matchCoordinator.cancelQuickMatch(session.id)
     this.lobby.delete(session.id)
 
     const roomId = session.roomId
@@ -426,16 +406,12 @@ export class GameHandler {
       return
     }
 
-    const match = this.matches.get(roomId)
-    if (!match) {
+    const abandoned = this.matchCoordinator.abandon(session.id)
+    if (!abandoned) {
       return
     }
 
-    this.matches.delete(roomId)
-    for (const playerId of match.players) {
-      if (playerId === session.id) {
-        continue
-      }
+    for (const playerId of abandoned.remainingConnectionIds) {
       const opponent = this.sessionsById.get(playerId)
       if (opponent) {
         opponent.roomId = undefined
@@ -449,7 +425,7 @@ export class GameHandler {
       }
     }
     this.options.logger('info', 'match.ended', {
-      roomId,
+      roomId: abandoned.roomId,
       disconnectedClientId: session.id,
     })
   }

@@ -251,6 +251,22 @@ describe.sequential('Hidden server', () => {
     ])
     expect([firstId, secondId]).toContain(Number(firstStart[2]))
     expect(firstStart[2]).toBe(secondStart[2])
+    expect(firstStart.slice(0, 3)).toEqual([
+      0,
+      PacketType.GAME_START,
+      firstStart[2],
+    ])
+    expect(firstStart[3]).toEqual(secondStart[3])
+    expect(firstStart[3]).toMatchObject({
+      matchId: expect.any(String),
+      mode: { id: 'classic', revision: 1 },
+      rules: DEFAULT_MATCH_RULES,
+      seed: expect.any(Number),
+      firstSeat: firstStart[2] === firstId ? 0 : 1,
+      revision: 0,
+      turnTimeRemainingMs: expect.any(Number),
+    })
+    expect(JSON.stringify(firstStart[3])).not.toContain('accountId')
 
     first.send([999, PacketType.READY_STATE, true])
     second.send([999, PacketType.READY_STATE, true])
@@ -260,6 +276,15 @@ describe.sequential('Hidden server', () => {
     ])
     expect([firstId, secondId]).toContain(Number(firstRematch[2]))
     expect(firstRematch[2]).toBe(secondRematch[2])
+    expect(firstRematch[3]).toEqual(secondRematch[3])
+    expect(firstRematch[3]).toMatchObject({
+      matchId: expect.any(String),
+      rules: DEFAULT_MATCH_RULES,
+      revision: 0,
+    })
+    expect((firstRematch[3] as { matchId: string }).matchId).not.toBe(
+      (firstStart[3] as { matchId: string }).matchId,
+    )
 
     first.send([999, PacketType.GAME_MOVE, 4, 'green'])
     expect(await second.waitFor(PacketType.GAME_MOVE)).toEqual([
