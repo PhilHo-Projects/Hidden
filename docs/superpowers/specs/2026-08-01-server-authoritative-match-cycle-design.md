@@ -123,7 +123,7 @@ draft PR and is not deployed by this plan.
 ## Roadmap
 
 1. **Complete:** land and deploy online rules authority.
-2. **Current:** extract `classic-v1` into the shared deterministic core.
+2. **Complete:** extract `classic-v1` into the shared deterministic core.
 3. **Current:** make Quick Match server-validated and server-resolved.
 4. **Deferred:** route Create/Find Game and private codes through the room factory.
 5. **Deferred:** persist matches, participants, mode revisions, and events.

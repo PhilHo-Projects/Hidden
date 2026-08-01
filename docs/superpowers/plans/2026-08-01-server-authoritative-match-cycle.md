@@ -56,7 +56,7 @@ MessagePack 3, Vitest 4, Docker
 - [x] Move `MatchRules` into the core and remove mirrored definitions.
 - [x] Add the web presentation adapter and migrate offline/bot play while
   keeping online relay behavior unchanged.
-- [ ] Verify all packages and Docker, review, push, merge, deploy, and smoke the
+- [x] Verify all packages and Docker, review, push, merge, deploy, and smoke the
   shared-core PR; then branch `codex/server-authoritative-match-cycle`.
 
 ### Task 4: Implement lifecycle stages 1-3
