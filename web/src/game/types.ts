@@ -1,4 +1,5 @@
 import type { PLAYER_COLORS, POWERUP_LABELS } from './constants'
+import type { GameState as CoreGameState, Seat } from '@hidden/game-core'
 
 export type PaintColor = (typeof PLAYER_COLORS)[number]
 export type PowerupKey = keyof typeof POWERUP_LABELS
@@ -55,6 +56,8 @@ export interface GameState {
   pendingExtraTurnMoves: QueuedMove[]
   isInExtraTurn: boolean
   result: MatchResult | null
+  canonicalState?: CoreGameState
+  localSeat?: Seat
 }
 
 export type EngineEvent =
