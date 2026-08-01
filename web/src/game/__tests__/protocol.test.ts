@@ -5,9 +5,11 @@ import {
   encodeGameMovePacket,
   encodeGameMovesPacket,
   encodeImmunePacket,
+  encodeMatchmakingPacket,
   LOBBY_ROOM_ID,
   PacketType,
 } from '../protocol'
+import { DEFAULT_MATCH_RULES } from '../matchRules'
 
 describe('protocol', () => {
   it('uses the only server-supported direct room id', () => {
@@ -19,6 +21,65 @@ describe('protocol', () => {
       type: PacketType.READY_STATE,
       senderId: 4,
       ready: true,
+    })
+  })
+
+  it('keeps active packet ids stable', () => {
+    expect(PacketType.MATCHMAKING_REQUEST).toBe(13)
+    expect(PacketType.MATCH_FOUND).toBe(14)
+    expect(PacketType.GAME_START).toBe(15)
+  })
+
+  it('encodes proposed rules as a keyed trailing map', () => {
+    expect(
+      decode(
+        encodeMatchmakingPacket(7, true, {
+          rounds: 8,
+          turnSeconds: 15,
+          blindMode: false,
+        }),
+      ),
+    ).toEqual([
+      7,
+      PacketType.MATCHMAKING_REQUEST,
+      true,
+      { rounds: 8, turnSeconds: 15, blindMode: false },
+    ])
+  })
+
+  it('decodes authoritative rules and defaults a missing or malformed map', () => {
+    expect(
+      decodePacket(
+        encode([
+          0,
+          PacketType.MATCH_FOUND,
+          'room-1',
+          { rounds: 999, turnSeconds: 0, blindMode: false },
+        ]),
+      ),
+    ).toEqual({
+      type: PacketType.MATCH_FOUND,
+      roomId: 'room-1',
+      rules: { rounds: 20, turnSeconds: 2, blindMode: false },
+    })
+    expect(decodePacket(encode([0, PacketType.MATCH_FOUND, 'room-2']))).toEqual({
+      type: PacketType.MATCH_FOUND,
+      roomId: 'room-2',
+      rules: DEFAULT_MATCH_RULES,
+    })
+    expect(
+      decodePacket(
+        encode([
+          0,
+          PacketType.MATCH_FOUND,
+          'room-3',
+          { rounds: 3, turnSeconds: 'bad', blindMode: false },
+        ]),
+      ),
+    ).toEqual({
+      type: PacketType.MATCH_FOUND,
+      roomId: 'room-3',
+      rules: DEFAULT_MATCH_RULES,
     })
   })
 

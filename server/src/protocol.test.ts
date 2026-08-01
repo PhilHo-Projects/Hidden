@@ -66,6 +66,37 @@ describe('decodeClientPacket', () => {
     ).toThrow(ProtocolError)
   })
 
+  it('decodes optional matchmaking rules without trusting the sender id', () => {
+    expect(
+      decodeClientPacket(
+        encode([
+          999,
+          PacketType.MATCHMAKING_REQUEST,
+          true,
+          { rounds: 8, turnSeconds: 15, blindMode: false },
+        ]),
+      ),
+    ).toEqual({
+      type: PacketType.MATCHMAKING_REQUEST,
+      searching: true,
+      proposedRules: { rounds: 8, turnSeconds: 15, blindMode: false },
+    })
+
+    expect(
+      decodeClientPacket(
+        encode([
+          999,
+          PacketType.MATCHMAKING_REQUEST,
+          true,
+          { rounds: 8, turnSeconds: 'bad', blindMode: false },
+        ]),
+      ),
+    ).toEqual({
+      type: PacketType.MATCHMAKING_REQUEST,
+      searching: true,
+    })
+  })
+
   it('rejects unsupported and malformed packets', () => {
     expect(() => decodeClientPacket(encode({ type: 'move' }))).toThrow(
       ProtocolError,
