@@ -81,13 +81,13 @@ MessagePack 3, Vitest 4, Docker
 
 ### Task 6: Integrate the authoritative client and open the final draft PR
 
-- [ ] Write failing client tests for server-confirmed state, rejection, accepted
+- [x] Write failing client tests for server-confirmed state, rejection, accepted
   batches, display-only online timers, and fail-closed revision gaps.
-- [ ] Replace legacy online gameplay sends with revisioned commands and apply
+- [x] Replace legacy online gameplay sends with revisioned commands and apply
   accepted updates through the shared core.
-- [ ] Add two-WebSocket full-match coverage and two-browser online/offline smoke.
-- [ ] Run core tests/build, web tests/lint/build, server tests/build,
+- [x] Add two-WebSocket full-match coverage and two-browser online/offline smoke.
+- [x] Run core tests/build, web tests/lint/build, server tests/build,
   `git diff --check`, and the root Docker build.
-- [ ] Complete independent review and resolve all Critical/Important findings.
+- [x] Complete independent review and resolve all Critical/Important findings.
 - [ ] Push `codex/server-authoritative-match-cycle` and open a draft PR; do not
   merge or deploy it.
