@@ -49,6 +49,8 @@ export enum PacketType {
   GAME_START = 15,
   OPPONENT_DISCONNECTED = 17,
   GAME_MOVES = 18,
+  GAME_COMMAND = 19,
+  GAME_UPDATE = 20,
 }
 
 export interface UserEntry {

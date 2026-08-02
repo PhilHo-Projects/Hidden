@@ -1,7 +1,10 @@
 import WebSocket from 'ws'
 import { type UserRole } from './auth/service'
 import { type Logger } from './logger'
-import { MatchCoordinator } from './matchCoordinator'
+import {
+  MatchCoordinator,
+  type GameUpdateDelivery,
+} from './matchCoordinator'
 import { type MatchRules } from './matchRules'
 import {
   decodeClientPacket,
@@ -43,6 +46,9 @@ export class GameHandler {
 
   constructor(private readonly options: GameHandlerOptions) {
     this.matchCoordinator = options.matchCoordinator ?? new MatchCoordinator()
+    this.matchCoordinator.subscribeDeliveries((deliveries) => {
+      this.sendGameUpdates(deliveries)
+    })
   }
 
   add(socket: WebSocket, identity?: ClientIdentity) {
@@ -196,28 +202,22 @@ export class GameHandler {
       case PacketType.READY_STATE:
         this.updateReadyState(session, packet.ready)
         break
+      case PacketType.GAME_COMMAND:
+        this.sendGameUpdates(
+          this.matchCoordinator.handleGameCommand(
+            session.id,
+            packet.envelope,
+          ),
+        )
+        break
       case PacketType.GAME_MOVE:
-        this.relayToOpponent(session, [
-          session.id,
-          packet.type,
-          packet.index,
-          packet.color,
-        ])
+        this.rejectLegacyGameplay(session)
         break
       case PacketType.GAME_MOVES:
-        this.relayToOpponent(session, [
-          session.id,
-          packet.type,
-          packet.moves.map(({ index }) => index),
-          packet.moves.map(({ color }) => color),
-        ])
+        this.rejectLegacyGameplay(session)
         break
       case PacketType.IMMUNE_UPDATE:
-        this.relayToOpponent(session, [
-          session.id,
-          packet.type,
-          packet.indices,
-        ])
+        this.rejectLegacyGameplay(session)
         break
     }
   }
@@ -340,18 +340,17 @@ export class GameHandler {
     }
   }
 
-  private relayToOpponent(session: ClientSession, packet: unknown[]) {
-    const room = this.matchCoordinator.getRoomForConnection(session.id)
-    if (!room || session.roomId !== room.id) {
-      throw new ProtocolError('Client is not a member of an active match.')
-    }
+  private rejectLegacyGameplay(session: ClientSession) {
+    this.sendGameUpdates(
+      this.matchCoordinator.rejectLegacyGameplay(session.id),
+    )
+  }
 
-    for (const playerId of this.matchCoordinator.getOpponentConnectionIds(
-      session.id,
-    )) {
-      const recipient = this.sessionsById.get(playerId)
+  private sendGameUpdates(deliveries: readonly GameUpdateDelivery[]) {
+    for (const delivery of deliveries) {
+      const recipient = this.sessionsById.get(delivery.connectionId)
       if (recipient) {
-        this.send(recipient, packet)
+        this.send(recipient, [0, PacketType.GAME_UPDATE, delivery.update])
       }
     }
   }

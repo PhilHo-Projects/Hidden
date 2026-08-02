@@ -1,4 +1,11 @@
-import { createGame, type MatchRules, type Seat } from '@hidden/game-core'
+import {
+  applyCommand,
+  applyTimeout,
+  createGame,
+  type GameCommand,
+  type MatchRules,
+  type Seat,
+} from '@hidden/game-core'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createMatchRoom,
@@ -150,11 +157,11 @@ describe('MatchCoordinator run lifecycle', () => {
     expect(pairedRoom.readySeats.size).toBe(0)
   })
 
-  it('keeps the room and rules stable while replacing the run with a fresh UUID and exactly one timer', () => {
+  it('does not let premature ready packets replace an active run', () => {
     const { clearTimeout, dependencies, scheduled } = deterministicDependencies({
-      firstSeats: [0, 1],
-      seeds: [7, 8],
-      uuids: ['stable-room-id', 'run-uuid-one', 'run-uuid-two'],
+      firstSeats: [0],
+      seeds: [7],
+      uuids: ['stable-room-id', 'run-uuid-one'],
     })
     const coordinator = new MatchCoordinator(dependencies)
     coordinator.enqueueQuickMatch(firstParticipant)
@@ -162,27 +169,25 @@ describe('MatchCoordinator run lifecycle', () => {
 
     coordinator.setReady(11, true)
     const firstStart = coordinator.setReady(22, true).start!
-    coordinator.setReady(11, true)
-    const secondStart = coordinator.setReady(22, true).start!
+    const firstPremature = coordinator.setReady(11, true)
+    const secondPremature = coordinator.setReady(22, true)
 
     expect(room.id).toBe('stable-room-id')
-    expect(secondStart.room).toBe(room)
-    expect(secondStart.run.id).toBe('run-uuid-two')
-    expect(secondStart.run.id).not.toBe(firstStart.run.id)
-    expect(secondStart.run.spec.rules).toBe(firstStart.run.spec.rules)
-    expect(secondStart.run.spec.seed).toBe(8)
-    expect(secondStart.run.spec.firstSeat).toBe(1)
-    expect(clearTimeout).toHaveBeenCalledOnce()
-    expect(clearTimeout).toHaveBeenCalledWith(scheduled[0]?.handle)
-    expect(scheduled).toHaveLength(2)
-    expect(room.currentRun).toBe(secondStart.run)
+    expect(firstPremature.start).toBeUndefined()
+    expect(secondPremature.start).toBeUndefined()
+    expect(firstPremature.opponentConnectionIds).toEqual([])
+    expect(secondPremature.opponentConnectionIds).toEqual([])
+    expect(room.readySeats.size).toBe(0)
+    expect(clearTimeout).not.toHaveBeenCalled()
+    expect(scheduled).toHaveLength(1)
+    expect(room.currentRun).toBe(firstStart.run)
   })
 
-  it('makes replaced and abandoned deadline callbacks inert and clears the active timer', () => {
+  it('makes abandoned deadline callbacks inert and clears the active timer', () => {
     const onDeadline = vi.fn()
     const { clearTimeout, dependencies, scheduled } = deterministicDependencies({
       onDeadline,
-      uuids: ['stable-room-id', 'run-uuid-one', 'run-uuid-two'],
+      uuids: ['stable-room-id', 'run-uuid-one'],
     })
     const coordinator = new MatchCoordinator(dependencies)
     coordinator.enqueueQuickMatch(firstParticipant)
@@ -190,14 +195,6 @@ describe('MatchCoordinator run lifecycle', () => {
 
     coordinator.setReady(11, true)
     coordinator.setReady(22, true)
-    coordinator.setReady(11, true)
-    const replacement = coordinator.setReady(22, true).start!
-
-    scheduled[0]?.callback()
-    expect(onDeadline).not.toHaveBeenCalled()
-    scheduled[1]?.callback()
-    expect(onDeadline).toHaveBeenCalledOnce()
-    expect(onDeadline).toHaveBeenCalledWith(replacement.room, replacement.run)
 
     const abandoned = coordinator.abandon(11)
     expect(abandoned).toMatchObject({
@@ -206,12 +203,799 @@ describe('MatchCoordinator run lifecycle', () => {
     })
     expect(abandoned?.room.phase).toBe('abandoned')
     expect(abandoned?.room.currentRun?.phase).toBe('abandoned')
-    expect(clearTimeout).toHaveBeenCalledTimes(2)
-    expect(clearTimeout).toHaveBeenLastCalledWith(scheduled[1]?.handle)
+    expect(clearTimeout).toHaveBeenCalledOnce()
+    expect(clearTimeout).toHaveBeenLastCalledWith(scheduled[0]?.handle)
     expect(coordinator.getRoomForConnection(11)).toBeUndefined()
     expect(coordinator.getRoomForConnection(22)).toBeUndefined()
 
-    scheduled[1]?.callback()
-    expect(onDeadline).toHaveBeenCalledOnce()
+    scheduled[0]?.callback()
+    expect(onDeadline).not.toHaveBeenCalled()
+  })
+})
+
+interface TestEnvelope {
+  matchId: string
+  commandId: number
+  expectedRevision: number
+  command: Exclude<GameCommand, { type: 'timeout' }> | null
+}
+
+function authoritativeFixture(
+  options: {
+    cacheSize?: number
+    firstSeat?: Seat
+    now?: number
+    rounds?: number
+    seed?: number
+    turnSeconds?: number
+    uuids?: string[]
+  } = {},
+) {
+  const clock = { now: options.now ?? 1_000 }
+  const uuids = [...(options.uuids ?? ['room-uuid', 'run-uuid', 'rematch-uuid'])]
+  const scheduled: Array<{
+    callback: () => void
+    delayMs: number
+    handle: { index: number }
+  }> = []
+  const cleared: unknown[] = []
+  const pushedDeliveries: unknown[][] = []
+  const coordinator = new MatchCoordinator({
+    createUuid: () => uuids.shift() ?? 'unexpected-uuid',
+    createSeed: () => options.seed ?? 7,
+    chooseFirstSeat: () => options.firstSeat ?? 0,
+    now: () => clock.now,
+    scheduleTimeout: (callback, delayMs) => {
+      const handle = { index: scheduled.length }
+      scheduled.push({ callback, delayMs, handle })
+      return handle
+    },
+    clearTimeout: (handle) => {
+      cleared.push(handle)
+    },
+    commandCacheSize: options.cacheSize ?? 64,
+    deliverySink: (deliveries: unknown[]) => pushedDeliveries.push(deliveries),
+  } as unknown as MatchCoordinatorDependencies)
+  coordinator.enqueueQuickMatch(firstParticipant, {
+    rounds: options.rounds ?? 20,
+    turnSeconds: options.turnSeconds ?? 10,
+    blindMode: false,
+  })
+  const room = coordinator.enqueueQuickMatch(secondParticipant)!
+  coordinator.setReady(11, true)
+  const start = coordinator.setReady(22, true).start!
+  const nextCommandId: [number, number] = [1, 1]
+
+  function envelope(
+    command: TestEnvelope['command'],
+    overrides: Partial<Omit<TestEnvelope, 'command'>> = {},
+  ): TestEnvelope {
+    return {
+      matchId: start.run.id,
+      commandId: 1,
+      expectedRevision: Number(start.run.revision),
+      command,
+      ...overrides,
+    }
+  }
+
+  function issue(
+    seat: Seat,
+    command: Exclude<GameCommand, { type: 'timeout' }>,
+  ) {
+    const commandId = nextCommandId[seat]++
+    const deliveries = coordinator.handleGameCommand(
+      room.participants[seat].connectionId,
+      envelope(command, {
+        commandId,
+        expectedRevision: Number(start.run.revision),
+      }),
+    )
+    const actor = deliveries.find(
+      (delivery: { connectionId: number }) =>
+        delivery.connectionId === room.participants[seat].connectionId,
+    )
+    expect(actor?.update).toMatchObject({ status: 'accepted', commandId })
+    return deliveries
+  }
+
+  return {
+    cleared,
+    clock,
+    coordinator,
+    envelope,
+    issue,
+    pushedDeliveries,
+    room,
+    run: start.run,
+    scheduled,
+    start,
+  }
+}
+
+function rejectionReason(deliveries: unknown[]) {
+  expect(deliveries).toHaveLength(1)
+  return (deliveries[0] as { update: { reason: string } }).update.reason
+}
+
+describe('MatchCoordinator authoritative command resolution', () => {
+  it('derives the actor from the connection and sends convergent canonical updates to both seats', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+    const initial = fixture.run.state
+    const intent = fixture.envelope(
+      { type: 'place', locationId: 4, symbol: 'rock' },
+      { commandId: 17, expectedRevision: 0 },
+    )
+
+    const deliveries = fixture.coordinator.handleGameCommand(11, intent)
+    const expected = applyCommand(initial, 0, intent.command!)
+
+    expect(deliveries).toHaveLength(2)
+    expect(deliveries[0]).toEqual({
+      connectionId: 11,
+      update: {
+        status: 'accepted',
+        matchId: 'run-uuid',
+        commandId: 17,
+        fromRevision: 0,
+        toRevision: 1,
+        actorSeat: 0,
+        commands: [{ type: 'place', locationId: 4, symbol: 'rock' }],
+        events: expected.events,
+        turnTimeRemainingMs: 10_000,
+      },
+    })
+    expect(deliveries[1]).toEqual({
+      connectionId: 22,
+      update: {
+        ...(deliveries[0] as { update: Record<string, unknown> }).update,
+        commandId: null,
+      },
+    })
+    expect(fixture.run.state).toEqual(expected.state)
+    expect(fixture.run.revision).toBe(1)
+    expect(fixture.run.state.activeSeat).toBe(1)
+  })
+
+  it('rejects absent, wrong-match, stale, and out-of-turn intentions without mutation or opponent delivery', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+    const initial = fixture.run.state
+
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          999,
+          fixture.envelope({ type: 'place', locationId: 0, symbol: 'rock' }),
+        ),
+      ),
+    ).toBe('no-active-match')
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope(
+            { type: 'place', locationId: 0, symbol: 'rock' },
+            { matchId: 'spoofed-run' },
+          ),
+        ),
+      ),
+    ).toBe('wrong-match')
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope(
+            { type: 'place', locationId: 0, symbol: 'rock' },
+            { expectedRevision: 4 },
+          ),
+        ),
+      ),
+    ).toBe('stale-revision')
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          22,
+          fixture.envelope({ type: 'place', locationId: 0, symbol: 'rock' }),
+        ),
+      ),
+    ).toBe('not-active-seat')
+
+    expect(fixture.run.state).toBe(initial)
+    expect(fixture.run.revision).toBe(0)
+    expect(fixture.scheduled).toHaveLength(1)
+  })
+
+  it('maps malformed commands and every core legality rejection without changing revision', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+
+    expect(
+      rejectionReason(fixture.coordinator.handleGameCommand(11, fixture.envelope(null))),
+    ).toBe('invalid-command')
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope({ type: 'place', locationId: 999, symbol: 'rock' }),
+        ),
+      ),
+    ).toBe('unknown-location')
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope({ type: 'activate-powerup', powerup: 'shield' }),
+        ),
+      ),
+    ).toBe('powerup-locked')
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope({ type: 'select-shield-target', locationId: 0 }),
+        ),
+      ),
+    ).toBe('shield-selection-not-pending')
+    expect(fixture.run.revision).toBe(0)
+
+    fixture.issue(0, { type: 'place', locationId: 0, symbol: 'rock' })
+    fixture.issue(1, { type: 'place', locationId: 3, symbol: 'paper' })
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope(
+            { type: 'place', locationId: 0, symbol: 'scissors' },
+            { commandId: 99, expectedRevision: Number(fixture.run.revision) },
+          ),
+        ),
+      ),
+    ).toBe('location-occupied')
+
+    fixture.issue(0, { type: 'place', locationId: 1, symbol: 'rock' })
+    fixture.issue(1, { type: 'place', locationId: 4, symbol: 'paper' })
+    fixture.issue(0, { type: 'place', locationId: 2, symbol: 'rock' })
+    fixture.issue(1, { type: 'place', locationId: 5, symbol: 'paper' })
+    fixture.issue(0, { type: 'activate-powerup', powerup: 'shield' })
+    const revision = Number(fixture.run.revision)
+
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope(
+            { type: 'place', locationId: 6, symbol: 'rock' },
+            { commandId: 100, expectedRevision: revision },
+          ),
+        ),
+      ),
+    ).toBe('shield-selection-pending')
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope(
+            { type: 'activate-powerup', powerup: 'shield' },
+            { commandId: 101, expectedRevision: revision },
+          ),
+        ),
+      ),
+    ).toBe('powerup-used')
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope(
+            { type: 'select-shield-target', locationId: 8 },
+            { commandId: 102, expectedRevision: revision },
+          ),
+        ),
+      ),
+    ).toBe('invalid-shield-target')
+    expect(fixture.run.revision).toBe(revision)
+  })
+
+  it('resends an exact accepted duplicate only to its actor and rejects conflicting or evicted IDs', () => {
+    const fixture = authoritativeFixture({ cacheSize: 1, firstSeat: 0 })
+    const first = fixture.envelope(
+      { type: 'place', locationId: 0, symbol: 'rock' },
+      { commandId: 1, expectedRevision: 0 },
+    )
+    const accepted = fixture.coordinator.handleGameCommand(11, first)
+    const duplicate = fixture.coordinator.handleGameCommand(11, first)
+
+    expect(duplicate).toEqual([accepted[0]])
+    expect(fixture.run.revision).toBe(1)
+    expect(fixture.scheduled).toHaveLength(2)
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(11, {
+          ...first,
+          command: { type: 'place', locationId: 1, symbol: 'paper' },
+        }),
+      ),
+    ).toBe('command-id-reused')
+
+    fixture.coordinator.handleGameCommand(
+      22,
+      fixture.envelope(
+        { type: 'place', locationId: 1, symbol: 'paper' },
+        { commandId: 1, expectedRevision: 1 },
+      ),
+    )
+    fixture.coordinator.handleGameCommand(
+      11,
+      fixture.envelope(
+        { type: 'place', locationId: 2, symbol: 'scissors' },
+        { commandId: 2, expectedRevision: 2 },
+      ),
+    )
+    expect(fixture.run.revision).toBe(3)
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope(
+            { type: 'place', locationId: 3, symbol: 'rock' },
+            { commandId: 1, expectedRevision: 3 },
+          ),
+        ),
+      ),
+    ).toBe('command-id-reused')
+    expect(fixture.run.revision).toBe(3)
+  })
+
+  it('accepts an unused lower command id because command ids are not required to be monotonic', () => {
+    const fixture = authoritativeFixture({ cacheSize: 1, firstSeat: 0 })
+    fixture.coordinator.handleGameCommand(
+      11,
+      fixture.envelope(
+        { type: 'place', locationId: 0, symbol: 'rock' },
+        { commandId: 10, expectedRevision: 0 },
+      ),
+    )
+    fixture.coordinator.handleGameCommand(
+      22,
+      fixture.envelope(
+        { type: 'place', locationId: 1, symbol: 'paper' },
+        { commandId: 10, expectedRevision: 1 },
+      ),
+    )
+
+    const lowerUnused = fixture.coordinator.handleGameCommand(
+      11,
+      fixture.envelope(
+        { type: 'place', locationId: 2, symbol: 'scissors' },
+        { commandId: 5, expectedRevision: 2 },
+      ),
+    )
+
+    expect(lowerUnused[0]?.update).toMatchObject({
+      status: 'accepted',
+      commandId: 5,
+      fromRevision: 2,
+      toRevision: 3,
+    })
+    expect(fixture.run.commandCaches[0].size).toBe(1)
+  })
+
+  it('delivers expiry before rejecting an old exact duplicate instead of replaying an older revision', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+    const first = fixture.envelope(
+      { type: 'place', locationId: 0, symbol: 'rock' },
+      { commandId: 1, expectedRevision: 0 },
+    )
+    fixture.coordinator.handleGameCommand(11, first)
+    fixture.clock.now = fixture.run.deadline
+
+    const lateDuplicate = fixture.coordinator.handleGameCommand(11, first)
+
+    expect(lateDuplicate).toHaveLength(3)
+    expect(lateDuplicate.slice(0, 2)).toEqual([
+      expect.objectContaining({
+        update: expect.objectContaining({
+          status: 'accepted',
+          fromRevision: 1,
+          toRevision: 2,
+          commands: [{ type: 'timeout' }],
+        }),
+      }),
+      expect.objectContaining({
+        update: expect.objectContaining({
+          status: 'accepted',
+          fromRevision: 1,
+          toRevision: 2,
+          commands: [{ type: 'timeout' }],
+        }),
+      }),
+    ])
+    expect(lateDuplicate[2]).toMatchObject({
+      connectionId: 11,
+      update: {
+        status: 'rejected',
+        currentRevision: 2,
+        reason: 'stale-revision',
+      },
+    })
+    expect(lateDuplicate).not.toContainEqual(
+      expect.objectContaining({
+        update: expect.objectContaining({ fromRevision: 0, toRevision: 1 }),
+      }),
+    )
+  })
+})
+
+describe('MatchCoordinator authoritative placement deadlines', () => {
+  it('resets placement windows but does not extend accepted power-up setup', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+    fixture.issue(0, { type: 'place', locationId: 0, symbol: 'rock' })
+    expect(fixture.cleared).toEqual([fixture.scheduled[0]?.handle])
+    expect(fixture.scheduled.at(-1)?.delayMs).toBe(10_000)
+
+    fixture.issue(1, { type: 'place', locationId: 3, symbol: 'paper' })
+    fixture.issue(0, { type: 'place', locationId: 1, symbol: 'rock' })
+    fixture.issue(1, { type: 'place', locationId: 4, symbol: 'paper' })
+    fixture.issue(0, { type: 'place', locationId: 2, symbol: 'rock' })
+    fixture.issue(1, { type: 'place', locationId: 5, symbol: 'paper' })
+    const schedulesBeforeSetup = fixture.scheduled.length
+    const deadlineBeforeSetup = fixture.run.deadline
+
+    fixture.clock.now += 1_000
+    const activated = fixture.issue(0, {
+      type: 'activate-powerup',
+      powerup: 'shield',
+    })
+    expect(fixture.scheduled).toHaveLength(schedulesBeforeSetup)
+    expect(fixture.run.deadline).toBe(deadlineBeforeSetup)
+    expect(activated[0]?.update).toMatchObject({ turnTimeRemainingMs: 9_000 })
+
+    fixture.clock.now += 1_000
+    const selected = fixture.issue(0, {
+      type: 'select-shield-target',
+      locationId: 0,
+    })
+    expect(fixture.scheduled).toHaveLength(schedulesBeforeSetup)
+    expect(fixture.run.deadline).toBe(deadlineBeforeSetup)
+    expect(selected[0]?.update).toMatchObject({ turnTimeRemainingMs: 8_000 })
+  })
+
+  it('makes replaced timer callbacks inert and lets the current callback deliver one seeded timeout', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0, seed: 1 })
+    const initial = fixture.run.state
+    fixture.issue(0, { type: 'place', locationId: 0, symbol: 'rock' })
+    const afterPlacement = fixture.run.state
+    const expectedTimeout = applyTimeout(afterPlacement)
+
+    fixture.scheduled[0]?.callback()
+    expect(fixture.pushedDeliveries).toHaveLength(0)
+
+    fixture.clock.now = fixture.run.deadline
+    fixture.scheduled[1]?.callback()
+    expect(fixture.pushedDeliveries).toHaveLength(1)
+    expect(fixture.pushedDeliveries[0]).toHaveLength(2)
+    expect(fixture.pushedDeliveries[0]?.[0]).toMatchObject({
+      update: {
+        status: 'accepted',
+        commandId: null,
+        fromRevision: 1,
+        toRevision: 2,
+        actorSeat: 1,
+        commands: [{ type: 'timeout' }],
+      },
+    })
+    expect(fixture.run.state).not.toBe(initial)
+    expect(fixture.run.state).toEqual(expectedTimeout.state)
+    expect(fixture.run.revision).toBe(2)
+    expect(fixture.scheduled).toHaveLength(3)
+    expect(fixture.cleared).not.toContain(fixture.scheduled[1]?.handle)
+  })
+
+  it('delivers an already-expired timeout before evaluating a late command', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0, now: 1_000 })
+    fixture.clock.now = 11_001
+
+    const deliveries = fixture.coordinator.handleGameCommand(
+      11,
+      fixture.envelope(
+        { type: 'place', locationId: 0, symbol: 'rock' },
+        { commandId: 1, expectedRevision: 0 },
+      ),
+    )
+
+    expect(deliveries).toHaveLength(3)
+    expect(deliveries.slice(0, 2)).toEqual([
+      expect.objectContaining({
+        connectionId: 11,
+        update: expect.objectContaining({
+          status: 'accepted',
+          commandId: null,
+          fromRevision: 0,
+          toRevision: 1,
+          commands: [{ type: 'timeout' }],
+        }),
+      }),
+      expect.objectContaining({
+        connectionId: 22,
+        update: expect.objectContaining({
+          status: 'accepted',
+          commandId: null,
+          fromRevision: 0,
+          toRevision: 1,
+        }),
+      }),
+    ])
+    expect(deliveries[2]).toMatchObject({
+      connectionId: 11,
+      update: {
+        status: 'rejected',
+        currentRevision: 1,
+        reason: 'stale-revision',
+      },
+    })
+    expect(fixture.run.revision).toBe(1)
+    expect(fixture.cleared).toContain(fixture.scheduled[0]?.handle)
+  })
+})
+
+function unlockExtraTurn(fixture: ReturnType<typeof authoritativeFixture>) {
+  for (const locationId of [0, 1, 2]) {
+    fixture.issue(0, { type: 'place', locationId, symbol: 'scissors' })
+    fixture.issue(1, { type: 'place', locationId, symbol: 'paper' })
+  }
+  fixture.issue(0, {
+    type: 'activate-powerup',
+    powerup: 'extraTurn',
+  })
+}
+
+describe('MatchCoordinator extra-turn delivery batching', () => {
+  it('confirms each placement to the actor while buffering a combined range for the opponent', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+    unlockExtraTurn(fixture)
+    const firstRevision = Number(fixture.run.revision)
+    const schedulesBeforePair = fixture.scheduled.length
+
+    const first = fixture.issue(0, {
+      type: 'place',
+      locationId: 6,
+      symbol: 'rock',
+    })
+    expect(first).toHaveLength(1)
+    expect(fixture.scheduled).toHaveLength(schedulesBeforePair + 1)
+    expect(first[0]).toMatchObject({
+      connectionId: 11,
+      update: {
+        fromRevision: firstRevision,
+        toRevision: firstRevision + 1,
+        commands: [{ type: 'place', locationId: 6, symbol: 'rock' }],
+      },
+    })
+
+    const second = fixture.issue(0, {
+      type: 'place',
+      locationId: 7,
+      symbol: 'paper',
+    })
+    expect(second).toHaveLength(2)
+    expect(fixture.scheduled).toHaveLength(schedulesBeforePair + 2)
+    expect(second[0]).toMatchObject({
+      connectionId: 11,
+      update: {
+        commandId: expect.any(Number),
+        fromRevision: firstRevision + 1,
+        toRevision: firstRevision + 2,
+        commands: [{ type: 'place', locationId: 7, symbol: 'paper' }],
+      },
+    })
+    expect(second[1]).toMatchObject({
+      connectionId: 22,
+      update: {
+        commandId: null,
+        fromRevision: firstRevision,
+        toRevision: firstRevision + 2,
+        commands: [
+          { type: 'place', locationId: 6, symbol: 'rock' },
+          { type: 'place', locationId: 7, symbol: 'paper' },
+        ],
+      },
+    })
+    expect(fixture.run.state.activeSeat).toBe(1)
+  })
+
+  it('combines a buffered first placement with a server timeout for the opponent', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0, seed: 1 })
+    unlockExtraTurn(fixture)
+    const firstRevision = Number(fixture.run.revision)
+    fixture.issue(0, { type: 'place', locationId: 6, symbol: 'rock' })
+
+    fixture.clock.now = fixture.run.deadline
+    fixture.scheduled.at(-1)?.callback()
+
+    expect(fixture.pushedDeliveries).toHaveLength(1)
+    const delivered = fixture.pushedDeliveries[0] as Array<{
+      connectionId: number
+      update: Record<string, unknown>
+    }>
+    expect(delivered).toHaveLength(2)
+    expect(delivered[0]).toMatchObject({
+      connectionId: 11,
+      update: {
+        commandId: null,
+        fromRevision: firstRevision + 1,
+        toRevision: firstRevision + 2,
+        commands: [{ type: 'timeout' }],
+      },
+    })
+    expect(delivered[1]).toMatchObject({
+      connectionId: 22,
+      update: {
+        commandId: null,
+        fromRevision: firstRevision,
+        toRevision: firstRevision + 2,
+        commands: [
+          { type: 'place', locationId: 6, symbol: 'rock' },
+          { type: 'timeout' },
+        ],
+      },
+    })
+  })
+
+  it('buffers a timeout that becomes the first extra placement and flushes both timeouts after the second', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0, seed: 1 })
+    unlockExtraTurn(fixture)
+    const firstRevision = Number(fixture.run.revision)
+
+    fixture.clock.now = fixture.run.deadline
+    fixture.scheduled.at(-1)?.callback()
+
+    expect(fixture.pushedDeliveries).toHaveLength(1)
+    expect(fixture.pushedDeliveries[0]).toEqual([
+      expect.objectContaining({
+        connectionId: 11,
+        update: expect.objectContaining({
+          commandId: null,
+          fromRevision: firstRevision,
+          toRevision: firstRevision + 1,
+          commands: [{ type: 'timeout' }],
+        }),
+      }),
+    ])
+    expect(fixture.run.state.powerups[0].extraTurnInProgress).toBe(true)
+
+    fixture.clock.now = fixture.run.deadline
+    fixture.scheduled.at(-1)?.callback()
+
+    const second = fixture.pushedDeliveries[1] as Array<{
+      connectionId: number
+      update: Record<string, unknown>
+    }>
+    expect(second).toHaveLength(2)
+    expect(second[0]).toMatchObject({
+      connectionId: 11,
+      update: {
+        fromRevision: firstRevision + 1,
+        toRevision: firstRevision + 2,
+        commands: [{ type: 'timeout' }],
+      },
+    })
+    expect(second[1]).toMatchObject({
+      connectionId: 22,
+      update: {
+        fromRevision: firstRevision,
+        toRevision: firstRevision + 2,
+        commands: [{ type: 'timeout' }, { type: 'timeout' }],
+      },
+    })
+  })
+
+  it('delivers an armed first placement immediately when no legal second placement exists', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+    for (const locationId of [0, 1, 2, 3, 4, 5, 6, 7]) {
+      fixture.issue(0, { type: 'place', locationId, symbol: 'scissors' })
+      fixture.issue(1, { type: 'place', locationId, symbol: 'paper' })
+    }
+    fixture.issue(0, {
+      type: 'activate-powerup',
+      powerup: 'extraTurn',
+    })
+
+    const result = fixture.issue(0, {
+      type: 'place',
+      locationId: 8,
+      symbol: 'scissors',
+    })
+
+    expect(result).toHaveLength(2)
+    expect(result[1]).toMatchObject({
+      connectionId: 22,
+      update: {
+        commands: [{ type: 'place', locationId: 8, symbol: 'scissors' }],
+        events: expect.arrayContaining([
+          expect.objectContaining({ type: 'turn-passed', seat: 0 }),
+        ]),
+      },
+    })
+    expect(fixture.run.state.powerups[0].extraTurnInProgress).toBe(false)
+  })
+})
+
+describe('MatchCoordinator finish, rematch, and legacy lifecycle', () => {
+  it('locks a configured-limit finish, clears its timer, and starts a fresh run only after both finished seats ready', () => {
+    const fixture = authoritativeFixture({
+      firstSeat: 0,
+      rounds: 1,
+      uuids: ['stable-room', 'first-run', 'second-run'],
+    })
+    fixture.issue(0, { type: 'place', locationId: 0, symbol: 'rock' })
+    const finishing = fixture.issue(1, {
+      type: 'place',
+      locationId: 1,
+      symbol: 'paper',
+    })
+
+    expect(fixture.run.state.result).toEqual({ scores: [1, 1], winner: null })
+    expect(fixture.run.phase).toBe('finished')
+    expect(fixture.room.phase).toBe('finished')
+    expect(fixture.cleared).toContain(fixture.scheduled.at(-1)?.handle)
+    expect(finishing).toHaveLength(2)
+    expect(finishing[0]?.update).toMatchObject({
+      status: 'accepted',
+      turnTimeRemainingMs: null,
+      events: expect.arrayContaining([
+        { type: 'game-finished', scores: [1, 1], winner: null },
+      ]),
+    })
+    const revision = Number(fixture.run.revision)
+    expect(
+      rejectionReason(
+        fixture.coordinator.handleGameCommand(
+          11,
+          fixture.envelope(
+            { type: 'place', locationId: 2, symbol: 'rock' },
+            { commandId: 99, expectedRevision: revision },
+          ),
+        ),
+      ),
+    ).toBe('game-finished')
+    expect(fixture.run.revision).toBe(revision)
+
+    const exactFinishingRetry = fixture.coordinator.handleGameCommand(
+      22,
+      fixture.envelope(
+        { type: 'place', locationId: 1, symbol: 'paper' },
+        { commandId: 1, expectedRevision: 1 },
+      ),
+    )
+    expect(exactFinishingRetry).toEqual([finishing[0]])
+    expect(fixture.run.revision).toBe(revision)
+
+    expect(fixture.coordinator.setReady(11, true).start).toBeUndefined()
+    const rematch = fixture.coordinator.setReady(22, true).start!
+    expect(rematch.run.id).toBe('second-run')
+    expect(rematch.run.id).not.toBe(fixture.run.id)
+    expect(rematch.room.id).toBe('stable-room')
+    expect(rematch.run.spec.rules).toBe(fixture.run.spec.rules)
+    expect(rematch.run.revision).toBe(0)
+  })
+
+  it('rejects legacy gameplay for a current run without mutation or opponent relay', () => {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+    const state = fixture.run.state
+
+    const deliveries = fixture.coordinator.rejectLegacyGameplay(11)
+
+    expect(deliveries).toEqual([
+      {
+        connectionId: 11,
+        update: {
+          status: 'rejected',
+          matchId: 'run-uuid',
+          commandId: null,
+          currentRevision: 0,
+          reason: 'legacy-gameplay-disabled',
+        },
+      },
+    ])
+    expect(fixture.run.state).toBe(state)
+    expect(fixture.run.revision).toBe(0)
   })
 })

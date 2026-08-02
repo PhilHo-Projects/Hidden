@@ -24,10 +24,27 @@ describe('protocol', () => {
     })
   })
 
-  it('keeps active packet ids stable', () => {
+  it('keeps every packet id stable and appends authoritative gameplay', () => {
+    expect(PacketType.CHAT).toBe(0)
+    expect(PacketType.POSITION).toBe(1)
+    expect(PacketType.ID_ASSIGN).toBe(2)
+    expect(PacketType.TIME_SYNC).toBe(3)
+    expect(PacketType.ROOM_CREATE).toBe(4)
+    expect(PacketType.ROOM_JOIN).toBe(5)
+    expect(PacketType.ROOM_LEAVE).toBe(6)
+    expect(PacketType.ROOM_DESTROY).toBe(7)
+    expect(PacketType.SERVER_RESPONSE).toBe(8)
+    expect(PacketType.USER_INFO).toBe(9)
+    expect(PacketType.GAME_MOVE).toBe(10)
+    expect(PacketType.IMMUNE_UPDATE).toBe(11)
+    expect(PacketType.READY_STATE).toBe(12)
     expect(PacketType.MATCHMAKING_REQUEST).toBe(13)
     expect(PacketType.MATCH_FOUND).toBe(14)
     expect(PacketType.GAME_START).toBe(15)
+    expect(PacketType.OPPONENT_DISCONNECTED).toBe(17)
+    expect(PacketType.GAME_MOVES).toBe(18)
+    expect(PacketType.GAME_COMMAND).toBe(19)
+    expect(PacketType.GAME_UPDATE).toBe(20)
   })
 
   it('keeps decoding the legacy first-player position when game start appends a descriptor', () => {

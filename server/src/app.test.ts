@@ -17,6 +17,7 @@ const ADMIN_SESSION_TOKEN = 'a'.repeat(43)
 const SECOND_ADMIN_SESSION_TOKEN = 'b'.repeat(43)
 
 class Probe {
+  clientId: number | undefined
   private readonly buffered: unknown[][] = []
   private readonly waiters: Array<{
     predicate: (packet: unknown[]) => boolean
@@ -26,6 +27,9 @@ class Probe {
   constructor(readonly socket: WebSocket) {
     socket.on('message', (bytes) => {
       const packet = decode(bytes as Buffer) as unknown[]
+      if (Number(packet[1]) === PacketType.ID_ASSIGN) {
+        this.clientId = Number(packet[2])
+      }
       const waiterIndex = this.waiters.findIndex(({ predicate }) =>
         predicate(packet),
       )
@@ -213,8 +217,11 @@ describe.sequential('Hidden server', () => {
     await expectUpgradeStatus(port, 403, 'https://evil.example')
   })
 
-  it('matches two clients, starts their game, relays their move with the real sender id, and reports disconnects', async () => {
-    const { port } = await startServer()
+  it('matches two clients, trusts the connection actor, rejects legacy relay, and reports disconnects', async () => {
+    const logs: Array<[string, string, Record<string, unknown> | undefined]> = []
+    const { port } = await startServer({
+      logger: (level, event, context) => logs.push([level, event, context]),
+    })
     const first = await connectProbe(port)
     const second = await connectProbe(port)
 
@@ -268,39 +275,152 @@ describe.sequential('Hidden server', () => {
     })
     expect(JSON.stringify(firstStart[3])).not.toContain('accountId')
 
-    first.send([999, PacketType.READY_STATE, true])
-    second.send([999, PacketType.READY_STATE, true])
-    const [firstRematch, secondRematch] = await Promise.all([
-      first.waitFor(PacketType.GAME_START),
-      second.waitFor(PacketType.GAME_START),
-    ])
-    expect([firstId, secondId]).toContain(Number(firstRematch[2]))
-    expect(firstRematch[2]).toBe(secondRematch[2])
-    expect(firstRematch[3]).toEqual(secondRematch[3])
-    expect(firstRematch[3]).toMatchObject({
-      matchId: expect.any(String),
-      rules: DEFAULT_MATCH_RULES,
-      revision: 0,
-    })
-    expect((firstRematch[3] as { matchId: string }).matchId).not.toBe(
-      (firstStart[3] as { matchId: string }).matchId,
-    )
+    const actor = firstStart[2] === firstId ? first : second
+    const opponent = actor === first ? second : first
+    const actorId = actor === first ? firstId : secondId
+    const actorSeat = (firstStart[3] as { firstSeat: number }).firstSeat
+    const matchId = (firstStart[3] as { matchId: string }).matchId
 
-    first.send([999, PacketType.GAME_MOVE, 4, 'green'])
-    expect(await second.waitFor(PacketType.GAME_MOVE)).toEqual([
-      firstId,
-      PacketType.GAME_MOVE,
-      4,
-      'green',
+    const legacyPackets = [
+      [999, PacketType.GAME_MOVE, 4, 'green'],
+      [999, PacketType.IMMUNE_UPDATE, [4]],
+      [999, PacketType.GAME_MOVES, [4, 5], ['green', 'red']],
+    ]
+    for (const legacyPacket of legacyPackets) {
+      actor.send(legacyPacket)
+      expect(await actor.waitFor(PacketType.GAME_UPDATE)).toEqual([
+        0,
+        PacketType.GAME_UPDATE,
+        {
+          status: 'rejected',
+          matchId,
+          commandId: null,
+          currentRevision: 0,
+          reason: 'legacy-gameplay-disabled',
+        },
+      ])
+      await expect(
+        opponent.waitFor(Number(legacyPacket[1]) as PacketType, 75),
+      ).rejects.toThrow(
+        `Timed out waiting for packet ${Number(legacyPacket[1])}.`,
+      )
+      expect(actor.socket.readyState).toBe(WebSocket.OPEN)
+    }
+    expect(logs).toContainEqual([
+      'debug',
+      'packet.received',
+      expect.objectContaining({
+        clientId: actorId,
+        packetType: PacketType.GAME_MOVE,
+        payloadBytes: expect.any(Number),
+      }),
+    ])
+    expect(
+      logs
+        .filter(([level]) => level === 'info')
+        .map((entry) => JSON.stringify(entry))
+        .join('\n'),
+    ).not.toMatch(/green|red|\[4,5\]/)
+    expect(actor.socket.readyState).toBe(WebSocket.OPEN)
+
+    actor.send([
+      999_999,
+      PacketType.GAME_COMMAND,
+      {
+        matchId,
+        commandId: 1,
+        expectedRevision: 0,
+        command: { type: 'place', locationId: 4, symbol: 'rock' },
+      },
+    ])
+    const [actorUpdate, opponentUpdate] = await Promise.all([
+      actor.waitFor(PacketType.GAME_UPDATE),
+      opponent.waitFor(PacketType.GAME_UPDATE),
+    ])
+    expect(actorUpdate).toMatchObject([
+      0,
+      PacketType.GAME_UPDATE,
+      {
+        status: 'accepted',
+        matchId,
+        commandId: 1,
+        fromRevision: 0,
+        toRevision: 1,
+        actorSeat,
+        commands: [{ type: 'place', locationId: 4, symbol: 'rock' }],
+      },
+    ])
+    expect(opponentUpdate).toMatchObject([
+      0,
+      PacketType.GAME_UPDATE,
+      { status: 'accepted', matchId, commandId: null, actorSeat },
     ])
 
-    first.close()
-    expect(await second.waitFor(PacketType.OPPONENT_DISCONNECTED)).toEqual([
+    actor.close()
+    expect(await opponent.waitFor(PacketType.OPPONENT_DISCONNECTED)).toEqual([
       0,
       PacketType.OPPONENT_DISCONNECTED,
       true,
     ])
-    second.close()
+    opponent.close()
+  })
+
+  it('keeps invalid gameplay commands connected but policy-closes malformed envelopes', async () => {
+    const { port } = await startServer()
+    const first = await queueProbe(port, { guestUsername: 'Guest#3001' })
+    const second = await queueProbe(port, { guestUsername: 'Guest#3002' })
+    await Promise.all([
+      first.waitFor(PacketType.MATCH_FOUND),
+      second.waitFor(PacketType.MATCH_FOUND),
+    ])
+    first.send([999, PacketType.READY_STATE, true])
+    second.send([999, PacketType.READY_STATE, true])
+    const [firstStart, secondStart] = await Promise.all([
+      first.waitFor(PacketType.GAME_START),
+      second.waitFor(PacketType.GAME_START),
+    ])
+    const actor = firstStart[2] === first.clientId ? first : second
+    const actorStart = actor === first ? firstStart : secondStart
+    const matchId = (actorStart[3] as { matchId: string }).matchId
+
+    actor.send([
+      999,
+      PacketType.GAME_COMMAND,
+      {
+        matchId,
+        commandId: 1,
+        expectedRevision: 0,
+        command: { type: 'place', locationId: 0, symbol: 'lizard' },
+      },
+    ])
+    expect(await actor.waitFor(PacketType.GAME_UPDATE)).toEqual([
+      0,
+      PacketType.GAME_UPDATE,
+      {
+        status: 'rejected',
+        matchId,
+        commandId: 1,
+        currentRevision: 0,
+        reason: 'invalid-command',
+      },
+    ])
+    expect(actor.socket.readyState).toBe(WebSocket.OPEN)
+
+    actor.send([
+      999,
+      PacketType.GAME_COMMAND,
+      {
+        matchId,
+        commandId: -1,
+        expectedRevision: 0,
+        command: { type: 'place', locationId: 0, symbol: 'rock' },
+      },
+    ])
+    const closeCode = await new Promise<number>((resolve) =>
+      actor.socket.once('close', resolve),
+    )
+    expect(closeCode).toBe(1008)
+    ;(actor === first ? second : first).close()
   })
 
   it('ignores a non-admin rules proposal and sends defaults to both players', async () => {
