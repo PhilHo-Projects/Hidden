@@ -20,6 +20,11 @@ import type {
   GameUpdateRejectionReason,
 } from './protocol'
 
+// The browser's visible 3-2-1-GO launch lasts 2.62 seconds. The first server
+// deadline includes this fixed transport/presentation grace; every reset after
+// an accepted placement remains exactly the configured placement window.
+export const MATCH_START_GRACE_MS = 3_000
+
 export type MatchLifecyclePhase =
   | 'ready'
   | 'active'
@@ -779,7 +784,8 @@ export class MatchCoordinator {
     }
 
     const startedAt = this.dependencies.now()
-    const turnTimeRemainingMs = room.rules.turnSeconds * 1_000
+    const turnTimeRemainingMs =
+      MATCH_START_GRACE_MS + room.rules.turnSeconds * 1_000
     const spec = freezeSpec({
       mode: { id: 'classic', revision: 1 },
       rules: room.rules,

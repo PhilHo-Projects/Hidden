@@ -375,4 +375,16 @@ describe('online authority', () => {
     expect(state.revision).toBe(0)
     expect(state.canonical.turnCount).toBe(0)
   })
+
+  it('still displays a full two-second first window after the visible countdown', () => {
+    const state = createOnlineAuthority({
+      ...descriptor,
+      rules: { ...descriptor.rules, turnSeconds: 2 },
+      turnTimeRemainingMs: 5_000,
+    }, 17, 17, 1_000)
+
+    expect(getDisplayedTurnTimeMs(state, 3_620)).toBe(2_380)
+    expect(getDisplayedTurnTimeMs(state, 3_620)).toBeGreaterThanOrEqual(2_000)
+    expect(state.canonical.turnCount).toBe(0)
+  })
 })

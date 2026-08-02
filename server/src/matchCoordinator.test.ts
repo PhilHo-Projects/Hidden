@@ -104,6 +104,27 @@ describe('MatchCoordinator discovery and trusted rooms', () => {
 })
 
 describe('MatchCoordinator run lifecycle', () => {
+  it('adds launch grace before the initial two-second placement window', () => {
+    const { dependencies, scheduled } = deterministicDependencies({
+      now: 1_000,
+      uuids: ['stable-room-id', 'run-uuid-one'],
+    })
+    const coordinator = new MatchCoordinator(dependencies)
+    coordinator.enqueueQuickMatch(firstParticipant, {
+      rounds: 1,
+      turnSeconds: 2,
+      blindMode: true,
+    })
+    coordinator.enqueueQuickMatch(secondParticipant)
+
+    coordinator.setReady(11, true)
+    const start = coordinator.setReady(22, true).start!
+
+    expect(start.descriptor.turnTimeRemainingMs).toBe(5_000)
+    expect(start.run.deadline).toBe(6_000)
+    expect(scheduled[0]?.delayMs).toBe(5_000)
+  })
+
   it('tracks ready and unready transitions and freezes one deterministic canonical start only when both seats are ready', () => {
     const { dependencies, scheduled } = deterministicDependencies({
       firstSeats: [1],
@@ -129,7 +150,7 @@ describe('MatchCoordinator run lifecycle', () => {
     expect(start.run.id).toBe('run-uuid-one')
     expect(start.run.phase).toBe('active')
     expect(start.run.revision).toBe(0)
-    expect(start.run.deadline).toBe(16_000)
+    expect(start.run.deadline).toBe(19_000)
     expect(start.run.spec).toEqual({
       mode: { id: 'classic', revision: 1 },
       rules: { rounds: 8, turnSeconds: 15, blindMode: false },
@@ -148,11 +169,11 @@ describe('MatchCoordinator run lifecycle', () => {
       seed: 5,
       firstSeat: 1,
       revision: 0,
-      turnTimeRemainingMs: 15_000,
+      turnTimeRemainingMs: 18_000,
     })
     expect(JSON.stringify(start.descriptor)).not.toContain('account-uuid-one')
     expect(scheduled).toHaveLength(1)
-    expect(scheduled[0]?.delayMs).toBe(15_000)
+    expect(scheduled[0]?.delayMs).toBe(18_000)
     expect(pairedRoom.phase).toBe('active')
     expect(pairedRoom.readySeats.size).toBe(0)
   })
@@ -691,7 +712,7 @@ describe('MatchCoordinator authoritative placement deadlines', () => {
 
   it('delivers an already-expired timeout before evaluating a late command', () => {
     const fixture = authoritativeFixture({ firstSeat: 0, now: 1_000 })
-    fixture.clock.now = 11_001
+    fixture.clock.now = fixture.run.deadline + 1
 
     const deliveries = fixture.coordinator.handleGameCommand(
       11,

@@ -3,6 +3,34 @@ import {
   type MatchRules,
 } from './matchRules'
 import type { MatchConfig } from './types'
+import type { Screen } from './viewModel'
+
+export type OnlineTerminalScreen = 'disconnected' | 'sync-lost'
+
+export const MATCH_COUNTDOWN_STEPS = Object.freeze([
+  Object.freeze({ label: '3', durationMs: 700 }),
+  Object.freeze({ label: '2', durationMs: 700 }),
+  Object.freeze({ label: '1', durationMs: 700 }),
+  Object.freeze({ label: 'GO!', durationMs: 520 }),
+])
+
+export const MATCH_COUNTDOWN_DURATION_MS = MATCH_COUNTDOWN_STEPS.reduce(
+  (total, step) => total + step.durationMs,
+  0,
+)
+
+export function isOnlineTerminalScreen(
+  screen: Screen,
+): screen is OnlineTerminalScreen {
+  return screen === 'disconnected' || screen === 'sync-lost'
+}
+
+export function markOnlineTerminalScreen(
+  screenRef: { current: Screen },
+  screen: OnlineTerminalScreen,
+) {
+  screenRef.current = screen
+}
 
 export function createOnlineMatchConfig(rules: MatchRules): MatchConfig {
   return {

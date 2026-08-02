@@ -46,6 +46,9 @@ import {
 } from './game/matchRules'
 import {
   createOnlineMatchConfig,
+  isOnlineTerminalScreen,
+  MATCH_COUNTDOWN_STEPS,
+  markOnlineTerminalScreen,
   restartMatch,
   shouldResolveTimeoutLocally,
 } from './game/onlineMatch'
@@ -266,10 +269,10 @@ function App() {
       )
       setScreen('countdown')
 
-      for (const value of ['3', '2', '1', 'GO!']) {
+      for (const step of MATCH_COUNTDOWN_STEPS) {
         if (runId !== countdownRunRef.current) return
-        setCountdown(value)
-        await sleep(value === 'GO!' ? 520 : 700)
+        setCountdown(step.label)
+        await sleep(step.durationMs)
       }
 
       if (runId !== countdownRunRef.current) return
@@ -294,6 +297,7 @@ function App() {
   )
 
   const enterSyncLost = useCallback((detail: string) => {
+    if (isOnlineTerminalScreen(screenRef.current)) return
     const authority = onlineAuthorityRef.current
     if (authority) {
       onlineAuthorityRef.current = {
@@ -304,6 +308,7 @@ function App() {
       }
     }
     countdownRunRef.current += 1
+    markOnlineTerminalScreen(screenRef, 'sync-lost')
     setStatus({ tone: 'error', label: 'SYNC LOST', detail })
     setAnnouncement('')
     setScreen('sync-lost')
@@ -326,6 +331,13 @@ function App() {
           manualCloseRef.current = false
           return
         }
+        if (isOnlineTerminalScreen(screenRef.current)) return
+        markOnlineTerminalScreen(screenRef, 'disconnected')
+        const authority = onlineAuthorityRef.current
+        if (authority) {
+          onlineAuthorityRef.current = { ...authority, pending: null }
+        }
+        setOnlineInputPending(false)
         setStatus({
           tone: 'error',
           label: 'CONNECTION LOST',
@@ -414,6 +426,7 @@ function App() {
       }
 
       if (event.type === 'game-update') {
+        if (isOnlineTerminalScreen(screenRef.current)) return
         const authority = onlineAuthorityRef.current
         const currentMatch = matchRef.current
         if (!authority || !currentMatch) {
@@ -445,6 +458,12 @@ function App() {
       if (!matchRef.current) return
 
       if (event.type === 'opponent-disconnected') {
+        markOnlineTerminalScreen(screenRef, 'disconnected')
+        const authority = onlineAuthorityRef.current
+        if (authority) {
+          onlineAuthorityRef.current = { ...authority, pending: null }
+        }
+        setOnlineInputPending(false)
         setStatus({
           tone: 'error',
           label: 'OPPONENT LEFT',
