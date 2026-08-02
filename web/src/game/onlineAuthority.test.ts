@@ -154,6 +154,113 @@ describe('online authority', () => {
     expect(result.clearLocalSelection).toBe(true)
   })
 
+  it('fails closed when a pending local command id is accepted for the opponent seat', () => {
+    const queued = queueOnlineCommand(
+      createOnlineAuthority(descriptor, 17, 17, 1_000),
+      { type: 'place', locationId: 0, symbol: 'rock' },
+    ).state
+    const timeout = applyTimeout(queued.canonical)
+    if (!timeout.accepted) throw new Error('Fixture timeout must be accepted.')
+    const afterTimeout = applyOnlineUpdate(queued, {
+      status: 'accepted',
+      matchId: descriptor.matchId,
+      commandId: null,
+      fromRevision: 0,
+      toRevision: 1,
+      actorSeat: 0,
+      commands: [{ type: 'timeout' }],
+      events: timeout.events,
+      turnTimeRemainingMs: 10_000,
+    }, 2_000).state
+    expect(afterTimeout.pending?.commandId).toBe(0)
+    expect(afterTimeout.canonical.activeSeat).toBe(1)
+
+    const opponentPlacement = applyCommand(afterTimeout.canonical, 1, {
+      type: 'place', locationId: 0, symbol: 'rock',
+    })
+    if (!opponentPlacement.accepted) {
+      throw new Error('Fixture opponent placement must be accepted.')
+    }
+    const result = applyOnlineUpdate(afterTimeout, {
+      status: 'accepted',
+      matchId: descriptor.matchId,
+      commandId: 0,
+      fromRevision: 1,
+      toRevision: 2,
+      actorSeat: 1,
+      commands: [{ type: 'place', locationId: 0, symbol: 'rock' }],
+      events: opponentPlacement.events,
+      turnTimeRemainingMs: 10_000,
+    }, 3_000)
+
+    expect(result.state.status).toBe('sync-lost')
+  })
+
+  it('fails closed when an active replay reports no remaining deadline', () => {
+    const initial = createOnlineAuthority(descriptor, 17, 17, 1_000)
+    const placement = applyCommand(initial.canonical, 0, {
+      type: 'place', locationId: 0, symbol: 'paper',
+    })
+    if (!placement.accepted) throw new Error('Fixture placement must be accepted.')
+    const result = applyOnlineUpdate(initial, {
+      status: 'accepted',
+      matchId: descriptor.matchId,
+      commandId: null,
+      fromRevision: 0,
+      toRevision: 1,
+      actorSeat: 0,
+      commands: [{ type: 'place', locationId: 0, symbol: 'paper' }],
+      events: placement.events,
+      turnTimeRemainingMs: null,
+    }, 2_000)
+
+    expect(placement.state.phase).toBe('active')
+    expect(result.state.status).toBe('sync-lost')
+  })
+
+  it('fails closed when a finished replay reports a live deadline', () => {
+    const oneRoundDescriptor: GameStartDescriptor = {
+      ...descriptor,
+      rules: { ...descriptor.rules, rounds: 1 },
+    }
+    const initial = createOnlineAuthority(oneRoundDescriptor, 17, 17, 1_000)
+    const firstPlacement = applyCommand(initial.canonical, 0, {
+      type: 'place', locationId: 0, symbol: 'rock',
+    })
+    if (!firstPlacement.accepted) throw new Error('First fixture placement must be accepted.')
+    const afterFirst = applyOnlineUpdate(initial, {
+      status: 'accepted',
+      matchId: descriptor.matchId,
+      commandId: null,
+      fromRevision: 0,
+      toRevision: 1,
+      actorSeat: 0,
+      commands: [{ type: 'place', locationId: 0, symbol: 'rock' }],
+      events: firstPlacement.events,
+      turnTimeRemainingMs: 10_000,
+    }, 2_000).state
+    const finishingPlacement = applyCommand(afterFirst.canonical, 1, {
+      type: 'place', locationId: 1, symbol: 'paper',
+    })
+    if (!finishingPlacement.accepted) {
+      throw new Error('Finishing fixture placement must be accepted.')
+    }
+    const result = applyOnlineUpdate(afterFirst, {
+      status: 'accepted',
+      matchId: descriptor.matchId,
+      commandId: null,
+      fromRevision: 1,
+      toRevision: 2,
+      actorSeat: 1,
+      commands: [{ type: 'place', locationId: 1, symbol: 'paper' }],
+      events: finishingPlacement.events,
+      turnTimeRemainingMs: 10_000,
+    }, 3_000)
+
+    expect(finishingPlacement.state.phase).toBe('finished')
+    expect(result.state.status).toBe('sync-lost')
+  })
+
   it('converges an actor single update with an opponent extra-turn batch', () => {
     let actor = createOnlineAuthority(descriptor, 17, 17, 1_000)
     let opponent = createOnlineAuthority(descriptor, 17, 21, 1_000)

@@ -188,6 +188,9 @@ export function applyOnlineUpdate(
   ) {
     return syncLost(state, 'The server accepted an unknown pending action.')
   }
+  if (update.commandId !== null && update.actorSeat !== state.localSeat) {
+    return syncLost(state, 'The server attributed a local action to another seat.')
+  }
   if (
     update.commandId !== null &&
     !sameWireValue(state.pending?.command, update.commands.at(-1))
@@ -212,6 +215,12 @@ export function applyOnlineUpdate(
   }
   if (!sameWireValue(replayedEvents, update.events)) {
     return syncLost(state, 'The authoritative effects do not match deterministic replay.')
+  }
+  if (
+    (canonical.phase === 'active' && update.turnTimeRemainingMs === null) ||
+    (canonical.phase === 'finished' && update.turnTimeRemainingMs !== null)
+  ) {
+    return syncLost(state, 'The authoritative deadline does not match the replayed phase.')
   }
 
   const acceptedCommand = update.commandId === null
