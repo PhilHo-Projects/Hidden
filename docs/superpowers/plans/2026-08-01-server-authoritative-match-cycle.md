@@ -70,13 +70,13 @@ MessagePack 3, Vitest 4, Docker
 
 ### Task 5: Implement lifecycle stages 4-6
 
-- [ ] Write failing protocol and behavior tests for packet IDs 19/20, spoofing,
+- [x] Write failing protocol and behavior tests for packet IDs 19/20, spoofing,
   revisions, deduplication, illegal actions, power-ups, deadlines, legacy
   packets, finish locking, disconnect, and rematch.
-- [ ] Decode keyed commands defensively and derive actors from sessions.
-- [ ] Resolve accepted commands in the canonical core and broadcast revisioned
+- [x] Decode keyed commands defensively and derive actors from sessions.
+- [x] Resolve accepted commands in the canonical core and broadcast revisioned
   command/effect batches, including extra-turn buffering.
-- [ ] Own placement-window deadlines, late-command ordering, seeded timeouts,
+- [x] Own placement-window deadlines, late-command ordering, seeded timeouts,
   automatic passing, finish locking, and fresh transient rematch runs.
 
 ### Task 6: Integrate the authoritative client and open the final draft PR
