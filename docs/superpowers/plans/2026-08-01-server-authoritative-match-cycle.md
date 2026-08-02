@@ -61,12 +61,12 @@ MessagePack 3, Vitest 4, Docker
 
 ### Task 4: Implement lifecycle stages 1-3
 
-- [ ] Write failing coordinator tests for discovery, immutable run specs,
+- [x] Write failing coordinator tests for discovery, immutable run specs,
   trusted seats, readiness, UUIDs, injected seed/clock/timers, and cleanup.
-- [ ] Split socket transport from `MatchCoordinator` gameplay ownership.
-- [ ] Create stable rooms and fresh UUID runs with immutable `classic@1`, rules,
+- [x] Split socket transport from `MatchCoordinator` gameplay ownership.
+- [x] Create stable rooms and fresh UUID runs with immutable `classic@1`, rules,
   participants, seed, first seat, revision, and deadline.
-- [ ] Append the keyed start descriptor to packet 15.
+- [x] Append the keyed start descriptor to packet 15.
 
 ### Task 5: Implement lifecycle stages 4-6
 
