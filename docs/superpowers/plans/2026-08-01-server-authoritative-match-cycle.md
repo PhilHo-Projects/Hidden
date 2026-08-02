@@ -89,5 +89,5 @@ MessagePack 3, Vitest 4, Docker
 - [x] Run core tests/build, web tests/lint/build, server tests/build,
   `git diff --check`, and the root Docker build.
 - [x] Complete independent review and resolve all Critical/Important findings.
-- [ ] Push `codex/server-authoritative-match-cycle` and open a draft PR; do not
+- [x] Push `codex/server-authoritative-match-cycle` and open a draft PR; do not
   merge or deploy it.
