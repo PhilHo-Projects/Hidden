@@ -10,6 +10,7 @@ import {
   restartMatch,
   shouldResolveTimeoutLocally,
   transitionOnlineMatchEvent,
+  tryMarkOnlineTerminalScreen,
 } from './onlineMatch'
 
 const ONLINE_CONFIG: MatchConfig = {
@@ -155,5 +156,13 @@ describe('online match flow', () => {
     expect(screenRef.current).toBe('sync-lost')
     expect(isOnlineTerminalScreen(screenRef.current)).toBe(true)
     expect(isOnlineTerminalScreen('battle')).toBe(false)
+  })
+
+  it('keeps sync-lost terminal when opponent-disconnected arrives afterward', () => {
+    const screenRef: { current: Screen } = { current: 'battle' }
+
+    expect(tryMarkOnlineTerminalScreen(screenRef, 'sync-lost')).toBe(true)
+    expect(tryMarkOnlineTerminalScreen(screenRef, 'disconnected')).toBe(false)
+    expect(screenRef.current).toBe('sync-lost')
   })
 })

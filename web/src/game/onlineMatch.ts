@@ -32,6 +32,15 @@ export function markOnlineTerminalScreen(
   screenRef.current = screen
 }
 
+export function tryMarkOnlineTerminalScreen(
+  screenRef: { current: Screen },
+  screen: OnlineTerminalScreen,
+) {
+  if (isOnlineTerminalScreen(screenRef.current)) return false
+  markOnlineTerminalScreen(screenRef, screen)
+  return true
+}
+
 export function createOnlineMatchConfig(rules: MatchRules): MatchConfig {
   return {
     rounds: rules.rounds,
