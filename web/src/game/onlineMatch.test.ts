@@ -3,6 +3,7 @@ import type { MatchConfig } from './types'
 import {
   createOnlineMatchConfig,
   restartMatch,
+  shouldResolveTimeoutLocally,
   transitionOnlineMatchEvent,
 } from './onlineMatch'
 
@@ -114,5 +115,10 @@ describe('online match flow', () => {
     expect(readyValues).toEqual([])
     expect(screen).toBe('results')
     expect(localConfig).toEqual(offlineConfig)
+  })
+
+  it('keeps online expiry display-only while offline expiry resolves immediately', () => {
+    expect(shouldResolveTimeoutLocally(ONLINE_CONFIG)).toBe(false)
+    expect(shouldResolveTimeoutLocally({ ...ONLINE_CONFIG, isOnline: false })).toBe(true)
   })
 })

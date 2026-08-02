@@ -14,6 +14,7 @@ import {
 import { readSessionToken } from './auth/sessionToken'
 import { GameHandler, type ClientIdentity } from './gameHandler'
 import { createLogger, type Logger, type LogLevel } from './logger'
+import type { MatchCoordinator } from './matchCoordinator'
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 16 * 1024
 
@@ -25,6 +26,7 @@ export interface HiddenServerOptions {
   host?: string
   logLevel?: LogLevel
   logger?: Logger
+  matchCoordinator?: MatchCoordinator
   maxConnections?: number
   maxMessagesPerSecond?: number
   maxPayloadBytes?: number
@@ -57,6 +59,9 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
   const gameHandler = new GameHandler({
     logger,
     maxMessagesPerSecond: options.maxMessagesPerSecond ?? 30,
+    ...(options.matchCoordinator
+      ? { matchCoordinator: options.matchCoordinator }
+      : {}),
   })
   const host = options.host ?? '0.0.0.0'
   const maxConnections = options.maxConnections ?? 100

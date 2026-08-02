@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './constants'
 import {
+  applyOnlinePresentation,
   applyOfflineBotMove,
   applyOfflineLocalMove,
   applyOfflinePowerup,
   createOfflineState,
+  createOnlinePresentedState,
   playOfflineBotTurn,
   startOfflineMatch,
 } from './coreAdapter'
+import { applyCommand, createGame } from '@hidden/game-core'
 import { selectColor } from './engine'
 import type { MatchConfig } from './types'
 
@@ -109,5 +112,59 @@ describe('offline core presentation adapter', () => {
       type: 'announcement',
       message: 'Timer expired!',
     })
+  })
+})
+
+describe('online core presentation adapter', () => {
+  it('presents the server-created canonical state without local relay events', () => {
+    const canonical = createGame({
+      mode: { id: 'classic', revision: 1 },
+      rules: config,
+      seed: 42,
+      firstSeat: 1,
+    })
+    const state = createOnlinePresentedState(
+      { ...config, isOnline: true, hasAI: false },
+      canonical,
+      0,
+    )
+
+    expect(state.phase).toBe('setup')
+    expect(state.isMyTurn).toBe(false)
+    expect(state.canonicalState).toBe(canonical)
+    expect(state.localSeat).toBe(0)
+  })
+
+  it('maps accepted server effects and never creates legacy send events', () => {
+    const canonical = createGame({
+      mode: { id: 'classic', revision: 1 },
+      rules: config,
+      seed: 42,
+      firstSeat: 0,
+    })
+    const state = {
+      ...createOnlinePresentedState(
+        { ...config, isOnline: true, hasAI: false },
+        canonical,
+        0,
+      ),
+      phase: 'battle' as const,
+      selectedColor: COLOR_GREEN,
+    }
+    const accepted = applyCommand(canonical, 0, {
+      type: 'place', locationId: 0, symbol: 'rock',
+    })
+    if (!accepted.accepted) throw new Error('Fixture command must be accepted.')
+
+    const result = applyOnlinePresentation(
+      state,
+      accepted.state,
+      accepted.events,
+      true,
+    )
+
+    expect(result.state.playerGrid.cells[0]?.color).toBe(COLOR_GREEN)
+    expect(result.state.selectedColor).toBeNull()
+    expect(result.events.some((event) => event.type.startsWith('send-'))).toBe(false)
   })
 })

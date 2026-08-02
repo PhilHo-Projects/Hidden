@@ -26,25 +26,18 @@ import {
 } from './components/PregameUi'
 import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './game/constants'
 import {
+  applyOnlinePresentation,
   applyOfflineLocalMove,
   applyOfflinePowerup,
   applyOfflineShieldSelection,
   createOfflineState,
+  createOnlinePresentedState,
   forceOfflineTimeout,
   playOfflineBotTurn,
   startOfflineMatch,
 } from './game/coreAdapter'
 import {
-  activatePowerup,
-  applyLocalMove,
-  applyRemoteImmuneStatus,
-  applyRemoteMove,
-  applyRemoteMoves,
-  applyShieldSelection,
-  createInitialState,
-  forceTimeoutAction,
   selectColor,
-  startMatch,
 } from './game/engine'
 import { NetworkClient, resolveWebSocketUrl, type ClientEvent } from './game/networkClient'
 import {
@@ -52,9 +45,17 @@ import {
   type MatchRules,
 } from './game/matchRules'
 import {
+  createOnlineMatchConfig,
   restartMatch,
-  transitionOnlineMatchEvent,
+  shouldResolveTimeoutLocally,
 } from './game/onlineMatch'
+import {
+  applyOnlineUpdate,
+  createOnlineAuthority,
+  getDisplayedTurnTimeMs,
+  queueOnlineCommand,
+  type OnlineAuthorityState,
+} from './game/onlineAuthority'
 import { LOBBY_ROOM_ID, type UserEntry } from './game/protocol'
 import type { EngineResult, GameState, MatchConfig, PaintColor, PowerupKey } from './game/types'
 import {
@@ -73,6 +74,12 @@ const pieces = [
   { color: COLOR_BLUE as PaintColor, label: 'Paper', icon: paperIcon },
   { color: COLOR_RED as PaintColor, label: 'Scissors', icon: scissorsIcon },
 ]
+
+const symbolByColor = {
+  [COLOR_GREEN]: 'rock',
+  [COLOR_BLUE]: 'paper',
+  [COLOR_RED]: 'scissors',
+} as const
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 type DestructionEffectMap = Partial<Record<number, CellDestructionEffect>>
@@ -133,6 +140,7 @@ function App() {
   const [searchSeconds, setSearchSeconds] = useState(0)
   const [turnTimeLeft, setTurnTimeLeft] = useState(0)
   const [clientId, setClientId] = useState<number | null>(null)
+  const [onlineInputPending, setOnlineInputPending] = useState(false)
   const [playerDestructionEffects, setPlayerDestructionEffects] = useState<DestructionEffectMap>({})
   const [opponentDestructionEffects, setOpponentDestructionEffects] = useState<DestructionEffectMap>({})
 
@@ -140,7 +148,7 @@ function App() {
   const matchRef = useRef<GameState | null>(null)
   const screenRef = useRef<Screen>('intro')
   const manualCloseRef = useRef(false)
-  const onlineRulesRef = useRef<MatchRules | null>(null)
+  const onlineAuthorityRef = useRef<OnlineAuthorityState | null>(null)
   const destructionSequenceRef = useRef(0)
   const destructionTimeoutsRef = useRef<number[]>([])
   const countdownRunRef = useRef(0)
@@ -228,19 +236,21 @@ function App() {
 
     for (const event of result.events) {
       if (event.type === 'cell-destroyed') queueDestructionEffect(event.board, event.index)
-      if (event.type === 'send-move') clientRef.current?.sendMove(event.index, event.color)
-      if (event.type === 'send-moves') clientRef.current?.sendMoves(event.moves)
-      if (event.type === 'send-immune') clientRef.current?.sendImmune(event.indices)
-      if (event.type === 'game-over') setScreen('results')
+      if (event.type === 'game-over') {
+        countdownRunRef.current += 1
+        setScreen('results')
+      }
     }
   }, [queueDestructionEffect])
 
   const beginCountdown = useCallback(
-    async (config: MatchConfig, isMyTurn: boolean) => {
+    async (
+      config: MatchConfig,
+      isMyTurn: boolean,
+      preparedOnlineState?: GameState,
+    ) => {
       const runId = ++countdownRunRef.current
-      const base = config.isOnline
-        ? createInitialState(config)
-        : createOfflineState(
+      const base = preparedOnlineState ?? createOfflineState(
             config,
             isMyTurn,
             crypto.getRandomValues(new Uint32Array(1))[0] ?? 0,
@@ -249,7 +259,11 @@ function App() {
       setMatch(base)
       setPlayerDestructionEffects({})
       setOpponentDestructionEffects({})
-      setTurnTimeLeft(config.turnSeconds)
+      setTurnTimeLeft(
+        config.isOnline && onlineAuthorityRef.current
+          ? getDisplayedTurnTimeMs(onlineAuthorityRef.current, performance.now()) / 1_000
+          : config.turnSeconds,
+      )
       setScreen('countdown')
 
       for (const value of ['3', '2', '1', 'GO!']) {
@@ -259,15 +273,42 @@ function App() {
       }
 
       if (runId !== countdownRunRef.current) return
+      const authority = onlineAuthorityRef.current
+      if (config.isOnline && (!authority || authority.status === 'sync-lost')) return
       const started = config.isOnline
-        ? startMatch(base, isMyTurn)
+        ? applyOnlinePresentation(
+            { ...(matchRef.current ?? base), phase: 'battle' },
+            authority!.canonical,
+            [],
+          )
         : startOfflineMatch(base)
       applyEngineResult(started)
-      setTurnTimeLeft(config.turnSeconds)
+      setTurnTimeLeft(
+        config.isOnline
+          ? getDisplayedTurnTimeMs(authority!, performance.now()) / 1_000
+          : config.turnSeconds,
+      )
       setScreen('battle')
     },
     [applyEngineResult],
   )
+
+  const enterSyncLost = useCallback((detail: string) => {
+    const authority = onlineAuthorityRef.current
+    if (authority) {
+      onlineAuthorityRef.current = {
+        ...authority,
+        status: 'sync-lost',
+        syncLostReason: detail,
+        pending: null,
+      }
+    }
+    countdownRunRef.current += 1
+    setStatus({ tone: 'error', label: 'SYNC LOST', detail })
+    setAnnouncement('')
+    setScreen('sync-lost')
+    setOnlineInputPending(false)
+  }, [])
 
   const onClientEvent = useCallback(
     (event: ClientEvent) => {
@@ -303,6 +344,11 @@ function App() {
         return
       }
 
+      if (event.type === 'sync-lost') {
+        enterSyncLost(event.message)
+        return
+      }
+
       if (event.type === 'assigned-id') {
         setClientId(event.clientId)
         setStatus({
@@ -319,12 +365,7 @@ function App() {
       }
 
       if (event.type === 'match-found') {
-        const transition = transitionOnlineMatchEvent(
-          { rules: onlineRulesRef.current },
-          event,
-        )
-        onlineRulesRef.current = transition.state.rules
-        setOnlineRules(transition.state.rules)
+        setOnlineRules(event.rules)
         setReadyLocked(false)
         setStatus({
           tone: 'success',
@@ -337,33 +378,71 @@ function App() {
       }
 
       if (event.type === 'game-start') {
-        const transition = transitionOnlineMatchEvent(
-          { rules: onlineRulesRef.current },
-          event,
+        const localClientId = clientRef.current?.clientId
+        if (localClientId === null || localClientId === undefined) {
+          enterSyncLost('The match started before client identity was assigned.')
+          return
+        }
+        let authority: OnlineAuthorityState
+        try {
+          authority = createOnlineAuthority(
+            event.descriptor,
+            event.firstPlayerId,
+            localClientId,
+            performance.now(),
+          )
+        } catch {
+          enterSyncLost('This match mode cannot be safely started.')
+          return
+        }
+        onlineAuthorityRef.current = authority
+        setOnlineInputPending(false)
+        setOnlineRules(event.descriptor.rules)
+        const config = createOnlineMatchConfig(event.descriptor.rules)
+        const presented = createOnlinePresentedState(
+          config,
+          authority.canonical,
+          authority.localSeat,
         )
-        if (transition.type !== 'game-start') return
         setStatus({
           tone: 'success',
           label: 'STARTING',
           detail: 'Both players are ready.',
         })
-        void beginCountdown(transition.config, transition.isMyTurn)
+        void beginCountdown(config, presented.isMyTurn, presented)
+        return
+      }
+
+      if (event.type === 'game-update') {
+        const authority = onlineAuthorityRef.current
+        const currentMatch = matchRef.current
+        if (!authority || !currentMatch) {
+          enterSyncLost('An authoritative update arrived before the match was ready.')
+          return
+        }
+        const result = applyOnlineUpdate(authority, event.update, performance.now())
+        onlineAuthorityRef.current = result.state
+        setOnlineInputPending(result.state.pending !== null)
+        if (result.state.status === 'sync-lost') {
+          enterSyncLost(result.state.syncLostReason ?? 'The match could not stay synchronized.')
+          return
+        }
+        setTurnTimeLeft(getDisplayedTurnTimeMs(result.state, performance.now()) / 1_000)
+        if (result.message) setAnnouncement(result.message)
+        if (event.update.status === 'accepted') {
+          applyEngineResult(
+            applyOnlinePresentation(
+              currentMatch,
+              result.state.canonical,
+              result.events,
+              result.clearLocalSelection,
+            ),
+          )
+        }
         return
       }
 
       if (!matchRef.current) return
-
-      if (event.type === 'hidden-move' && event.senderId !== clientRef.current?.clientId) {
-        applyEngineResult(applyRemoteMove(matchRef.current, event.index, event.color))
-      }
-
-      if (event.type === 'hidden-moves' && event.senderId !== clientRef.current?.clientId) {
-        applyEngineResult(applyRemoteMoves(matchRef.current, event.moves))
-      }
-
-      if (event.type === 'immune' && event.senderId !== clientRef.current?.clientId) {
-        applyEngineResult(applyRemoteImmuneStatus(matchRef.current, event.indices))
-      }
 
       if (event.type === 'opponent-disconnected') {
         setStatus({
@@ -374,16 +453,13 @@ function App() {
         setScreen('disconnected')
       }
     },
-    [applyEngineResult, beginCountdown],
+    [applyEngineResult, beginCountdown, enterSyncLost],
   )
 
   const onTimeout = useCallback(() => {
     if (!matchRef.current) return
-    applyEngineResult(
-      matchRef.current.config.isOnline
-        ? forceTimeoutAction(matchRef.current)
-        : forceOfflineTimeout(matchRef.current),
-    )
+    if (!shouldResolveTimeoutLocally(matchRef.current.config)) return
+    applyEngineResult(forceOfflineTimeout(matchRef.current))
   }, [applyEngineResult])
 
   const onAiTurn = useCallback(() => {
@@ -392,7 +468,16 @@ function App() {
   }, [applyEngineResult])
 
   useEffect(() => {
-    if (screen !== 'battle' || !match || !match.isMyTurn || match.phase !== 'battle') return
+    if (screen !== 'battle' || !match || match.phase !== 'battle') return
+    if (match.config.isOnline) {
+      const id = window.setInterval(() => {
+        const authority = onlineAuthorityRef.current
+        if (!authority) return
+        setTurnTimeLeft(getDisplayedTurnTimeMs(authority, performance.now()) / 1_000)
+      }, 100)
+      return () => window.clearInterval(id)
+    }
+    if (!match.isMyTurn) return
     const startedAt = performance.now()
     const id = window.setInterval(() => {
       const remaining = Math.max(0, match.config.turnSeconds - (performance.now() - startedAt) / 1000)
@@ -423,6 +508,8 @@ function App() {
     }
     client.close('Returning to Hidden')
     clientRef.current = null
+    onlineAuthorityRef.current = null
+    setOnlineInputPending(false)
   }, [])
 
   const openAccount = useCallback((mode: AccountMode) => {
@@ -430,6 +517,8 @@ function App() {
     closeClient()
     setMatch(null)
     matchRef.current = null
+    onlineAuthorityRef.current = null
+    setOnlineInputPending(false)
     setUsers([])
     setReadyLocked(false)
     setAuthMode(mode)
@@ -518,6 +607,8 @@ function App() {
     setReadyLocked(false)
     setMatch(null)
     matchRef.current = null
+    onlineAuthorityRef.current = null
+    setOnlineInputPending(false)
     setCountdown('3')
     setTurnTimeLeft(0)
     setSearchSeconds(0)
@@ -538,7 +629,10 @@ function App() {
   const navigateBack = useCallback(() => {
     const current = screenRef.current
     const currentMatch = matchRef.current
-    const isOnlineMatch = current === 'disconnected' || currentMatch?.config.isOnline === true
+    const isOnlineMatch =
+      current === 'disconnected' ||
+      current === 'sync-lost' ||
+      currentMatch?.config.isOnline === true
     const target = getBackTarget(current, isOnlineMatch)
 
     if (target === 'intro') {
@@ -550,12 +644,15 @@ function App() {
       current === 'countdown' ||
       current === 'battle' ||
       current === 'results' ||
-      current === 'disconnected'
+      current === 'disconnected' ||
+      current === 'sync-lost'
 
     if (leavingActiveMatch) {
       countdownRunRef.current += 1
       setMatch(null)
       matchRef.current = null
+      onlineAuthorityRef.current = null
+      setOnlineInputPending(false)
       setCountdown('3')
       setTurnTimeLeft(0)
       setPlayerDestructionEffects({})
@@ -602,7 +699,8 @@ function App() {
       detail: 'Reaching the Hidden server…',
     })
     setAnnouncement('')
-    onlineRulesRef.current = null
+    onlineAuthorityRef.current = null
+    setOnlineInputPending(false)
     setOnlineRules(null)
     setScreen('matchmaking')
 
@@ -687,34 +785,65 @@ function App() {
     setMatch(next)
   }
 
+  const sendOnlineCommand = (
+    command:
+      | { type: 'place'; locationId: number; symbol: 'rock' | 'paper' | 'scissors' }
+      | { type: 'activate-powerup'; powerup: PowerupKey }
+      | { type: 'select-shield-target'; locationId: number },
+  ) => {
+    const authority = onlineAuthorityRef.current
+    if (!authority) {
+      enterSyncLost('The online match authority is unavailable.')
+      return
+    }
+    const queued = queueOnlineCommand(authority, command)
+    if (!queued.envelope) {
+      if (authority.pending) setAnnouncement('Waiting for the server…')
+      return
+    }
+    onlineAuthorityRef.current = queued.state
+    setOnlineInputPending(true)
+    try {
+      const client = clientRef.current
+      if (!client) throw new Error('WebSocket client is unavailable.')
+      client.sendGameCommand(queued.envelope)
+    } catch {
+      enterSyncLost('The action could not be delivered to the server.')
+    }
+  }
+
   const onCellSelect = (index: number) => {
     if (!matchRef.current) return
     if (matchRef.current.shieldSelectionMode) {
-      applyEngineResult(
-        matchRef.current.config.isOnline
-          ? applyShieldSelection(matchRef.current, index)
-          : applyOfflineShieldSelection(matchRef.current, index),
-      )
+      if (matchRef.current.config.isOnline) {
+        sendOnlineCommand({ type: 'select-shield-target', locationId: index })
+      } else {
+        applyEngineResult(applyOfflineShieldSelection(matchRef.current, index))
+      }
       return
     }
     if (!matchRef.current.selectedColor) {
       setAnnouncement('Pick rock, paper, or scissors first.')
       return
     }
-    applyEngineResult(
-      matchRef.current.config.isOnline
-        ? applyLocalMove(matchRef.current, index)
-        : applyOfflineLocalMove(matchRef.current, index),
-    )
+    if (matchRef.current.config.isOnline) {
+      sendOnlineCommand({
+        type: 'place',
+        locationId: index,
+        symbol: symbolByColor[matchRef.current.selectedColor],
+      })
+    } else {
+      applyEngineResult(applyOfflineLocalMove(matchRef.current, index))
+    }
   }
 
   const onPowerup = (powerup: PowerupKey) => {
     if (!matchRef.current) return
-    applyEngineResult(
-      matchRef.current.config.isOnline
-        ? activatePowerup(matchRef.current, powerup)
-        : applyOfflinePowerup(matchRef.current, powerup),
-    )
+    if (matchRef.current.config.isOnline) {
+      sendOnlineCommand({ type: 'activate-powerup', powerup })
+    } else {
+      applyEngineResult(applyOfflinePowerup(matchRef.current, powerup))
+    }
   }
 
   const opponentName = getOpponentName(users, clientId, match)
@@ -1033,7 +1162,10 @@ function App() {
                 title="Player Board"
                 subtitle={username.trim() || 'Player'}
                 grid={match.playerGrid}
-                interactive={match.isMyTurn}
+                interactive={
+                  match.isMyTurn &&
+                  (!match.config.isOnline || !onlineInputPending)
+                }
                 selectedColor={match.selectedColor}
                 destructionEffects={visiblePlayerDestructionEffects}
                 onSelect={onCellSelect}
@@ -1052,7 +1184,14 @@ function App() {
               ) : null}
             </div>
             <div className="battle-controls">
-              <PowerupTray powerups={match.playerPowerups} disabled={!match.isMyTurn} onUse={onPowerup} />
+              <PowerupTray
+                powerups={match.playerPowerups}
+                disabled={
+                  !match.isMyTurn ||
+                  (match.config.isOnline && onlineInputPending)
+                }
+                onUse={onPowerup}
+              />
               <div
                 className={`rps-dock ${awaitingMoveChoice ? 'rps-dock-awaiting' : ''}`}
                 aria-label="Move loader"
@@ -1061,6 +1200,9 @@ function App() {
                   <button
                     key={piece.label}
                     type="button"
+                    disabled={
+                      match.config.isOnline && onlineInputPending
+                    }
                     onClick={() => onSelectColor(piece.color)}
                     className={`rps-tile ${match.selectedColor === piece.color ? 'rps-tile-selected' : ''}`}
                     style={{ backgroundColor: piece.color }}
@@ -1118,6 +1260,19 @@ function App() {
             <p className="brush-subtitle">DISCONNECTED</p>
             <h1>The room went dark.</h1>
             <BrushButton onClick={backHome}>HIDDEN</BrushButton>
+          </div>
+        </section>
+      ) : null}
+
+      {screen === 'sync-lost' ? (
+        <section className="setup-screen pregame-screen pregame-single-panel">
+          <GameMasthead compact />
+          <div className="single-panel">
+            <img src={exitDoorIcon} alt="" className="single-panel-icon" />
+            <p className="brush-subtitle">SYNC LOST</p>
+            <h1>This match can no longer be verified.</h1>
+            <p>{status.detail}</p>
+            <BrushButton onClick={navigateBack}>BACK TO ONLINE</BrushButton>
           </div>
         </section>
       ) : null}

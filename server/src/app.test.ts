@@ -9,6 +9,15 @@ import type { AuthenticatedUser } from './auth/service'
 import { createHiddenServer, type HiddenServer } from './app'
 import { DEFAULT_MATCH_RULES } from './matchRules'
 import { PacketType } from './protocol'
+import { MatchCoordinator } from './matchCoordinator'
+import {
+  applyCommand,
+  applyTimeout,
+  createGame,
+  type GameCommand,
+  type GameState as CoreGameState,
+  type Seat,
+} from '@hidden/game-core'
 
 const ORIGIN = 'http://localhost:5173'
 const VALID_SESSION_TOKEN = 'v'.repeat(43)
@@ -363,6 +372,195 @@ describe.sequential('Hidden server', () => {
       true,
     ])
     opponent.close()
+  })
+
+  it('runs a complete authoritative match with power-up, timeout, rematch, spoof resistance, and disconnect', async () => {
+    let now = 1_000
+    const uuids = ['room-1', 'match-1', 'match-2']
+    const scheduled: Array<{
+      callback: () => void
+      cleared: boolean
+      delayMs: number
+    }> = []
+    const coordinator = new MatchCoordinator({
+      createUuid: () => uuids.shift() ?? 'unexpected-match-id',
+      createSeed: () => 42,
+      chooseFirstSeat: () => 0,
+      now: () => now,
+      scheduleTimeout: (callback, delayMs) => {
+        const handle = { callback, cleared: false, delayMs }
+        scheduled.push(handle)
+        return handle
+      },
+      clearTimeout: (handle) => {
+        ;(handle as { cleared: boolean }).cleared = true
+      },
+    })
+    const { port } = await startServer({ matchCoordinator: coordinator })
+    const first = await queueProbe(port, { guestUsername: 'Guest#4101' })
+    const second = await queueProbe(port, { guestUsername: 'Guest#4102' })
+    await Promise.all([
+      first.waitFor(PacketType.MATCH_FOUND),
+      second.waitFor(PacketType.MATCH_FOUND),
+    ])
+    first.send([second.clientId, PacketType.READY_STATE, true])
+    second.send([first.clientId, PacketType.READY_STATE, true])
+    const [firstStart, secondStart] = await Promise.all([
+      first.waitFor(PacketType.GAME_START),
+      second.waitFor(PacketType.GAME_START),
+    ])
+    expect(firstStart[3]).toEqual(secondStart[3])
+    const descriptor = firstStart[3] as {
+      matchId: string
+      mode: { id: 'classic'; revision: 1 }
+      rules: typeof DEFAULT_MATCH_RULES
+      seed: number
+      firstSeat: Seat
+      revision: 0
+    }
+    expect(descriptor.matchId).toBe('match-1')
+    const probesBySeat = [first, second] as const
+    const commandIds = [0, 0]
+    let revision = 0
+    let canonical: CoreGameState = createGame({
+      mode: descriptor.mode,
+      rules: descriptor.rules,
+      seed: descriptor.seed,
+      firstSeat: descriptor.firstSeat,
+    })
+
+    const applyAccepted = (update: unknown, expectedSeat: Seat) => {
+      const payload = update as {
+        status: 'accepted'
+        actorSeat: Seat
+        commands: GameCommand[]
+        events: unknown[]
+        fromRevision: number
+        toRevision: number
+        turnTimeRemainingMs: number | null
+      }
+      expect(payload.status).toBe('accepted')
+      expect(payload.actorSeat).toBe(expectedSeat)
+      expect(payload.fromRevision).toBe(revision)
+      for (const command of payload.commands) {
+        const result = command.type === 'timeout'
+          ? applyTimeout(canonical)
+          : applyCommand(canonical, expectedSeat, command)
+        expect(result.accepted).toBe(true)
+        canonical = result.state
+      }
+      revision = payload.toRevision
+      return payload
+    }
+
+    const sendAccepted = async (
+      seat: Seat,
+      command: Exclude<GameCommand, { type: 'timeout' }>,
+      spoofedSender = 999_999,
+    ) => {
+      const actor = probesBySeat[seat]
+      const opponent = probesBySeat[(1 - seat) as Seat]
+      const commandId = commandIds[seat]++
+      actor.send([
+        spoofedSender,
+        PacketType.GAME_COMMAND,
+        { matchId: descriptor.matchId, commandId, expectedRevision: revision, command },
+      ])
+      const [actorPacket, opponentPacket] = await Promise.all([
+        actor.waitFor(PacketType.GAME_UPDATE),
+        opponent.waitFor(PacketType.GAME_UPDATE),
+      ])
+      expect(actorPacket[2]).toMatchObject({ commandId })
+      expect(opponentPacket[2]).toMatchObject({ commandId: null })
+      const payload = applyAccepted(actorPacket[2], seat)
+      expect(opponentPacket[2]).toMatchObject({
+        status: 'accepted',
+        matchId: descriptor.matchId,
+        actorSeat: seat,
+        fromRevision: payload.fromRevision,
+        toRevision: payload.toRevision,
+        commands: payload.commands,
+        events: payload.events,
+      })
+      return payload
+    }
+
+    await sendAccepted(0, { type: 'place', locationId: 0, symbol: 'paper' }, Number(second.clientId))
+    await sendAccepted(1, { type: 'place', locationId: 6, symbol: 'rock' })
+    await sendAccepted(0, { type: 'place', locationId: 1, symbol: 'paper' })
+    await sendAccepted(1, { type: 'place', locationId: 7, symbol: 'rock' })
+    await sendAccepted(0, { type: 'place', locationId: 2, symbol: 'paper' })
+    await sendAccepted(1, { type: 'place', locationId: 8, symbol: 'rock' })
+    expect(canonical.powerups[0].unlocked.reveal).toBe(true)
+
+    await sendAccepted(0, { type: 'activate-powerup', powerup: 'reveal' })
+    expect(canonical.powerups[0].revealActive).toBe(true)
+    await sendAccepted(0, { type: 'place', locationId: 3, symbol: 'scissors' })
+
+    const activeTimer = [...scheduled].reverse().find((timer) => !timer.cleared)
+    expect(activeTimer?.delayMs).toBe(DEFAULT_MATCH_RULES.turnSeconds * 1_000)
+    now += DEFAULT_MATCH_RULES.turnSeconds * 1_000
+    activeTimer?.callback()
+    const [timeoutFirst, timeoutSecond] = await Promise.all([
+      first.waitFor(PacketType.GAME_UPDATE),
+      second.waitFor(PacketType.GAME_UPDATE),
+    ])
+    const timeoutActor = canonical.activeSeat
+    const actorTimeoutPacket = probesBySeat[timeoutActor] === first
+      ? timeoutFirst
+      : timeoutSecond
+    const timeoutPayload = applyAccepted(actorTimeoutPacket[2], timeoutActor)
+    expect(timeoutPayload.commands).toContainEqual({ type: 'timeout' })
+
+    while (canonical.phase === 'active') {
+      const seat = canonical.activeSeat
+      const location = canonical.boards[seat].locations.find(
+        (candidate) => candidate.symbol === null,
+      )
+      if (!location) throw new Error('Expected a legal finishing placement.')
+      await sendAccepted(seat, {
+        type: 'place',
+        locationId: location.locationId,
+        symbol: seat === 0 ? 'scissors' : 'paper',
+      })
+    }
+    expect(canonical.phase).toBe('finished')
+    expect(canonical.result).not.toBeNull()
+
+    const finishedSeat: Seat = 0
+    probesBySeat[finishedSeat].send([
+      0,
+      PacketType.GAME_COMMAND,
+      {
+        matchId: descriptor.matchId,
+        commandId: commandIds[finishedSeat]++,
+        expectedRevision: revision,
+        command: { type: 'place', locationId: 5, symbol: 'rock' },
+      },
+    ])
+    expect((await probesBySeat[finishedSeat].waitFor(PacketType.GAME_UPDATE))[2]).toMatchObject({
+      status: 'rejected',
+      reason: 'game-finished',
+      currentRevision: revision,
+    })
+
+    first.send([999, PacketType.READY_STATE, true])
+    second.send([999, PacketType.READY_STATE, true])
+    const [firstRematch, secondRematch] = await Promise.all([
+      first.waitFor(PacketType.GAME_START),
+      second.waitFor(PacketType.GAME_START),
+    ])
+    expect(firstRematch[3]).toEqual(secondRematch[3])
+    expect((firstRematch[3] as { matchId: string }).matchId).toBe('match-2')
+    expect((firstRematch[3] as { matchId: string }).matchId).not.toBe(descriptor.matchId)
+
+    first.close()
+    expect(await second.waitFor(PacketType.OPPONENT_DISCONNECTED)).toEqual([
+      0,
+      PacketType.OPPONENT_DISCONNECTED,
+      true,
+    ])
+    second.close()
   })
 
   it('keeps invalid gameplay commands connected but policy-closes malformed envelopes', async () => {

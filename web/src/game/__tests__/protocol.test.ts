@@ -2,6 +2,7 @@ import { COLOR_GREEN, COLOR_RED } from '../constants'
 import { decode, encode } from '@msgpack/msgpack'
 import {
   decodePacket,
+  encodeGameCommandPacket,
   encodeGameMovePacket,
   encodeGameMovesPacket,
   encodeImmunePacket,
@@ -68,7 +69,120 @@ describe('protocol', () => {
     ).toEqual({
       type: PacketType.GAME_START,
       firstPlayerId: 7,
+      descriptor: {
+        matchId: '78bd46ff-cc07-46df-949a-eea9c543fdac',
+        mode: { id: 'classic', revision: 1 },
+        rules: DEFAULT_MATCH_RULES,
+        seed: 42,
+        firstSeat: 0,
+        revision: 0,
+        turnTimeRemainingMs: 10_000,
+      },
     })
+  })
+
+  it('rejects malformed or unsupported authoritative start descriptors', () => {
+    const descriptor = {
+      matchId: 'match-1',
+      mode: { id: 'classic', revision: 1 },
+      rules: DEFAULT_MATCH_RULES,
+      seed: 42,
+      firstSeat: 0,
+      revision: 0,
+      turnTimeRemainingMs: 10_000,
+    }
+
+    for (const replacement of [
+      { ...descriptor, matchId: '' },
+      { ...descriptor, mode: { id: 'classic', revision: 2 } },
+      { ...descriptor, rules: { ...DEFAULT_MATCH_RULES, rounds: 'six' } },
+      { ...descriptor, seed: -1 },
+      { ...descriptor, firstSeat: 2 },
+      { ...descriptor, revision: 1 },
+      { ...descriptor, turnTimeRemainingMs: -1 },
+    ]) {
+      expect(() =>
+        decodePacket(encode([0, PacketType.GAME_START, 7, replacement])),
+      ).toThrow()
+    }
+  })
+
+  it('decodes accepted and rejected authoritative updates defensively', () => {
+    const accepted = {
+      status: 'accepted',
+      matchId: 'match-1',
+      commandId: 3,
+      fromRevision: 4,
+      toRevision: 5,
+      actorSeat: 0,
+      commands: [{ type: 'place', locationId: 2, symbol: 'rock' }],
+      events: [{
+        type: 'placements-committed',
+        seat: 0,
+        placements: [{ locationId: 2, symbol: 'rock' }],
+      }],
+      turnTimeRemainingMs: 9_500,
+    }
+    expect(decodePacket(encode([0, PacketType.GAME_UPDATE, accepted]))).toEqual({
+      type: PacketType.GAME_UPDATE,
+      update: accepted,
+    })
+
+    const rejected = {
+      status: 'rejected',
+      matchId: 'match-1',
+      commandId: 3,
+      currentRevision: 4,
+      reason: 'location-occupied',
+    }
+    expect(decodePacket(encode([0, PacketType.GAME_UPDATE, rejected]))).toEqual({
+      type: PacketType.GAME_UPDATE,
+      update: rejected,
+    })
+
+    for (const invalid of [
+      { ...accepted, actorSeat: 3 },
+      { ...accepted, commands: [{ type: 'timeout', extra: true }] },
+      { ...accepted, events: [{ type: 'mystery' }] },
+      { ...accepted, fromRevision: -1 },
+      { ...rejected, reason: 'invented-reason' },
+      { ...rejected, currentRevision: 1.5 },
+    ]) {
+      expect(() =>
+        decodePacket(encode([0, PacketType.GAME_UPDATE, invalid])),
+      ).toThrow()
+    }
+  })
+
+  it('encodes revisioned commands and excludes client timeout commands', () => {
+    expect(
+      decode(
+        encodeGameCommandPacket(7, {
+          matchId: 'match-1',
+          commandId: 3,
+          expectedRevision: 4,
+          command: { type: 'place', locationId: 2, symbol: 'rock' },
+        }),
+      ),
+    ).toEqual([
+      7,
+      PacketType.GAME_COMMAND,
+      {
+        matchId: 'match-1',
+        commandId: 3,
+        expectedRevision: 4,
+        command: { type: 'place', locationId: 2, symbol: 'rock' },
+      },
+    ])
+
+    expect(() =>
+      encodeGameCommandPacket(7, {
+        matchId: 'match-1',
+        commandId: 4,
+        expectedRevision: 4,
+        command: { type: 'timeout' } as never,
+      }),
+    ).toThrow('timeout')
   })
 
   it('encodes proposed rules as a keyed trailing map', () => {

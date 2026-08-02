@@ -66,3 +66,7 @@ export function restartMatch(options: RestartMatchOptions) {
 
   options.beginLocalMatch(options.config)
 }
+
+export function shouldResolveTimeoutLocally(config: MatchConfig) {
+  return !config.isOnline
+}

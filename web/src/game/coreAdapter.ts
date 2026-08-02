@@ -250,6 +250,49 @@ export function createOfflineState(
   return presentState(canonicalState, base)
 }
 
+export function createOnlinePresentedState(
+  config: MatchConfig,
+  canonicalState: CoreGameState,
+  localSeat: Seat,
+): GameState {
+  const base: GameState = {
+    config,
+    phase: 'setup',
+    playerGrid: { cells: [] },
+    opponentGrid: { cells: [] },
+    isMyTurn: canonicalState.activeSeat === localSeat,
+    currentRound: canonicalState.currentRound,
+    totalTurns: canonicalState.turnCount,
+    maxTurns: canonicalState.maxTurns,
+    selectedColor: null,
+    shieldSelectionMode: false,
+    playerPowerups: presentPowerups(canonicalState, localSeat),
+    pendingExtraTurnMoves: [],
+    isInExtraTurn: false,
+    result: null,
+    canonicalState,
+    localSeat,
+  }
+  return presentState(canonicalState, base)
+}
+
+export function applyOnlinePresentation(
+  previous: GameState,
+  canonicalState: CoreGameState,
+  events: readonly DomainEvent[],
+  clearSelection = false,
+): EngineResult {
+  const localSeat = previous.localSeat ?? 0
+  return {
+    state: presentState(canonicalState, previous, {
+      selectedColor: clearSelection ? null : previous.selectedColor,
+    }),
+    events: events.flatMap((event) =>
+      presentEvent(event, canonicalState, localSeat),
+    ),
+  }
+}
+
 export function startOfflineMatch(state: GameState): EngineResult {
   const { canonicalState, localSeat } = requireCanonical(state)
   return {
