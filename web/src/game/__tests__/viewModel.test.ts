@@ -48,6 +48,7 @@ describe('view model helpers', () => {
     expect(getScreenLabel('online-menu')).toBe('Online')
     expect(getScreenLabel('matchmaking')).toBe('Searching')
     expect(getScreenLabel('battle')).toBe('Battle')
+    expect(getScreenLabel('sync-lost')).toBe('Sync Lost')
   })
 
   it('creates a four-digit guest identity from the supplied random source', () => {
@@ -75,6 +76,7 @@ describe('view model helpers', () => {
     expect(getBackTarget('battle', true)).toBe('online-menu')
     expect(getBackTarget('results', true)).toBe('online-menu')
     expect(getBackTarget('disconnected', true)).toBe('online-menu')
+    expect(getBackTarget('sync-lost', true)).toBe('online-menu')
   })
 
   it('chooses the visible opponent name from online users before fallbacks', () => {

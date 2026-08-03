@@ -141,4 +141,110 @@ describe('resolveWebSocketUrl', () => {
     })
     client.close()
   })
+
+  it('sends revisioned commands and emits authoritative start and update events', async () => {
+    Object.defineProperty(globalThis, 'WebSocket', {
+      configurable: true,
+      value: RecordingSocket,
+    })
+    const client = new NetworkClient()
+    const events: unknown[] = []
+    client.subscribe((event) => events.push(event))
+    await client.connect('ws://localhost:5173/ws')
+    const socket = RecordingSocket.instances[0]!
+    socket.receive([0, PacketType.ID_ASSIGN, 7])
+    const descriptor = {
+      matchId: 'match-1',
+      mode: { id: 'classic', revision: 1 },
+      rules: { rounds: 6, turnSeconds: 10, blindMode: true },
+      seed: 42,
+      firstSeat: 0,
+      revision: 0,
+      turnTimeRemainingMs: 10_000,
+    }
+    socket.receive([0, PacketType.GAME_START, 7, descriptor])
+    expect(events).toContainEqual({
+      type: 'game-start',
+      firstPlayerId: 7,
+      descriptor,
+    })
+
+    client.sendGameCommand({
+      matchId: 'match-1',
+      commandId: 0,
+      expectedRevision: 0,
+      command: { type: 'place', locationId: 0, symbol: 'paper' },
+    })
+    expect(socket.sent.at(-1)).toEqual([
+      7,
+      PacketType.GAME_COMMAND,
+      {
+        matchId: 'match-1',
+        commandId: 0,
+        expectedRevision: 0,
+        command: { type: 'place', locationId: 0, symbol: 'paper' },
+      },
+    ])
+
+    const rejection = {
+      status: 'rejected',
+      matchId: 'match-1',
+      commandId: 0,
+      currentRevision: 0,
+      reason: 'location-occupied',
+    }
+    socket.receive([0, PacketType.GAME_UPDATE, rejection])
+    expect(events).toContainEqual({ type: 'game-update', update: rejection })
+    expect(socket.readyState).toBe(RecordingSocket.OPEN)
+    client.close()
+  })
+
+  it('emits sync-lost without closing when an authoritative packet is malformed', async () => {
+    Object.defineProperty(globalThis, 'WebSocket', {
+      configurable: true,
+      value: RecordingSocket,
+    })
+    const client = new NetworkClient()
+    const events: unknown[] = []
+    client.subscribe((event) => events.push(event))
+    await client.connect('ws://localhost:5173/ws')
+    const socket = RecordingSocket.instances[0]!
+    socket.receive([0, PacketType.GAME_UPDATE, {
+      status: 'accepted',
+      matchId: 'match-1',
+      commandId: null,
+      fromRevision: 0,
+      toRevision: 3,
+      actorSeat: 9,
+      commands: [],
+      events: [],
+      turnTimeRemainingMs: 10_000,
+    }])
+
+    expect(events).toContainEqual({
+      type: 'sync-lost',
+      message: 'The server sent an update this client cannot safely apply.',
+    })
+    expect(socket.readyState).toBe(RecordingSocket.OPEN)
+    client.close()
+  })
+
+  it('does not surface legacy gameplay relays into the authoritative online flow', async () => {
+    Object.defineProperty(globalThis, 'WebSocket', {
+      configurable: true,
+      value: RecordingSocket,
+    })
+    const client = new NetworkClient()
+    const events: unknown[] = []
+    client.subscribe((event) => events.push(event))
+    await client.connect('ws://localhost:5173/ws')
+    const socket = RecordingSocket.instances[0]!
+    socket.receive([9, PacketType.GAME_MOVE, 0, 'green'])
+    socket.receive([9, PacketType.GAME_MOVES, [0, 1], ['green', 'blue']])
+    socket.receive([9, PacketType.IMMUNE_UPDATE, [0]])
+
+    expect(events).toEqual([{ type: 'open' }])
+    expect(socket.readyState).toBe(RecordingSocket.OPEN)
+    client.close()
+  })
 })

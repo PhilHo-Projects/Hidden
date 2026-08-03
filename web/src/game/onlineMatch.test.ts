@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import type { MatchConfig } from './types'
+import type { Screen } from './viewModel'
 import {
   createOnlineMatchConfig,
+  isOnlineTerminalScreen,
+  MATCH_COUNTDOWN_DURATION_MS,
+  MATCH_COUNTDOWN_STEPS,
+  markOnlineTerminalScreen,
   restartMatch,
+  shouldResolveTimeoutLocally,
   transitionOnlineMatchEvent,
+  tryMarkOnlineTerminalScreen,
 } from './onlineMatch'
 
 const ONLINE_CONFIG: MatchConfig = {
@@ -114,5 +121,48 @@ describe('online match flow', () => {
     expect(readyValues).toEqual([])
     expect(screen).toBe('results')
     expect(localConfig).toEqual(offlineConfig)
+  })
+
+  it('keeps online expiry display-only while offline expiry resolves immediately', () => {
+    expect(shouldResolveTimeoutLocally(ONLINE_CONFIG)).toBe(false)
+    expect(shouldResolveTimeoutLocally({ ...ONLINE_CONFIG, isOnline: false })).toBe(true)
+  })
+
+  it('keeps the visible countdown below the server launch-grace contract', () => {
+    expect(MATCH_COUNTDOWN_STEPS).toEqual([
+      { label: '3', durationMs: 700 },
+      { label: '2', durationMs: 700 },
+      { label: '1', durationMs: 700 },
+      { label: 'GO!', durationMs: 520 },
+    ])
+    expect(MATCH_COUNTDOWN_DURATION_MS).toBe(2_620)
+    expect(MATCH_COUNTDOWN_DURATION_MS).toBeLessThan(3_000)
+  })
+
+  it('makes opponent disconnect terminal before a later authoritative update can run', () => {
+    const screenRef: { current: Screen } = { current: 'battle' }
+
+    markOnlineTerminalScreen(screenRef, 'disconnected')
+
+    expect(screenRef.current).toBe('disconnected')
+    expect(isOnlineTerminalScreen(screenRef.current)).toBe(true)
+  })
+
+  it('also treats sync-lost as terminal for later authoritative updates', () => {
+    const screenRef: { current: Screen } = { current: 'battle' }
+
+    markOnlineTerminalScreen(screenRef, 'sync-lost')
+
+    expect(screenRef.current).toBe('sync-lost')
+    expect(isOnlineTerminalScreen(screenRef.current)).toBe(true)
+    expect(isOnlineTerminalScreen('battle')).toBe(false)
+  })
+
+  it('keeps sync-lost terminal when opponent-disconnected arrives afterward', () => {
+    const screenRef: { current: Screen } = { current: 'battle' }
+
+    expect(tryMarkOnlineTerminalScreen(screenRef, 'sync-lost')).toBe(true)
+    expect(tryMarkOnlineTerminalScreen(screenRef, 'disconnected')).toBe(false)
+    expect(screenRef.current).toBe('sync-lost')
   })
 })

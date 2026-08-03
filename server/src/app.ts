@@ -13,7 +13,8 @@ import {
 } from './auth/http'
 import { readSessionToken } from './auth/sessionToken'
 import { GameHandler, type ClientIdentity } from './gameHandler'
-import { createLogger, type LogLevel } from './logger'
+import { createLogger, type Logger, type LogLevel } from './logger'
+import type { MatchCoordinator } from './matchCoordinator'
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 16 * 1024
 
@@ -24,6 +25,8 @@ export interface HiddenServerOptions {
   heartbeatIntervalMs?: number
   host?: string
   logLevel?: LogLevel
+  logger?: Logger
+  matchCoordinator?: MatchCoordinator
   maxConnections?: number
   maxMessagesPerSecond?: number
   maxPayloadBytes?: number
@@ -47,7 +50,7 @@ function rejectUpgrade(socket: Duplex, status: number, label: string) {
 
 export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
   const app = express()
-  const logger = createLogger(options.logLevel ?? 'info')
+  const logger = options.logger ?? createLogger(options.logLevel ?? 'info')
   const httpServer: HttpServer = createServer(app)
   const webSocketServer = new WebSocketServer({
     noServer: true,
@@ -56,6 +59,9 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
   const gameHandler = new GameHandler({
     logger,
     maxMessagesPerSecond: options.maxMessagesPerSecond ?? 30,
+    ...(options.matchCoordinator
+      ? { matchCoordinator: options.matchCoordinator }
+      : {}),
   })
   const host = options.host ?? '0.0.0.0'
   const maxConnections = options.maxConnections ?? 100

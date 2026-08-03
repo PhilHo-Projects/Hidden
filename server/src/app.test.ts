@@ -9,6 +9,15 @@ import type { AuthenticatedUser } from './auth/service'
 import { createHiddenServer, type HiddenServer } from './app'
 import { DEFAULT_MATCH_RULES } from './matchRules'
 import { PacketType } from './protocol'
+import { MatchCoordinator } from './matchCoordinator'
+import {
+  applyCommand,
+  applyTimeout,
+  createGame,
+  type GameCommand,
+  type GameState as CoreGameState,
+  type Seat,
+} from '@hidden/game-core'
 
 const ORIGIN = 'http://localhost:5173'
 const VALID_SESSION_TOKEN = 'v'.repeat(43)
@@ -17,6 +26,7 @@ const ADMIN_SESSION_TOKEN = 'a'.repeat(43)
 const SECOND_ADMIN_SESSION_TOKEN = 'b'.repeat(43)
 
 class Probe {
+  clientId: number | undefined
   private readonly buffered: unknown[][] = []
   private readonly waiters: Array<{
     predicate: (packet: unknown[]) => boolean
@@ -26,6 +36,9 @@ class Probe {
   constructor(readonly socket: WebSocket) {
     socket.on('message', (bytes) => {
       const packet = decode(bytes as Buffer) as unknown[]
+      if (Number(packet[1]) === PacketType.ID_ASSIGN) {
+        this.clientId = Number(packet[2])
+      }
       const waiterIndex = this.waiters.findIndex(({ predicate }) =>
         predicate(packet),
       )
@@ -213,8 +226,11 @@ describe.sequential('Hidden server', () => {
     await expectUpgradeStatus(port, 403, 'https://evil.example')
   })
 
-  it('matches two clients, starts their game, relays their move with the real sender id, and reports disconnects', async () => {
-    const { port } = await startServer()
+  it('matches two clients, trusts the connection actor, rejects legacy relay, and reports disconnects', async () => {
+    const logs: Array<[string, string, Record<string, unknown> | undefined]> = []
+    const { port } = await startServer({
+      logger: (level, event, context) => logs.push([level, event, context]),
+    })
     const first = await connectProbe(port)
     const second = await connectProbe(port)
 
@@ -251,6 +267,282 @@ describe.sequential('Hidden server', () => {
     ])
     expect([firstId, secondId]).toContain(Number(firstStart[2]))
     expect(firstStart[2]).toBe(secondStart[2])
+    expect(firstStart.slice(0, 3)).toEqual([
+      0,
+      PacketType.GAME_START,
+      firstStart[2],
+    ])
+    expect(firstStart[3]).toEqual(secondStart[3])
+    expect(firstStart[3]).toMatchObject({
+      matchId: expect.any(String),
+      mode: { id: 'classic', revision: 1 },
+      rules: DEFAULT_MATCH_RULES,
+      seed: expect.any(Number),
+      firstSeat: firstStart[2] === firstId ? 0 : 1,
+      revision: 0,
+      turnTimeRemainingMs: expect.any(Number),
+    })
+    expect(JSON.stringify(firstStart[3])).not.toContain('accountId')
+
+    const actor = firstStart[2] === firstId ? first : second
+    const opponent = actor === first ? second : first
+    const actorId = actor === first ? firstId : secondId
+    const actorSeat = (firstStart[3] as { firstSeat: number }).firstSeat
+    const matchId = (firstStart[3] as { matchId: string }).matchId
+
+    const legacyPackets = [
+      [999, PacketType.GAME_MOVE, 4, 'green'],
+      [999, PacketType.IMMUNE_UPDATE, [4]],
+      [999, PacketType.GAME_MOVES, [4, 5], ['green', 'red']],
+    ]
+    for (const legacyPacket of legacyPackets) {
+      actor.send(legacyPacket)
+      expect(await actor.waitFor(PacketType.GAME_UPDATE)).toEqual([
+        0,
+        PacketType.GAME_UPDATE,
+        {
+          status: 'rejected',
+          matchId,
+          commandId: null,
+          currentRevision: 0,
+          reason: 'legacy-gameplay-disabled',
+        },
+      ])
+      await expect(
+        opponent.waitFor(Number(legacyPacket[1]) as PacketType, 75),
+      ).rejects.toThrow(
+        `Timed out waiting for packet ${Number(legacyPacket[1])}.`,
+      )
+      expect(actor.socket.readyState).toBe(WebSocket.OPEN)
+    }
+    expect(logs).toContainEqual([
+      'debug',
+      'packet.received',
+      expect.objectContaining({
+        clientId: actorId,
+        packetType: PacketType.GAME_MOVE,
+        payloadBytes: expect.any(Number),
+      }),
+    ])
+    expect(
+      logs
+        .filter(([level]) => level === 'info')
+        .map((entry) => JSON.stringify(entry))
+        .join('\n'),
+    ).not.toMatch(/green|red|\[4,5\]/)
+    expect(actor.socket.readyState).toBe(WebSocket.OPEN)
+
+    actor.send([
+      999_999,
+      PacketType.GAME_COMMAND,
+      {
+        matchId,
+        commandId: 1,
+        expectedRevision: 0,
+        command: { type: 'place', locationId: 4, symbol: 'rock' },
+      },
+    ])
+    const [actorUpdate, opponentUpdate] = await Promise.all([
+      actor.waitFor(PacketType.GAME_UPDATE),
+      opponent.waitFor(PacketType.GAME_UPDATE),
+    ])
+    expect(actorUpdate).toMatchObject([
+      0,
+      PacketType.GAME_UPDATE,
+      {
+        status: 'accepted',
+        matchId,
+        commandId: 1,
+        fromRevision: 0,
+        toRevision: 1,
+        actorSeat,
+        commands: [{ type: 'place', locationId: 4, symbol: 'rock' }],
+      },
+    ])
+    expect(opponentUpdate).toMatchObject([
+      0,
+      PacketType.GAME_UPDATE,
+      { status: 'accepted', matchId, commandId: null, actorSeat },
+    ])
+
+    actor.close()
+    expect(await opponent.waitFor(PacketType.OPPONENT_DISCONNECTED)).toEqual([
+      0,
+      PacketType.OPPONENT_DISCONNECTED,
+      true,
+    ])
+    opponent.close()
+  })
+
+  it('runs a complete authoritative match with power-up, timeout, rematch, spoof resistance, and disconnect', async () => {
+    let now = 1_000
+    const uuids = ['room-1', 'match-1', 'match-2']
+    const scheduled: Array<{
+      callback: () => void
+      cleared: boolean
+      delayMs: number
+    }> = []
+    const coordinator = new MatchCoordinator({
+      createUuid: () => uuids.shift() ?? 'unexpected-match-id',
+      createSeed: () => 42,
+      chooseFirstSeat: () => 0,
+      now: () => now,
+      scheduleTimeout: (callback, delayMs) => {
+        const handle = { callback, cleared: false, delayMs }
+        scheduled.push(handle)
+        return handle
+      },
+      clearTimeout: (handle) => {
+        ;(handle as { cleared: boolean }).cleared = true
+      },
+    })
+    const { port } = await startServer({ matchCoordinator: coordinator })
+    const first = await queueProbe(port, { guestUsername: 'Guest#4101' })
+    const second = await queueProbe(port, { guestUsername: 'Guest#4102' })
+    await Promise.all([
+      first.waitFor(PacketType.MATCH_FOUND),
+      second.waitFor(PacketType.MATCH_FOUND),
+    ])
+    first.send([second.clientId, PacketType.READY_STATE, true])
+    second.send([first.clientId, PacketType.READY_STATE, true])
+    const [firstStart, secondStart] = await Promise.all([
+      first.waitFor(PacketType.GAME_START),
+      second.waitFor(PacketType.GAME_START),
+    ])
+    expect(firstStart[3]).toEqual(secondStart[3])
+    const descriptor = firstStart[3] as {
+      matchId: string
+      mode: { id: 'classic'; revision: 1 }
+      rules: typeof DEFAULT_MATCH_RULES
+      seed: number
+      firstSeat: Seat
+      revision: 0
+    }
+    expect(descriptor.matchId).toBe('match-1')
+    const probesBySeat = [first, second] as const
+    const commandIds = [0, 0]
+    let revision = 0
+    let canonical: CoreGameState = createGame({
+      mode: descriptor.mode,
+      rules: descriptor.rules,
+      seed: descriptor.seed,
+      firstSeat: descriptor.firstSeat,
+    })
+
+    const applyAccepted = (update: unknown, expectedSeat: Seat) => {
+      const payload = update as {
+        status: 'accepted'
+        actorSeat: Seat
+        commands: GameCommand[]
+        events: unknown[]
+        fromRevision: number
+        toRevision: number
+        turnTimeRemainingMs: number | null
+      }
+      expect(payload.status).toBe('accepted')
+      expect(payload.actorSeat).toBe(expectedSeat)
+      expect(payload.fromRevision).toBe(revision)
+      for (const command of payload.commands) {
+        const result = command.type === 'timeout'
+          ? applyTimeout(canonical)
+          : applyCommand(canonical, expectedSeat, command)
+        expect(result.accepted).toBe(true)
+        canonical = result.state
+      }
+      revision = payload.toRevision
+      return payload
+    }
+
+    const sendAccepted = async (
+      seat: Seat,
+      command: Exclude<GameCommand, { type: 'timeout' }>,
+      spoofedSender = 999_999,
+    ) => {
+      const actor = probesBySeat[seat]
+      const opponent = probesBySeat[(1 - seat) as Seat]
+      const commandId = commandIds[seat]++
+      actor.send([
+        spoofedSender,
+        PacketType.GAME_COMMAND,
+        { matchId: descriptor.matchId, commandId, expectedRevision: revision, command },
+      ])
+      const [actorPacket, opponentPacket] = await Promise.all([
+        actor.waitFor(PacketType.GAME_UPDATE),
+        opponent.waitFor(PacketType.GAME_UPDATE),
+      ])
+      expect(actorPacket[2]).toMatchObject({ commandId })
+      expect(opponentPacket[2]).toMatchObject({ commandId: null })
+      const payload = applyAccepted(actorPacket[2], seat)
+      expect(opponentPacket[2]).toMatchObject({
+        status: 'accepted',
+        matchId: descriptor.matchId,
+        actorSeat: seat,
+        fromRevision: payload.fromRevision,
+        toRevision: payload.toRevision,
+        commands: payload.commands,
+        events: payload.events,
+      })
+      return payload
+    }
+
+    await sendAccepted(0, { type: 'place', locationId: 0, symbol: 'paper' }, Number(second.clientId))
+    await sendAccepted(1, { type: 'place', locationId: 6, symbol: 'rock' })
+    await sendAccepted(0, { type: 'place', locationId: 1, symbol: 'paper' })
+    await sendAccepted(1, { type: 'place', locationId: 7, symbol: 'rock' })
+    await sendAccepted(0, { type: 'place', locationId: 2, symbol: 'paper' })
+    await sendAccepted(1, { type: 'place', locationId: 8, symbol: 'rock' })
+    expect(canonical.powerups[0].unlocked.reveal).toBe(true)
+
+    await sendAccepted(0, { type: 'activate-powerup', powerup: 'reveal' })
+    expect(canonical.powerups[0].revealActive).toBe(true)
+    await sendAccepted(0, { type: 'place', locationId: 3, symbol: 'scissors' })
+
+    const activeTimer = [...scheduled].reverse().find((timer) => !timer.cleared)
+    expect(activeTimer?.delayMs).toBe(DEFAULT_MATCH_RULES.turnSeconds * 1_000)
+    now += DEFAULT_MATCH_RULES.turnSeconds * 1_000
+    activeTimer?.callback()
+    const [timeoutFirst, timeoutSecond] = await Promise.all([
+      first.waitFor(PacketType.GAME_UPDATE),
+      second.waitFor(PacketType.GAME_UPDATE),
+    ])
+    const timeoutActor = canonical.activeSeat
+    const actorTimeoutPacket = probesBySeat[timeoutActor] === first
+      ? timeoutFirst
+      : timeoutSecond
+    const timeoutPayload = applyAccepted(actorTimeoutPacket[2], timeoutActor)
+    expect(timeoutPayload.commands).toContainEqual({ type: 'timeout' })
+
+    while (canonical.phase === 'active') {
+      const seat = canonical.activeSeat
+      const location = canonical.boards[seat].locations.find(
+        (candidate) => candidate.symbol === null,
+      )
+      if (!location) throw new Error('Expected a legal finishing placement.')
+      await sendAccepted(seat, {
+        type: 'place',
+        locationId: location.locationId,
+        symbol: seat === 0 ? 'scissors' : 'paper',
+      })
+    }
+    expect(canonical.phase).toBe('finished')
+    expect(canonical.result).not.toBeNull()
+
+    const finishedSeat: Seat = 0
+    probesBySeat[finishedSeat].send([
+      0,
+      PacketType.GAME_COMMAND,
+      {
+        matchId: descriptor.matchId,
+        commandId: commandIds[finishedSeat]++,
+        expectedRevision: revision,
+        command: { type: 'place', locationId: 5, symbol: 'rock' },
+      },
+    ])
+    expect((await probesBySeat[finishedSeat].waitFor(PacketType.GAME_UPDATE))[2]).toMatchObject({
+      status: 'rejected',
+      reason: 'game-finished',
+      currentRevision: revision,
+    })
 
     first.send([999, PacketType.READY_STATE, true])
     second.send([999, PacketType.READY_STATE, true])
@@ -258,16 +550,9 @@ describe.sequential('Hidden server', () => {
       first.waitFor(PacketType.GAME_START),
       second.waitFor(PacketType.GAME_START),
     ])
-    expect([firstId, secondId]).toContain(Number(firstRematch[2]))
-    expect(firstRematch[2]).toBe(secondRematch[2])
-
-    first.send([999, PacketType.GAME_MOVE, 4, 'green'])
-    expect(await second.waitFor(PacketType.GAME_MOVE)).toEqual([
-      firstId,
-      PacketType.GAME_MOVE,
-      4,
-      'green',
-    ])
+    expect(firstRematch[3]).toEqual(secondRematch[3])
+    expect((firstRematch[3] as { matchId: string }).matchId).toBe('match-2')
+    expect((firstRematch[3] as { matchId: string }).matchId).not.toBe(descriptor.matchId)
 
     first.close()
     expect(await second.waitFor(PacketType.OPPONENT_DISCONNECTED)).toEqual([
@@ -276,6 +561,64 @@ describe.sequential('Hidden server', () => {
       true,
     ])
     second.close()
+  })
+
+  it('keeps invalid gameplay commands connected but policy-closes malformed envelopes', async () => {
+    const { port } = await startServer()
+    const first = await queueProbe(port, { guestUsername: 'Guest#3001' })
+    const second = await queueProbe(port, { guestUsername: 'Guest#3002' })
+    await Promise.all([
+      first.waitFor(PacketType.MATCH_FOUND),
+      second.waitFor(PacketType.MATCH_FOUND),
+    ])
+    first.send([999, PacketType.READY_STATE, true])
+    second.send([999, PacketType.READY_STATE, true])
+    const [firstStart, secondStart] = await Promise.all([
+      first.waitFor(PacketType.GAME_START),
+      second.waitFor(PacketType.GAME_START),
+    ])
+    const actor = firstStart[2] === first.clientId ? first : second
+    const actorStart = actor === first ? firstStart : secondStart
+    const matchId = (actorStart[3] as { matchId: string }).matchId
+
+    actor.send([
+      999,
+      PacketType.GAME_COMMAND,
+      {
+        matchId,
+        commandId: 1,
+        expectedRevision: 0,
+        command: { type: 'place', locationId: 0, symbol: 'lizard' },
+      },
+    ])
+    expect(await actor.waitFor(PacketType.GAME_UPDATE)).toEqual([
+      0,
+      PacketType.GAME_UPDATE,
+      {
+        status: 'rejected',
+        matchId,
+        commandId: 1,
+        currentRevision: 0,
+        reason: 'invalid-command',
+      },
+    ])
+    expect(actor.socket.readyState).toBe(WebSocket.OPEN)
+
+    actor.send([
+      999,
+      PacketType.GAME_COMMAND,
+      {
+        matchId,
+        commandId: -1,
+        expectedRevision: 0,
+        command: { type: 'place', locationId: 0, symbol: 'rock' },
+      },
+    ])
+    const closeCode = await new Promise<number>((resolve) =>
+      actor.socket.once('close', resolve),
+    )
+    expect(closeCode).toBe(1008)
+    ;(actor === first ? second : first).close()
   })
 
   it('ignores a non-admin rules proposal and sends defaults to both players', async () => {

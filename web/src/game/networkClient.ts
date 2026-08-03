@@ -1,8 +1,6 @@
 import {
   decodePacket,
-  encodeGameMovePacket,
-  encodeGameMovesPacket,
-  encodeImmunePacket,
+  encodeGameCommandPacket,
   encodeMatchmakingPacket,
   encodeReadyPacket,
   encodeRoomJoinPacket,
@@ -10,9 +8,11 @@ import {
   encodeUserInfoPacket,
   PacketType,
   type DecodedPacket,
+  type GameCommandEnvelope,
+  type GameStartDescriptor,
+  type GameUpdate,
   type UserEntry,
 } from './protocol'
-import type { PaintColor, QueuedMove } from './types'
 import type { MatchRules } from './matchRules'
 
 export type ClientEvent =
@@ -22,10 +22,13 @@ export type ClientEvent =
   | { type: 'assigned-id'; clientId: number }
   | { type: 'users'; users: UserEntry[] }
   | { type: 'match-found'; roomId: string; rules: MatchRules }
-  | { type: 'game-start'; firstPlayerId: number; isMyTurn: boolean }
-  | { type: 'hidden-move'; senderId: number; index: number; color: PaintColor }
-  | { type: 'hidden-moves'; senderId: number; moves: QueuedMove[] }
-  | { type: 'immune'; senderId: number; indices: number[] }
+  | {
+      type: 'game-start'
+      firstPlayerId: number
+      descriptor: GameStartDescriptor
+    }
+  | { type: 'game-update'; update: GameUpdate }
+  | { type: 'sync-lost'; message: string }
   | { type: 'opponent-disconnected' }
 
 type EventListener = (event: ClientEvent) => void
@@ -197,16 +200,8 @@ export class NetworkClient {
     this.send(encodeReadyPacket(this.clientId ?? 0, isReady))
   }
 
-  sendMove(index: number, color: PaintColor) {
-    this.send(encodeGameMovePacket(this.clientId ?? 0, index, color))
-  }
-
-  sendMoves(moves: QueuedMove[]) {
-    this.send(encodeGameMovesPacket(this.clientId ?? 0, moves))
-  }
-
-  sendImmune(indices: number[]) {
-    this.send(encodeImmunePacket(this.clientId ?? 0, indices))
+  sendGameCommand(envelope: GameCommandEnvelope) {
+    this.send(encodeGameCommandPacket(this.clientId ?? 0, envelope))
   }
 
   private handleServerResponse(packet: Extract<DecodedPacket, { type: PacketType.SERVER_RESPONSE }>) {
@@ -250,30 +245,17 @@ export class NetworkClient {
         this.emit({
           type: 'game-start',
           firstPlayerId: packet.firstPlayerId,
-          isMyTurn: packet.firstPlayerId === this.clientId,
+          descriptor: packet.descriptor,
         })
+        break
+      case PacketType.GAME_UPDATE:
+        this.emit({ type: 'game-update', update: packet.update })
         break
       case PacketType.GAME_MOVE:
-        this.emit({
-          type: 'hidden-move',
-          senderId: packet.senderId,
-          index: packet.index,
-          color: packet.color,
-        })
         break
       case PacketType.GAME_MOVES:
-        this.emit({
-          type: 'hidden-moves',
-          senderId: packet.senderId,
-          moves: packet.moves,
-        })
         break
       case PacketType.IMMUNE_UPDATE:
-        this.emit({
-          type: 'immune',
-          senderId: packet.senderId,
-          indices: packet.indices,
-        })
         break
       case PacketType.READY_STATE:
         break
@@ -288,11 +270,26 @@ export class NetworkClient {
   private handleMessage(data: Blob | ArrayBuffer) {
     if (data instanceof Blob) {
       void data.arrayBuffer().then((buffer) => {
-        this.handleDecoded(decodePacket(buffer))
-      })
+        this.decodeAndHandle(buffer)
+      }).catch(() => this.emitSyncLost())
       return
     }
 
-    this.handleDecoded(decodePacket(data))
+    this.decodeAndHandle(data)
+  }
+
+  private decodeAndHandle(data: ArrayBuffer) {
+    try {
+      this.handleDecoded(decodePacket(data))
+    } catch {
+      this.emitSyncLost()
+    }
+  }
+
+  private emitSyncLost() {
+    this.emit({
+      type: 'sync-lost',
+      message: 'The server sent an update this client cannot safely apply.',
+    })
   }
 }

@@ -56,38 +56,38 @@ MessagePack 3, Vitest 4, Docker
 - [x] Move `MatchRules` into the core and remove mirrored definitions.
 - [x] Add the web presentation adapter and migrate offline/bot play while
   keeping online relay behavior unchanged.
-- [ ] Verify all packages and Docker, review, push, merge, deploy, and smoke the
+- [x] Verify all packages and Docker, review, push, merge, deploy, and smoke the
   shared-core PR; then branch `codex/server-authoritative-match-cycle`.
 
 ### Task 4: Implement lifecycle stages 1-3
 
-- [ ] Write failing coordinator tests for discovery, immutable run specs,
+- [x] Write failing coordinator tests for discovery, immutable run specs,
   trusted seats, readiness, UUIDs, injected seed/clock/timers, and cleanup.
-- [ ] Split socket transport from `MatchCoordinator` gameplay ownership.
-- [ ] Create stable rooms and fresh UUID runs with immutable `classic@1`, rules,
+- [x] Split socket transport from `MatchCoordinator` gameplay ownership.
+- [x] Create stable rooms and fresh UUID runs with immutable `classic@1`, rules,
   participants, seed, first seat, revision, and deadline.
-- [ ] Append the keyed start descriptor to packet 15.
+- [x] Append the keyed start descriptor to packet 15.
 
 ### Task 5: Implement lifecycle stages 4-6
 
-- [ ] Write failing protocol and behavior tests for packet IDs 19/20, spoofing,
+- [x] Write failing protocol and behavior tests for packet IDs 19/20, spoofing,
   revisions, deduplication, illegal actions, power-ups, deadlines, legacy
   packets, finish locking, disconnect, and rematch.
-- [ ] Decode keyed commands defensively and derive actors from sessions.
-- [ ] Resolve accepted commands in the canonical core and broadcast revisioned
+- [x] Decode keyed commands defensively and derive actors from sessions.
+- [x] Resolve accepted commands in the canonical core and broadcast revisioned
   command/effect batches, including extra-turn buffering.
-- [ ] Own placement-window deadlines, late-command ordering, seeded timeouts,
+- [x] Own placement-window deadlines, late-command ordering, seeded timeouts,
   automatic passing, finish locking, and fresh transient rematch runs.
 
 ### Task 6: Integrate the authoritative client and open the final draft PR
 
-- [ ] Write failing client tests for server-confirmed state, rejection, accepted
+- [x] Write failing client tests for server-confirmed state, rejection, accepted
   batches, display-only online timers, and fail-closed revision gaps.
-- [ ] Replace legacy online gameplay sends with revisioned commands and apply
+- [x] Replace legacy online gameplay sends with revisioned commands and apply
   accepted updates through the shared core.
-- [ ] Add two-WebSocket full-match coverage and two-browser online/offline smoke.
-- [ ] Run core tests/build, web tests/lint/build, server tests/build,
+- [x] Add two-WebSocket full-match coverage and two-browser online/offline smoke.
+- [x] Run core tests/build, web tests/lint/build, server tests/build,
   `git diff --check`, and the root Docker build.
-- [ ] Complete independent review and resolve all Critical/Important findings.
-- [ ] Push `codex/server-authoritative-match-cycle` and open a draft PR; do not
+- [x] Complete independent review and resolve all Critical/Important findings.
+- [x] Push `codex/server-authoritative-match-cycle` and open a draft PR; do not
   merge or deploy it.
