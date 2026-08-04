@@ -1206,14 +1206,18 @@ function App() {
               ) : null}
             </div>
             <div className="battle-controls">
-              <PowerupTray
-                powerups={match.playerPowerups}
-                disabled={
-                  !match.isMyTurn ||
-                  (match.config.isOnline && onlineInputPending)
-                }
-                onUse={onPowerup}
-              />
+              {/* Hidden entirely when the variant has no power-ups, so a
+                  no-power-up test does not show an unusable tray. */}
+              {match.config.powerupsEnabled ? (
+                <PowerupTray
+                  powerups={match.playerPowerups}
+                  disabled={
+                    !match.isMyTurn ||
+                    (match.config.isOnline && onlineInputPending)
+                  }
+                  onUse={onPowerup}
+                />
+              ) : null}
               <div
                 className={`rps-dock ${awaitingMoveChoice ? 'rps-dock-awaiting' : ''}`}
                 aria-label="Move loader"
