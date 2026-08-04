@@ -45,6 +45,11 @@ import {
   type MatchRules,
 } from './game/matchRules'
 import {
+  clampGameConfig,
+  DEFAULT_GAME_CONFIG,
+  type GameConfig,
+} from '@hidden/game-core'
+import {
   createOnlineMatchConfig,
   isOnlineTerminalScreen,
   MATCH_COUNTDOWN_STEPS,
@@ -96,13 +101,11 @@ const wsUrl = () =>
   })
 
 function makeConfig(
-  rounds: number,
-  turnSeconds: number,
-  blindMode: boolean,
+  config: GameConfig,
   isOnline: boolean,
   hasAI: boolean,
 ): MatchConfig {
-  return { rounds, turnSeconds, blindMode, isOnline, hasAI }
+  return { ...config, isOnline, hasAI }
 }
 
 interface BrushButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -126,9 +129,13 @@ function App() {
   const [authMode, setAuthMode] = useState<AccountMode>('register')
   const [authBusy, setAuthBusy] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
-  const [rounds, setRounds] = useState(6)
-  const [turnSeconds, setTurnSeconds] = useState(10)
-  const [blindMode, setBlindMode] = useState(true)
+  // One config object rather than one state hook per knob: the knob count grows
+  // with every rule experiment, the call sites should not.
+  const [config, setConfig] = useState<GameConfig>(DEFAULT_GAME_CONFIG)
+  const applyConfigPatch = (patch: Partial<GameConfig>) =>
+    // Clamping here means the UI cannot produce an invalid config, so the
+    // server clamp becomes a defence rather than the only guard.
+    setConfig((current) => clampGameConfig({ ...current, ...patch }))
   const [onlineRules, setOnlineRules] = useState<MatchRules | null>(null)
   const [match, setMatch] = useState<GameState | null>(null)
   const [status, setStatus] = useState<UiStatus>({
@@ -703,7 +710,7 @@ function App() {
       detail: 'Practice bot ready.',
     })
     setAnnouncement('Battle starting.')
-    await beginCountdown(makeConfig(rounds, turnSeconds, blindMode, false, true), true)
+    await beginCountdown(makeConfig(config, false, true), true)
   }
 
   const startOnline = async () => {
@@ -742,8 +749,14 @@ function App() {
       const joined = await client.joinRoom(LOBBY_ROOM_ID)
       if (!joined) throw new Error('Could not join the lobby.')
       client.startMatchmaking(
+        // The matchmaking packet still carries only the three legacy rules.
+        // Widened to the full config when the server migrates.
         authUser?.role === 'admin'
-          ? { rounds, turnSeconds, blindMode }
+          ? {
+              rounds: config.rounds,
+              turnSeconds: config.turnSeconds,
+              blindMode: config.blindMode,
+            }
           : undefined,
       )
       setStatus({
@@ -1089,12 +1102,8 @@ function App() {
           </div>
           <OnlineAdminSettings
             user={authUser}
-            rounds={rounds}
-            turnSeconds={turnSeconds}
-            blindMode={blindMode}
-            onRoundsChange={setRounds}
-            onTurnSecondsChange={setTurnSeconds}
-            onBlindModeChange={setBlindMode}
+            config={config}
+            onConfigChange={applyConfigPatch}
           />
         </section>
       ) : null}
@@ -1112,12 +1121,8 @@ function App() {
               START PRACTICE
             </BrushButton>
             <AdvancedSettings
-              rounds={rounds}
-              turnSeconds={turnSeconds}
-              blindMode={blindMode}
-              onRoundsChange={setRounds}
-              onTurnSecondsChange={setTurnSeconds}
-              onBlindModeChange={setBlindMode}
+              config={config}
+              onConfigChange={applyConfigPatch}
             />
           </div>
         </section>

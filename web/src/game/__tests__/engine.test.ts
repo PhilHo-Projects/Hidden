@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from '../constants'
 import {
   activatePowerup,
@@ -11,6 +12,7 @@ import {
 import type { MatchConfig } from '../types'
 
 const baseConfig: MatchConfig = {
+  ...DEFAULT_GAME_CONFIG,
   rounds: 3,
   turnSeconds: 10,
   isOnline: true,

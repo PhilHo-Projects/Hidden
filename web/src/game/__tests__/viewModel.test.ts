@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { describe, expect, it } from 'vitest'
 import {
   createGuestName,
@@ -13,11 +14,9 @@ import type { GameState } from '../types'
 
 const makeMatch = (overrides: Partial<GameState> = {}): GameState => ({
   config: {
-    rounds: 6,
-    turnSeconds: 10,
+    ...DEFAULT_GAME_CONFIG,
     isOnline: false,
     hasAI: true,
-    blindMode: true,
   },
   phase: 'battle',
   playerGrid: { cells: [] },

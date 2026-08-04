@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { describe, expect, it } from 'vitest'
 
 import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './constants'
@@ -16,6 +17,7 @@ import { selectColor } from './engine'
 import type { MatchConfig } from './types'
 
 const config: MatchConfig = {
+  ...DEFAULT_GAME_CONFIG,
   rounds: 6,
   turnSeconds: 10,
   blindMode: true,

@@ -28,6 +28,13 @@ interface BoardGridProps {
   onSelect?: (index: number) => void
 }
 
+// Boards are always square, so the column count is recoverable from the cell
+// count. Deriving it here avoids threading board size through every call site.
+function boardColumns(cellCount: number) {
+  if (cellCount <= 0) return 3
+  return Math.round(Math.sqrt(cellCount))
+}
+
 function cellTone(color: PaintColor | null, hidden: boolean, occupied: boolean) {
   if (!occupied) return '#f5f5f5'
   if (hidden) return 'linear-gradient(145deg, #383838, #080808)'
@@ -65,7 +72,14 @@ export function BoardGrid({
         ) : null}
       </header>
 
-      <div className="unity-board-grid">
+      <div
+        className="unity-board-grid"
+        style={
+          {
+            '--board-size': String(boardColumns(grid.cells.length)),
+          } as CSSProperties
+        }
+      >
         {grid.cells.map((cell, index) => {
           const isClickable = interactive && typeof onSelect === 'function'
           const destructionEffect = destructionEffects[index]

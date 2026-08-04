@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { describe, expect, it } from 'vitest'
 import type { MatchConfig } from './types'
 import type { Screen } from './viewModel'
@@ -14,6 +15,7 @@ import {
 } from './onlineMatch'
 
 const ONLINE_CONFIG: MatchConfig = {
+  ...DEFAULT_GAME_CONFIG,
   rounds: 3,
   turnSeconds: 25,
   blindMode: false,
@@ -34,6 +36,7 @@ describe('online match flow', () => {
 
   it('carries server rules from match-found into game-start instead of local settings', () => {
     const persistedLocalConfig: MatchConfig = {
+  ...DEFAULT_GAME_CONFIG,
       rounds: 20,
       turnSeconds: 60,
       blindMode: false,
@@ -65,6 +68,9 @@ describe('online match flow', () => {
         rules: { rounds: 4, turnSeconds: 18, blindMode: true },
       },
       config: {
+        // Knobs the server does not yet transmit fall back to the defaults,
+        // so an online match still plays as the default game.
+        ...DEFAULT_GAME_CONFIG,
         rounds: 4,
         turnSeconds: 18,
         blindMode: true,
@@ -99,6 +105,7 @@ describe('online match flow', () => {
 
   it('keeps offline replay immediate with the completed match config', () => {
     const offlineConfig: MatchConfig = {
+  ...DEFAULT_GAME_CONFIG,
       ...ONLINE_CONFIG,
       isOnline: false,
       hasAI: true,

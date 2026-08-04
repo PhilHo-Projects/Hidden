@@ -1,5 +1,7 @@
 import type { ButtonHTMLAttributes } from 'react'
+import type { GameConfig } from '@hidden/game-core'
 import type { AuthUser } from '../auth/authClient'
+import { POWERUP_LABELS } from '../game/constants'
 import type { MatchRules } from '../game/matchRules'
 
 export type StatusTone = 'neutral' | 'working' | 'success' | 'error'
@@ -67,21 +69,16 @@ export function GuestIdentity({ name }: GuestIdentityProps) {
 }
 
 export interface AdvancedSettingsProps {
-  rounds: number
-  turnSeconds: number
-  blindMode: boolean
-  onRoundsChange: (rounds: number) => void
-  onTurnSecondsChange: (turnSeconds: number) => void
-  onBlindModeChange: (blindMode: boolean) => void
+  config: GameConfig
+  onConfigChange: (patch: Partial<GameConfig>) => void
 }
 
+const BOARD_SIZES = [3, 4, 5] as const
+const POWERUP_KEYS = ['shield', 'reveal', 'extraTurn'] as const
+
 export function AdvancedSettings({
-  rounds,
-  turnSeconds,
-  blindMode,
-  onRoundsChange,
-  onTurnSecondsChange,
-  onBlindModeChange,
+  config,
+  onConfigChange,
 }: AdvancedSettingsProps) {
   return (
     <details className="advanced-panel">
@@ -93,9 +90,9 @@ export function AdvancedSettings({
             type="number"
             min={1}
             max={20}
-            value={rounds}
+            value={config.rounds}
             onChange={(event) =>
-              onRoundsChange(Math.max(1, Number(event.target.value) || 1))
+              onConfigChange({ rounds: Math.max(1, Number(event.target.value) || 1) })
             }
           />
         </label>
@@ -105,9 +102,11 @@ export function AdvancedSettings({
             type="number"
             min={2}
             max={60}
-            value={turnSeconds}
+            value={config.turnSeconds}
             onChange={(event) =>
-              onTurnSecondsChange(Math.max(2, Number(event.target.value) || 2))
+              onConfigChange({
+                turnSeconds: Math.max(2, Number(event.target.value) || 2),
+              })
             }
           />
         </label>
@@ -115,9 +114,91 @@ export function AdvancedSettings({
           <span>Blind</span>
           <button
             type="button"
-            className={`unity-toggle ${blindMode ? 'unity-toggle-on' : ''}`}
-            aria-pressed={blindMode}
-            onClick={() => onBlindModeChange(!blindMode)}
+            className={`unity-toggle ${config.blindMode ? 'unity-toggle-on' : ''}`}
+            aria-pressed={config.blindMode}
+            onClick={() => onConfigChange({ blindMode: !config.blindMode })}
+          >
+            <span />
+          </button>
+        </div>
+        <div className="toggle-row">
+          <span>Board</span>
+          <div className="board-size-choice">
+            {BOARD_SIZES.map((size) => (
+              <button
+                key={size}
+                type="button"
+                className={`unity-toggle ${config.boardSize === size ? 'unity-toggle-on' : ''}`}
+                aria-pressed={config.boardSize === size}
+                onClick={() =>
+                  onConfigChange(
+                    // A 5-streak is illegal on a 3x3, so shrink it with the board.
+                    config.streak > size
+                      ? { boardSize: size, streak: size }
+                      : { boardSize: size },
+                  )
+                }
+              >
+                {size}x{size}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label>
+          <span>Line</span>
+          <input
+            type="number"
+            min={2}
+            max={config.boardSize}
+            value={config.streak}
+            onChange={(event) =>
+              onConfigChange({ streak: Number(event.target.value) || 2 })
+            }
+          />
+        </label>
+        <div className="toggle-row">
+          <span>Power-ups</span>
+          <button
+            type="button"
+            className={`unity-toggle ${config.powerupsEnabled ? 'unity-toggle-on' : ''}`}
+            aria-pressed={config.powerupsEnabled}
+            onClick={() =>
+              onConfigChange({ powerupsEnabled: !config.powerupsEnabled })
+            }
+          >
+            <span />
+          </button>
+        </div>
+        {config.powerupsEnabled
+          ? POWERUP_KEYS.map((key) => (
+              <div className="toggle-row" key={key}>
+                <span>{POWERUP_LABELS[key]}</span>
+                <button
+                  type="button"
+                  className={`unity-toggle ${config.powerups[key] ? 'unity-toggle-on' : ''}`}
+                  aria-pressed={config.powerups[key]}
+                  onClick={() =>
+                    onConfigChange({
+                      powerups: { ...config.powerups, [key]: !config.powerups[key] },
+                    })
+                  }
+                >
+                  <span />
+                </button>
+              </div>
+            ))
+          : null}
+        <div className="toggle-row">
+          <span>No repeat</span>
+          <button
+            type="button"
+            className={`unity-toggle ${config.forbidImmediateRepeat ? 'unity-toggle-on' : ''}`}
+            aria-pressed={config.forbidImmediateRepeat}
+            onClick={() =>
+              onConfigChange({
+                forbidImmediateRepeat: !config.forbidImmediateRepeat,
+              })
+            }
           >
             <span />
           </button>

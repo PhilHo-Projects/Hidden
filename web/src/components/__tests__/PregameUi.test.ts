@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -100,12 +101,8 @@ describe('pre-game UI', () => {
 
   it('hides online advanced settings from guests and non-admin accounts', () => {
     const settings = {
-      rounds: 6,
-      turnSeconds: 10,
-      blindMode: true,
-      onRoundsChange: () => undefined,
-      onTurnSecondsChange: () => undefined,
-      onBlindModeChange: () => undefined,
+      config: DEFAULT_GAME_CONFIG,
+      onConfigChange: () => undefined,
     }
     const guestMarkup = renderToStaticMarkup(
       createElement(OnlineAdminSettings, { ...settings, user: null }),

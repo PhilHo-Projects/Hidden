@@ -2,6 +2,8 @@ import {
   applyCommand,
   applyTimeout,
   createGame,
+  ENGINE_ID,
+  ENGINE_REVISION,
   type ApplyResult as CoreApplyResult,
   type ClassicSymbol,
   type DomainEvent,
@@ -220,12 +222,10 @@ export function createOfflineState(
 ): GameState {
   const localSeat: Seat = 0
   const canonicalState = createGame({
-    mode: { id: 'classic', revision: 1 },
-    rules: {
-      rounds: config.rounds,
-      turnSeconds: config.turnSeconds,
-      blindMode: config.blindMode,
-    },
+    engine: { id: ENGINE_ID, revision: ENGINE_REVISION },
+    // MatchConfig structurally satisfies GameConfig; the two extra transport
+    // fields are ignored by the clamp.
+    config,
     seed,
     firstSeat: isMyTurn ? localSeat : opponentOf(localSeat),
   })

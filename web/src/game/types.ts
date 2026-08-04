@@ -1,5 +1,9 @@
 import type { PLAYER_COLORS, POWERUP_LABELS } from './constants'
-import type { GameState as CoreGameState, Seat } from '@hidden/game-core'
+import type {
+  GameConfig,
+  GameState as CoreGameState,
+  Seat,
+} from '@hidden/game-core'
 
 export type PaintColor = (typeof PLAYER_COLORS)[number]
 export type PowerupKey = keyof typeof POWERUP_LABELS
@@ -22,12 +26,11 @@ export interface PowerupState {
   extraTurnArmed: boolean
 }
 
-export interface MatchConfig {
-  rounds: number
-  turnSeconds: number
+// Every rule knob lives in GameConfig; MatchConfig only adds how the match is
+// being played, which the core neither knows nor cares about.
+export interface MatchConfig extends GameConfig {
   isOnline: boolean
   hasAI: boolean
-  blindMode: boolean
 }
 
 export interface QueuedMove {

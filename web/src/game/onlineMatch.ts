@@ -1,3 +1,4 @@
+import { clampGameConfig } from '@hidden/game-core'
 import {
   DEFAULT_MATCH_RULES,
   type MatchRules,
@@ -41,11 +42,16 @@ export function tryMarkOnlineTerminalScreen(
   return true
 }
 
+// The server still sends only the three legacy rules. Knobs it does not yet
+// carry fall back to the default game, so an online match plays exactly as it
+// did before. Replaced by a straight config spread once the server migrates.
 export function createOnlineMatchConfig(rules: MatchRules): MatchConfig {
   return {
-    rounds: rules.rounds,
-    turnSeconds: rules.turnSeconds,
-    blindMode: rules.blindMode,
+    ...clampGameConfig({
+      rounds: rules.rounds,
+      turnSeconds: rules.turnSeconds,
+      blindMode: rules.blindMode,
+    }),
     isOnline: true,
     hasAI: false,
   }
