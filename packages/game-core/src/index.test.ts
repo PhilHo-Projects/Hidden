@@ -6,6 +6,9 @@ import {
   ENGINE_ID,
   ENGINE_REVISION,
   createTopology,
+  clampGameConfig,
+  decodeGameConfig,
+  DEFAULT_GAME_CONFIG,
   DEFAULT_MATCH_RULES,
   MODE_REGISTRY,
   applyCommand,
@@ -494,5 +497,85 @@ describe('topology generation', () => {
   it('exposes the engine identity', () => {
     assert.equal(ENGINE_ID, 'classic')
     assert.equal(ENGINE_REVISION, 1)
+  })
+})
+
+describe('game config', () => {
+  it('defaults to the game as it plays today', () => {
+    assert.deepEqual(DEFAULT_GAME_CONFIG, {
+      boardSize: 3,
+      streak: 3,
+      rounds: 6,
+      turnSeconds: 10,
+      blindMode: true,
+      powerupsEnabled: true,
+      powerups: { shield: true, reveal: true, extraTurn: true },
+      powerupBySymbol: { rock: 'shield', paper: 'reveal', scissors: 'extraTurn' },
+      forbidImmediateRepeat: false,
+    })
+  })
+
+  it('decodes a complete config', () => {
+    const decoded = decodeGameConfig({
+      boardSize: 5,
+      streak: 4,
+      rounds: 12,
+      turnSeconds: 15,
+      blindMode: false,
+      powerupsEnabled: false,
+      powerups: { shield: false, reveal: true, extraTurn: false },
+      powerupBySymbol: { rock: 'reveal', paper: 'shield', scissors: 'extraTurn' },
+      forbidImmediateRepeat: true,
+    })
+    assert.equal(decoded?.boardSize, 5)
+    assert.equal(decoded?.streak, 4)
+    assert.equal(decoded?.powerupsEnabled, false)
+    assert.equal(decoded?.powerups.reveal, true)
+    assert.equal(decoded?.powerupBySymbol.rock, 'reveal')
+    assert.equal(decoded?.forbidImmediateRepeat, true)
+  })
+
+  it('fills missing fields from defaults instead of failing', () => {
+    // A stale client must degrade to the default game, not fail to join.
+    assert.deepEqual(decodeGameConfig({ boardSize: 4 }), {
+      ...DEFAULT_GAME_CONFIG,
+      boardSize: 4,
+    })
+  })
+
+  it('rejects values that are not objects', () => {
+    for (const value of [null, undefined, 7, 'config', []]) {
+      assert.equal(decodeGameConfig(value), undefined)
+    }
+  })
+
+  it('clamps every numeric field into range', () => {
+    const clamped = clampGameConfig({
+      boardSize: 9,
+      streak: 99,
+      rounds: 999,
+      turnSeconds: 0,
+    })
+    assert.equal(clamped.boardSize, 5)
+    assert.equal(clamped.rounds, 20)
+    assert.equal(clamped.turnSeconds, 2)
+    assert.equal(clamped.streak, 5)
+  })
+
+  it('clamps streak against the clamped board size, not the requested one', () => {
+    assert.equal(clampGameConfig({ boardSize: 3, streak: 5 }).streak, 3)
+  })
+
+  it('coerces malformed booleans and power-up maps to defaults', () => {
+    const clamped = clampGameConfig({
+      blindMode: 'yes',
+      powerupsEnabled: 1,
+      powerups: { shield: 'no' },
+      powerupBySymbol: { rock: 'nonsense' },
+    })
+    assert.equal(clamped.blindMode, true)
+    assert.equal(clamped.powerupsEnabled, true)
+    assert.equal(clamped.powerups.shield, true)
+    assert.equal(clamped.powerupBySymbol.rock, 'shield')
   })
 })

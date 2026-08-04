@@ -121,6 +121,118 @@ export function createTopology(
   return deepFreeze({ locationIds, winningPatterns })
 }
 
+export interface GameConfig {
+  readonly boardSize: BoardSize
+  readonly streak: number
+  readonly rounds: number
+  readonly turnSeconds: number
+  readonly blindMode: boolean
+  readonly powerupsEnabled: boolean
+  readonly powerups: Readonly<Record<PowerupKey, boolean>>
+  readonly powerupBySymbol: Readonly<Record<ClassicSymbol, PowerupKey>>
+  readonly forbidImmediateRepeat: boolean
+}
+
+export const DEFAULT_GAME_CONFIG: Readonly<GameConfig> = deepFreeze({
+  boardSize: 3,
+  streak: 3,
+  rounds: 6,
+  turnSeconds: 10,
+  blindMode: true,
+  powerupsEnabled: true,
+  powerups: { shield: true, reveal: true, extraTurn: true },
+  powerupBySymbol: { rock: 'shield', paper: 'reveal', scissors: 'extraTurn' },
+  forbidImmediateRepeat: false,
+}) as Readonly<GameConfig>
+
+const BOARD_SIZES: readonly BoardSize[] = [3, 4, 5]
+const SYMBOLS: readonly ClassicSymbol[] = ['rock', 'paper', 'scissors']
+const POWERUP_KEYS: readonly PowerupKey[] = ['shield', 'reveal', 'extraTurn']
+
+function clampInteger(value: unknown, min: number, max: number, fallback: number) {
+  const numeric = finiteNumberOrDefault(value, fallback)
+  return Math.min(max, Math.max(min, Math.trunc(numeric)))
+}
+
+function booleanOrDefault(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+// Tolerant by design: unknown fields are ignored and missing fields fall back
+// to the default game, so an older client degrades instead of failing to join.
+export function clampGameConfig(value: unknown): GameConfig {
+  const candidate =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {}
+
+  const requestedSize = clampInteger(
+    candidate.boardSize,
+    3,
+    5,
+    DEFAULT_GAME_CONFIG.boardSize,
+  )
+  const boardSize = (
+    BOARD_SIZES.includes(requestedSize as BoardSize)
+      ? requestedSize
+      : DEFAULT_GAME_CONFIG.boardSize
+  ) as BoardSize
+
+  const powerupsInput =
+    candidate.powerups && typeof candidate.powerups === 'object'
+      ? (candidate.powerups as Record<string, unknown>)
+      : {}
+  const powerups = {} as Record<PowerupKey, boolean>
+  for (const key of POWERUP_KEYS) {
+    powerups[key] = booleanOrDefault(
+      powerupsInput[key],
+      DEFAULT_GAME_CONFIG.powerups[key],
+    )
+  }
+
+  const mappingInput =
+    candidate.powerupBySymbol && typeof candidate.powerupBySymbol === 'object'
+      ? (candidate.powerupBySymbol as Record<string, unknown>)
+      : {}
+  const powerupBySymbol = {} as Record<ClassicSymbol, PowerupKey>
+  for (const symbol of SYMBOLS) {
+    const mapped = mappingInput[symbol]
+    powerupBySymbol[symbol] = POWERUP_KEYS.includes(mapped as PowerupKey)
+      ? (mapped as PowerupKey)
+      : DEFAULT_GAME_CONFIG.powerupBySymbol[symbol]
+  }
+
+  return {
+    boardSize,
+    streak: clampInteger(candidate.streak, 2, boardSize, Math.min(3, boardSize)),
+    rounds: clampInteger(candidate.rounds, 1, 20, DEFAULT_GAME_CONFIG.rounds),
+    turnSeconds: clampInteger(
+      candidate.turnSeconds,
+      2,
+      60,
+      DEFAULT_GAME_CONFIG.turnSeconds,
+    ),
+    blindMode: booleanOrDefault(candidate.blindMode, DEFAULT_GAME_CONFIG.blindMode),
+    powerupsEnabled: booleanOrDefault(
+      candidate.powerupsEnabled,
+      DEFAULT_GAME_CONFIG.powerupsEnabled,
+    ),
+    powerups,
+    powerupBySymbol,
+    forbidImmediateRepeat: booleanOrDefault(
+      candidate.forbidImmediateRepeat,
+      DEFAULT_GAME_CONFIG.forbidImmediateRepeat,
+    ),
+  }
+}
+
+export function decodeGameConfig(value: unknown): GameConfig | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  return clampGameConfig(value)
+}
+
 export interface ModeRef {
   readonly id: 'classic'
   readonly revision: 1
