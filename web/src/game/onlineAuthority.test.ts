@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { describe, expect, it } from 'vitest'
 import {
   applyCommand,
@@ -18,8 +19,8 @@ import type { AcceptedGameUpdate, GameStartDescriptor } from './protocol'
 
 const descriptor: GameStartDescriptor = {
   matchId: 'match-1',
-  mode: { id: 'classic', revision: 1 },
-  rules: { rounds: 6, turnSeconds: 10, blindMode: true },
+  engine: { id: 'classic', revision: 1 },
+  config: DEFAULT_GAME_CONFIG,
   seed: 42,
   firstSeat: 0,
   revision: 0,
@@ -221,7 +222,7 @@ describe('online authority', () => {
   it('fails closed when a finished replay reports a live deadline', () => {
     const oneRoundDescriptor: GameStartDescriptor = {
       ...descriptor,
-      rules: { ...descriptor.rules, rounds: 1 },
+      config: { ...descriptor.config, rounds: 1 },
     }
     const initial = createOnlineAuthority(oneRoundDescriptor, 17, 17, 1_000)
     const firstPlacement = applyCommand(initial.canonical, 0, {
@@ -265,8 +266,8 @@ describe('online authority', () => {
     let actor = createOnlineAuthority(descriptor, 17, 17, 1_000)
     let opponent = createOnlineAuthority(descriptor, 17, 21, 1_000)
     let server = createGame({
-      mode: descriptor.mode,
-      rules: descriptor.rules,
+      engine: descriptor.engine,
+      config: descriptor.config,
       seed: descriptor.seed,
       firstSeat: descriptor.firstSeat,
     })
@@ -379,7 +380,7 @@ describe('online authority', () => {
   it('still displays a full two-second first window after the visible countdown', () => {
     const state = createOnlineAuthority({
       ...descriptor,
-      rules: { ...descriptor.rules, turnSeconds: 2 },
+      config: DEFAULT_GAME_CONFIG,
       turnTimeRemainingMs: 5_000,
     }, 17, 17, 1_000)
 

@@ -1,19 +1,19 @@
 import { decode, encode } from '@msgpack/msgpack'
 import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './constants'
-import {
-  clampMatchRules,
-  decodeMatchRules,
-  DEFAULT_MATCH_RULES,
-  type MatchRules,
-} from './matchRules'
 import type { PaintColor, QueuedMove } from './types'
-import type {
-  ClassicSymbol,
-  DomainEvent,
-  GameCommand,
-  PowerupKey,
-  RejectionReason,
-  Seat,
+import {
+  clampGameConfig,
+  DEFAULT_GAME_CONFIG,
+  decodeGameConfig,
+  ENGINE_ID,
+  ENGINE_REVISION,
+  type ClassicSymbol,
+  type DomainEvent,
+  type GameCommand,
+  type GameConfig,
+  type PowerupKey,
+  type RejectionReason,
+  type Seat,
 } from '@hidden/game-core'
 
 export const LOBBY_ROOM_ID = 'lobby'
@@ -68,8 +68,8 @@ export interface UserEntry {
 
 export interface GameStartDescriptor {
   readonly matchId: string
-  readonly mode: { readonly id: 'classic'; readonly revision: 1 }
-  readonly rules: MatchRules
+  readonly engine: { readonly id: typeof ENGINE_ID; readonly revision: number }
+  readonly config: GameConfig
   readonly seed: number
   readonly firstSeat: Seat
   readonly revision: 0
@@ -120,7 +120,7 @@ export type DecodedPacket =
   | { type: PacketType.TIME_SYNC; sequence: number; serverTime: number }
   | { type: PacketType.SERVER_RESPONSE; success: boolean; originalPacketType?: PacketType }
   | { type: PacketType.USER_INFO; users: UserEntry[] }
-  | { type: PacketType.MATCH_FOUND; roomId: string; rules: MatchRules }
+  | { type: PacketType.MATCH_FOUND; roomId: string; config: GameConfig }
   | {
       type: PacketType.GAME_START
       firstPlayerId: number
@@ -279,24 +279,38 @@ function decodeDomainEvent(value: unknown): DomainEvent {
   }
 }
 
+// The server is expected to send an already-clamped config. This compares the
+// clamped result against the RAW wire value, not against the decoded one:
+// `decodeGameConfig` clamps internally, so comparing the two decoded objects
+// would always match and validate nothing.
+function matchesRawConfig(clamped: GameConfig, raw: Record<string, unknown>) {
+  const scalars = [
+    'boardSize',
+    'streak',
+    'rounds',
+    'turnSeconds',
+    'blindMode',
+    'powerupsEnabled',
+    'forbidImmediateRepeat',
+  ] as const
+  return scalars.every(
+    (key) => !(key in raw) || raw[key] === clamped[key],
+  )
+}
+
 function decodeStartDescriptor(value: unknown): GameStartDescriptor {
   if (!isRecord(value)) throw new Error('Game start descriptor is required.')
   if (
-    !isRecord(value.mode) ||
-    value.mode.id !== 'classic' ||
-    value.mode.revision !== 1
+    !isRecord(value.engine) ||
+    value.engine.id !== ENGINE_ID ||
+    value.engine.revision !== ENGINE_REVISION
   ) {
-    throw new Error('Unsupported game mode revision.')
+    throw new Error('Unsupported engine revision.')
   }
-  const rules = decodeMatchRules(value.rules)
-  if (!rules) throw new Error('Game start rules are invalid.')
-  const clamped = clampMatchRules(rules)
-  if (
-    clamped.rounds !== rules.rounds ||
-    clamped.turnSeconds !== rules.turnSeconds ||
-    clamped.blindMode !== rules.blindMode
-  ) {
-    throw new Error('Game start rules are outside supported limits.')
+  if (!isRecord(value.config)) throw new Error('Game start config is invalid.')
+  const config = clampGameConfig(value.config)
+  if (!matchesRawConfig(config, value.config)) {
+    throw new Error('Game start config is outside supported limits.')
   }
   const revision = safeInteger(value.revision, 'Revision')
   if (revision !== 0) throw new Error('A game start must begin at revision 0.')
@@ -304,8 +318,8 @@ function decodeStartDescriptor(value: unknown): GameStartDescriptor {
   if (seed > 0xffff_ffff) throw new Error('Seed must be an unsigned 32-bit integer.')
   return {
     matchId: matchId(value.matchId),
-    mode: { id: 'classic', revision: 1 },
-    rules,
+    engine: { id: ENGINE_ID, revision: ENGINE_REVISION },
+    config,
     seed,
     firstSeat: seat(value.firstSeat),
     revision: 0,
@@ -443,9 +457,7 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
       return {
         type: packetType,
         roomId: String(decoded[2]),
-        rules: clampMatchRules(
-          decodeMatchRules(decoded[3]) ?? DEFAULT_MATCH_RULES,
-        ),
+        config: clampGameConfig(decodeGameConfig(decoded[3]) ?? DEFAULT_GAME_CONFIG),
       }
     case PacketType.GAME_START:
       return {
@@ -521,13 +533,13 @@ export function encodeRoomLeavePacket(senderId: number, roomId: string) {
 export function encodeMatchmakingPacket(
   senderId: number,
   isSearching: boolean,
-  proposedRules?: MatchRules,
+  proposedConfig?: GameConfig,
 ) {
   return encode([
     senderId,
     PacketType.MATCHMAKING_REQUEST,
     isSearching,
-    ...(proposedRules ? [proposedRules] : []),
+    ...(proposedConfig ? [proposedConfig] : []),
   ])
 }
 

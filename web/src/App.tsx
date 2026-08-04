@@ -382,7 +382,7 @@ function App() {
       }
 
       if (event.type === 'match-found') {
-        setOnlineRules(event.rules)
+        setOnlineRules(event.config)
         setReadyLocked(false)
         setStatus({
           tone: 'success',
@@ -414,8 +414,8 @@ function App() {
         }
         onlineAuthorityRef.current = authority
         setOnlineInputPending(false)
-        setOnlineRules(event.descriptor.rules)
-        const config = createOnlineMatchConfig(event.descriptor.rules)
+        setOnlineRules(event.descriptor.config)
+        const config = createOnlineMatchConfig(event.descriptor.config)
         const presented = createOnlinePresentedState(
           config,
           authority.canonical,
@@ -748,17 +748,9 @@ function App() {
       })
       const joined = await client.joinRoom(LOBBY_ROOM_ID)
       if (!joined) throw new Error('Could not join the lobby.')
-      client.startMatchmaking(
-        // The matchmaking packet still carries only the three legacy rules.
-        // Widened to the full config when the server migrates.
-        authUser?.role === 'admin'
-          ? {
-              rounds: config.rounds,
-              turnSeconds: config.turnSeconds,
-              blindMode: config.blindMode,
-            }
-          : undefined,
-      )
+      // Quick Match rules are still admin-only: a proposal here binds a
+      // stranger. A game you host yourself is configured on the create screen.
+      client.startMatchmaking(authUser?.role === 'admin' ? config : undefined)
       setStatus({
         tone: 'working',
         label: 'SEARCHING',

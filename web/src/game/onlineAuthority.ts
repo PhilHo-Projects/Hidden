@@ -105,8 +105,8 @@ export function createOnlineAuthority(
     matchId: descriptor.matchId,
     localSeat,
     canonical: createGame({
-      mode: descriptor.mode,
-      rules: descriptor.rules,
+      engine: descriptor.engine,
+      config: descriptor.config,
       seed: descriptor.seed,
       firstSeat: descriptor.firstSeat,
     }),

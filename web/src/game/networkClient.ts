@@ -1,3 +1,4 @@
+import type { GameConfig } from '@hidden/game-core'
 import {
   decodePacket,
   encodeGameCommandPacket,
@@ -13,7 +14,6 @@ import {
   type GameUpdate,
   type UserEntry,
 } from './protocol'
-import type { MatchRules } from './matchRules'
 
 export type ClientEvent =
   | { type: 'open' }
@@ -21,7 +21,7 @@ export type ClientEvent =
   | { type: 'error'; message: string }
   | { type: 'assigned-id'; clientId: number }
   | { type: 'users'; users: UserEntry[] }
-  | { type: 'match-found'; roomId: string; rules: MatchRules }
+  | { type: 'match-found'; roomId: string; config: GameConfig }
   | {
       type: 'game-start'
       firstPlayerId: number
@@ -182,12 +182,12 @@ export class NetworkClient {
     )
   }
 
-  startMatchmaking(proposedRules?: MatchRules) {
+  startMatchmaking(proposedConfig?: GameConfig) {
     this.send(
       encodeMatchmakingPacket(
         this.clientId ?? 0,
         true,
-        proposedRules,
+        proposedConfig,
       ),
     )
   }
@@ -238,7 +238,7 @@ export class NetworkClient {
         this.emit({
           type: 'match-found',
           roomId: packet.roomId,
-          rules: packet.rules,
+          config: packet.config,
         })
         break
       case PacketType.GAME_START:

@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { COLOR_GREEN, COLOR_RED } from '../constants'
 import { decode, encode } from '@msgpack/msgpack'
 import {
@@ -10,7 +11,6 @@ import {
   LOBBY_ROOM_ID,
   PacketType,
 } from '../protocol'
-import { DEFAULT_MATCH_RULES } from '../matchRules'
 
 describe('protocol', () => {
   it('uses the only server-supported direct room id', () => {
@@ -57,8 +57,8 @@ describe('protocol', () => {
           7,
           {
             matchId: '78bd46ff-cc07-46df-949a-eea9c543fdac',
-            mode: { id: 'classic', revision: 1 },
-            rules: DEFAULT_MATCH_RULES,
+            engine: { id: 'classic', revision: 1 },
+            config: DEFAULT_GAME_CONFIG,
             seed: 42,
             firstSeat: 0,
             revision: 0,
@@ -71,8 +71,8 @@ describe('protocol', () => {
       firstPlayerId: 7,
       descriptor: {
         matchId: '78bd46ff-cc07-46df-949a-eea9c543fdac',
-        mode: { id: 'classic', revision: 1 },
-        rules: DEFAULT_MATCH_RULES,
+        engine: { id: 'classic', revision: 1 },
+        config: DEFAULT_GAME_CONFIG,
         seed: 42,
         firstSeat: 0,
         revision: 0,
@@ -81,11 +81,33 @@ describe('protocol', () => {
     })
   })
 
+  it('carries a non-default board size through a game start', () => {
+    const packet = decodePacket(
+      encode([
+        0,
+        PacketType.GAME_START,
+        7,
+        {
+          matchId: 'match-5x5',
+          engine: { id: 'classic', revision: 1 },
+          config: { ...DEFAULT_GAME_CONFIG, boardSize: 5, streak: 4 },
+          seed: 42,
+          firstSeat: 0,
+          revision: 0,
+          turnTimeRemainingMs: 10_000,
+        },
+      ]),
+    )
+    if (packet.type !== PacketType.GAME_START) throw new Error('Expected a start.')
+    expect(packet.descriptor.config.boardSize).toBe(5)
+    expect(packet.descriptor.config.streak).toBe(4)
+  })
+
   it('rejects malformed or unsupported authoritative start descriptors', () => {
     const descriptor = {
       matchId: 'match-1',
-      mode: { id: 'classic', revision: 1 },
-      rules: DEFAULT_MATCH_RULES,
+      engine: { id: 'classic', revision: 1 },
+      config: DEFAULT_GAME_CONFIG,
       seed: 42,
       firstSeat: 0,
       revision: 0,
@@ -94,8 +116,11 @@ describe('protocol', () => {
 
     for (const replacement of [
       { ...descriptor, matchId: '' },
-      { ...descriptor, mode: { id: 'classic', revision: 2 } },
-      { ...descriptor, rules: { ...DEFAULT_MATCH_RULES, rounds: 'six' } },
+      { ...descriptor, engine: { id: 'classic', revision: 2 } },
+      // Out-of-range values must be rejected, not silently clamped: the server
+      // is required to send an already-clamped config.
+      { ...descriptor, config: { ...DEFAULT_GAME_CONFIG, rounds: 999 } },
+      { ...descriptor, config: { ...DEFAULT_GAME_CONFIG, boardSize: 7 } },
       { ...descriptor, seed: -1 },
       { ...descriptor, firstSeat: 2 },
       { ...descriptor, revision: 1 },
@@ -185,10 +210,11 @@ describe('protocol', () => {
     ).toThrow('timeout')
   })
 
-  it('encodes proposed rules as a keyed trailing map', () => {
+  it('encodes the proposed config as a keyed trailing map', () => {
     expect(
       decode(
         encodeMatchmakingPacket(7, true, {
+          ...DEFAULT_GAME_CONFIG,
           rounds: 8,
           turnSeconds: 15,
           blindMode: false,
@@ -198,43 +224,44 @@ describe('protocol', () => {
       7,
       PacketType.MATCHMAKING_REQUEST,
       true,
-      { rounds: 8, turnSeconds: 15, blindMode: false },
+      { ...DEFAULT_GAME_CONFIG, rounds: 8, turnSeconds: 15, blindMode: false },
     ])
   })
 
-  it('decodes authoritative rules and defaults a missing or malformed map', () => {
+  it('clamps an authoritative match-found config and defaults a missing map', () => {
     expect(
       decodePacket(
         encode([
           0,
           PacketType.MATCH_FOUND,
           'room-1',
-          { rounds: 999, turnSeconds: 0, blindMode: false },
+          { ...DEFAULT_GAME_CONFIG, rounds: 999, turnSeconds: 0 },
         ]),
       ),
     ).toEqual({
       type: PacketType.MATCH_FOUND,
       roomId: 'room-1',
-      rules: { rounds: 20, turnSeconds: 2, blindMode: false },
+      config: { ...DEFAULT_GAME_CONFIG, rounds: 20, turnSeconds: 2 },
     })
     expect(decodePacket(encode([0, PacketType.MATCH_FOUND, 'room-2']))).toEqual({
       type: PacketType.MATCH_FOUND,
       roomId: 'room-2',
-      rules: DEFAULT_MATCH_RULES,
+      config: DEFAULT_GAME_CONFIG,
     })
+    // A malformed field falls back on its own; the rest of the config survives.
     expect(
       decodePacket(
         encode([
           0,
           PacketType.MATCH_FOUND,
           'room-3',
-          { rounds: 3, turnSeconds: 'bad', blindMode: false },
+          { ...DEFAULT_GAME_CONFIG, boardSize: 5, streak: 4, turnSeconds: 'bad' },
         ]),
       ),
     ).toEqual({
       type: PacketType.MATCH_FOUND,
       roomId: 'room-3',
-      rules: DEFAULT_MATCH_RULES,
+      config: { ...DEFAULT_GAME_CONFIG, boardSize: 5, streak: 4 },
     })
   })
 

@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { decode, encode } from '@msgpack/msgpack'
 import { afterEach, describe, expect, it } from 'vitest'
 import { NetworkClient, resolveWebSocketUrl } from '../networkClient'
@@ -117,6 +118,7 @@ describe('resolveWebSocketUrl', () => {
     socket.receive([0, PacketType.ID_ASSIGN, 7])
 
     client.startMatchmaking({
+      ...DEFAULT_GAME_CONFIG,
       rounds: 8,
       turnSeconds: 15,
       blindMode: false,
@@ -125,19 +127,19 @@ describe('resolveWebSocketUrl', () => {
       7,
       PacketType.MATCHMAKING_REQUEST,
       true,
-      { rounds: 8, turnSeconds: 15, blindMode: false },
+      { ...DEFAULT_GAME_CONFIG, rounds: 8, turnSeconds: 15, blindMode: false },
     ])
 
     socket.receive([
       0,
       PacketType.MATCH_FOUND,
       'room-1',
-      { rounds: 999, turnSeconds: 0, blindMode: false },
+      { ...DEFAULT_GAME_CONFIG, rounds: 999, turnSeconds: 0 },
     ])
     expect(events).toContainEqual({
       type: 'match-found',
       roomId: 'room-1',
-      rules: { rounds: 20, turnSeconds: 2, blindMode: false },
+      config: { ...DEFAULT_GAME_CONFIG, rounds: 20, turnSeconds: 2 },
     })
     client.close()
   })
@@ -155,8 +157,8 @@ describe('resolveWebSocketUrl', () => {
     socket.receive([0, PacketType.ID_ASSIGN, 7])
     const descriptor = {
       matchId: 'match-1',
-      mode: { id: 'classic', revision: 1 },
-      rules: { rounds: 6, turnSeconds: 10, blindMode: true },
+      engine: { id: 'classic', revision: 1 },
+      config: DEFAULT_GAME_CONFIG,
       seed: 42,
       firstSeat: 0,
       revision: 0,
