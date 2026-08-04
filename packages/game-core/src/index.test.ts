@@ -9,6 +9,7 @@ import {
   clampGameConfig,
   decodeGameConfig,
   DEFAULT_GAME_CONFIG,
+  type GameConfig,
   DEFAULT_MATCH_RULES,
   MODE_REGISTRY,
   applyCommand,
@@ -59,6 +60,7 @@ function mirrorState(state: GameState) {
     activeSeat: (1 - state.activeSeat) as Seat,
     boards: [state.boards[1], state.boards[0]],
     powerups: [state.powerups[1], state.powerups[0]],
+    lastPlacedLocation: [state.lastPlacedLocation[1], state.lastPlacedLocation[0]],
     result: state.result
       ? {
           scores: [state.result.scores[1], state.result.scores[0]],
@@ -82,27 +84,20 @@ describe('classic@1 registry and construction', () => {
     assert.equal(Object.isFrozen(CLASSIC_V1.topology.winningPatterns), true)
   })
 
-  it('constructs boards from injected topology location IDs instead of a nine-cell assumption', () => {
-    const alternateClassic: ClassicMode = {
-      ...CLASSIC_V1,
-      topology: {
-        locationIds: [10, 20, 40, 80],
-        winningPatterns: [[10, 20]],
-      },
-    }
-    const registry: ModeRegistry = { 'classic@1': alternateClassic }
-
-    const state = createGame(baseSpec(), registry)
+  it('constructs boards from the config topology instead of a nine-cell assumption', () => {
+    // Topology now comes from the config rather than an injected registry, so
+    // this asserts the same property through the supported entry point.
+    const state = configGame({ boardSize: 4, streak: 3 })
 
     assert.deepEqual(
       state.boards[0].locations.map((location) => location.locationId),
-      [10, 20, 40, 80],
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     )
     assert.deepEqual(
       state.boards[1].locations.map((location) => location.locationId),
-      [10, 20, 40, 80],
+      state.boards[0].locations.map((location) => location.locationId),
     )
-    assert.equal(state.boards[0].locations.length, 4)
+    assert.equal(state.boards[0].locations.length, 16)
   })
 })
 
@@ -271,17 +266,23 @@ describe('classic conflict and turn behavior', () => {
   })
 
   it('automatically passes a full active board, consumes that turn, and continues', () => {
-    const singleLocationMode: ClassicMode = {
-      ...CLASSIC_V1,
-      topology: { locationIds: [7], winningPatterns: [[7]] },
+    // A one-cell board is no longer constructible, so fill a real 3x3 instead:
+    // seat 0 plays rock and seat 1 answers with scissors at the same location,
+    // so seat 0 keeps every cell and seat 1's board stays empty.
+    let state = configGame({ rounds: 20, powerupsEnabled: false })
+    for (let locationId = 0; locationId < 8; locationId += 1) {
+      state = play(state, 0, locationId, 'rock').state
+      state = play(state, 1, locationId, 'scissors').state
     }
-    const registry: ModeRegistry = { 'classic@1': singleLocationMode }
-    let state = createGame(baseSpec({ rules: { ...DEFAULT_MATCH_RULES, rounds: 2 } }), registry)
-    state = play(state, 0, 7, 'rock').state
+    state = play(state, 0, 8, 'rock').state
+    assert.equal(
+      state.boards[0].locations.every((location) => location.symbol !== null),
+      true,
+    )
 
-    const result = play(state, 1, 7, 'scissors')
+    const result = play(state, 1, 8, 'scissors')
 
-    assert.equal(result.state.turnCount, 3)
+    assert.equal(result.state.turnCount, 19)
     assert.equal(result.state.activeSeat, 1)
     assert.equal(result.state.phase, 'active')
     assert.equal(
@@ -577,5 +578,129 @@ describe('game config', () => {
     assert.equal(clamped.powerupsEnabled, true)
     assert.equal(clamped.powerups.shield, true)
     assert.equal(clamped.powerupBySymbol.rock, 'shield')
+  })
+})
+
+const configGame = (overrides: Partial<GameConfig> = {}, seed = 1): GameState =>
+  createGame({
+    engine: { id: 'classic', revision: 1 },
+    config: clampGameConfig({ ...DEFAULT_GAME_CONFIG, ...overrides }),
+    seed,
+    firstSeat: 0,
+  })
+
+const put = (state: GameState, seat: Seat, locationId: number, symbol: 'rock' | 'paper' | 'scissors') =>
+  applyCommand(state, seat, { type: 'place', locationId, symbol })
+
+describe('config-driven engine', () => {
+  it('accepts a legacy mode+rules spec and produces the default game', () => {
+    const legacy = createGame(baseSpec())
+    assert.deepEqual(legacy.config, DEFAULT_GAME_CONFIG)
+    assert.equal(legacy.boards[0].locations.length, 9)
+  })
+
+  it('builds a board sized by the config', () => {
+    assert.equal(configGame({ boardSize: 5, streak: 4 }).boards[0].locations.length, 25)
+    assert.equal(configGame({ boardSize: 4, streak: 3 }).boards[1].locations.length, 16)
+  })
+
+  it('rejects a spec from a different engine revision', () => {
+    assert.throws(
+      () =>
+        createGame({
+          engine: { id: 'classic', revision: 2 },
+          config: DEFAULT_GAME_CONFIG,
+          seed: 1,
+          firstSeat: 0,
+        }),
+      /engine/i,
+    )
+  })
+
+  it('never unlocks a power-up when power-ups are disabled', () => {
+    // streak 2 means a line forms after the seat's second adjacent placement.
+    let state = configGame({ powerupsEnabled: false, streak: 2 })
+    state = put(state, 0, 0, 'rock').state
+    state = put(state, 1, 8, 'paper').state
+    const unlock = put(state, 0, 1, 'rock')
+    assert.equal(
+      unlock.events.some((event) => event.type === 'powerup-unlocked'),
+      false,
+    )
+    assert.equal(unlock.state.powerups[0].unlocked.shield, false)
+  })
+
+  it('rejects activating a power-up when power-ups are disabled', () => {
+    const result = applyCommand(configGame({ powerupsEnabled: false }), 0, {
+      type: 'activate-powerup',
+      powerup: 'shield',
+    })
+    assert.equal(result.accepted, false)
+    assert.equal(result.rejection?.reason, 'powerup-locked')
+  })
+
+  it('never unlocks an individually disabled power-up', () => {
+    let state = configGame({
+      streak: 2,
+      powerups: { shield: false, reveal: true, extraTurn: true },
+    })
+    state = put(state, 0, 0, 'rock').state
+    state = put(state, 1, 8, 'paper').state
+    const unlock = put(state, 0, 1, 'rock')
+    assert.equal(
+      unlock.events.some((event) => event.type === 'powerup-unlocked'),
+      false,
+    )
+  })
+
+  it('still unlocks an enabled power-up when a different one is disabled', () => {
+    let state = configGame({
+      streak: 2,
+      powerups: { shield: false, reveal: true, extraTurn: true },
+    })
+    state = put(state, 0, 0, 'paper').state
+    state = put(state, 1, 8, 'rock').state
+    const unlock = put(state, 0, 1, 'paper')
+    assert.deepEqual(
+      unlock.events.filter((event) => event.type === 'powerup-unlocked'),
+      [{ type: 'powerup-unlocked', seat: 0, powerup: 'reveal' }],
+    )
+  })
+
+  it('bars a seat from replaying its own previous location when configured', () => {
+    let state = configGame({ forbidImmediateRepeat: true, powerupsEnabled: false })
+    state = put(state, 0, 4, 'rock').state
+    state = put(state, 1, 4, 'paper').state
+    // Seat 0's rock lost to paper, so location 4 is empty on its board again.
+    const repeat = put(state, 0, 4, 'scissors')
+    assert.equal(repeat.accepted, false)
+    assert.equal(repeat.rejection?.reason, 'repeat-location')
+  })
+
+  it('permits the same location once a turn has passed', () => {
+    let state = configGame({ forbidImmediateRepeat: true, powerupsEnabled: false })
+    state = put(state, 0, 4, 'rock').state
+    state = put(state, 1, 4, 'paper').state
+    state = put(state, 0, 0, 'rock').state
+    state = put(state, 1, 1, 'rock').state
+    assert.equal(put(state, 0, 4, 'rock').accepted, true)
+  })
+
+  it('allows repeats when the rule is off', () => {
+    let state = configGame({ forbidImmediateRepeat: false, powerupsEnabled: false })
+    state = put(state, 0, 4, 'rock').state
+    state = put(state, 1, 4, 'paper').state
+    assert.equal(put(state, 0, 4, 'scissors').accepted, true)
+  })
+
+  it('is deterministic for a given seed, config, and command list', () => {
+    const run = () => {
+      let state = configGame({ boardSize: 4, streak: 3 }, 99)
+      for (let index = 0; index < 8; index += 1) {
+        state = applyTimeout(state).state
+      }
+      return JSON.stringify(state)
+    }
+    assert.equal(run(), run())
   })
 })

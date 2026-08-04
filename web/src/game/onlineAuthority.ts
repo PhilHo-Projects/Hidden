@@ -82,6 +82,7 @@ const REJECTION_MESSAGES: Record<GameUpdateRejectionReason, string> = {
   'shield-selection-pending': 'Choose a shield target first.',
   'shield-selection-not-pending': 'Shield targeting is not active.',
   'invalid-shield-target': 'Only one of your pieces can be shielded.',
+  'repeat-location': 'You cannot play the same spot twice in a row.',
   'no-active-match': 'This match is no longer active.',
   'wrong-match': 'That action belongs to another match.',
   'stale-revision': 'The match changed before that action arrived.',

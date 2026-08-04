@@ -239,10 +239,36 @@ export interface ModeRef {
 }
 
 export interface GameSpec {
-  readonly mode: ModeRef
-  readonly rules: MatchRules
+  readonly engine?: EngineRef
+  readonly config?: GameConfig
+  /** @deprecated Legacy shape, removed once server and web have migrated. */
+  readonly mode?: ModeRef
+  /** @deprecated Legacy shape, removed once server and web have migrated. */
+  readonly rules?: MatchRules
   readonly seed: number
   readonly firstSeat: Seat
+}
+
+export interface ResolvedGameSpec {
+  readonly engine: EngineRef
+  readonly config: GameConfig
+  readonly seed: number
+  readonly firstSeat: Seat
+}
+
+// Accepts either the legacy `{ mode, rules }` shape or the current
+// `{ engine, config }` shape. Deleted once server and web have migrated.
+function resolveSpec(spec: GameSpec): ResolvedGameSpec {
+  const engine = spec.engine ?? { id: ENGINE_ID, revision: ENGINE_REVISION }
+  if (engine.id !== ENGINE_ID || engine.revision !== ENGINE_REVISION) {
+    throw new Error(
+      `Unsupported engine ${engine.id}@${engine.revision}; this build runs ${ENGINE_ID}@${ENGINE_REVISION}.`,
+    )
+  }
+  const config = spec.config
+    ? clampGameConfig(spec.config)
+    : clampGameConfig({ ...DEFAULT_GAME_CONFIG, ...(spec.rules ?? {}) })
+  return { engine, config, seed: spec.seed >>> 0, firstSeat: spec.firstSeat }
 }
 
 export interface ClassicTopology {
@@ -340,8 +366,10 @@ export interface GameResult {
 }
 
 export interface GameState {
-  readonly spec: GameSpec
+  readonly spec: ResolvedGameSpec
   readonly mode: ClassicMode
+  readonly config: GameConfig
+  readonly lastPlacedLocation: readonly [LocationId | null, LocationId | null]
   readonly phase: 'active' | 'finished'
   readonly boards: readonly [BoardState, BoardState]
   readonly powerups: readonly [PlayerPowerups, PlayerPowerups]
@@ -377,6 +405,7 @@ export type RejectionReason =
   | 'shield-selection-pending'
   | 'shield-selection-not-pending'
   | 'invalid-shield-target'
+  | 'repeat-location'
 
 export interface ApplyResult {
   readonly accepted: boolean
@@ -406,33 +435,36 @@ function createBoard(mode: ClassicMode): BoardState {
   }
 }
 
-export function createGame(
-  spec: GameSpec,
-  registry: ModeRegistry = MODE_REGISTRY,
-): GameState {
-  const mode = registry[`${spec.mode.id}@${spec.mode.revision}`]
-  if (!mode) {
-    throw new Error(`Unsupported game mode: ${spec.mode.id}@${spec.mode.revision}`)
-  }
+function buildMode(config: GameConfig): ClassicMode {
+  return deepFreeze({
+    id: ENGINE_ID,
+    revision: ENGINE_REVISION,
+    randomAlgorithm: 'mulberry32-v1',
+    topology: createTopology(config.boardSize, config.streak),
+    defeats: { rock: 'scissors', paper: 'rock', scissors: 'paper' },
+    powerupBySymbol: config.powerupBySymbol,
+  }) as ClassicMode
+}
+
+export function createGame(spec: GameSpec): GameState {
+  const resolved = resolveSpec(spec)
+  const mode = buildMode(resolved.config)
 
   return {
-    spec: {
-      mode: { ...spec.mode },
-      rules: { ...spec.rules },
-      seed: spec.seed >>> 0,
-      firstSeat: spec.firstSeat,
-    },
+    spec: resolved,
     mode,
+    config: resolved.config,
+    lastPlacedLocation: [null, null],
     phase: 'active',
     boards: [createBoard(mode), createBoard(mode)],
     powerups: [createPowerups(), createPowerups()],
-    activeSeat: spec.firstSeat,
+    activeSeat: resolved.firstSeat,
     turnCount: 0,
     currentRound: 1,
-    maxTurns: spec.rules.rounds * 2,
+    maxTurns: resolved.config.rounds * 2,
     pendingExtraPlacements: [],
     result: null,
-    randomState: spec.seed >>> 0,
+    randomState: resolved.seed,
   }
 }
 
@@ -440,11 +472,17 @@ function cloneState(state: GameState): GameState {
   return {
     ...state,
     spec: {
-      mode: { ...state.spec.mode },
-      rules: { ...state.spec.rules },
+      engine: { ...state.spec.engine },
+      // `config` is deep-frozen at clamp time, so sharing the reference avoids
+      // re-cloning a nested object on every command.
+      config: state.spec.config,
       seed: state.spec.seed,
       firstSeat: state.spec.firstSeat,
     },
+    lastPlacedLocation: [...state.lastPlacedLocation] as [
+      LocationId | null,
+      LocationId | null,
+    ],
     boards: state.boards.map((board) => ({
       locations: board.locations.map((location) => ({ ...location })),
     })) as unknown as [BoardState, BoardState],
@@ -537,7 +575,7 @@ function consumeTurn(state: GameState, events: DomainEvent[]) {
   const mutable = state as Mutable<GameState>
   mutable.turnCount += 1
   mutable.currentRound = Math.min(
-    state.spec.rules.rounds,
+    state.config.rounds,
     Math.floor(state.turnCount / 2) + 1,
   )
   if (state.turnCount >= state.maxTurns) {
@@ -555,7 +593,7 @@ function resolveAutomaticPasses(state: GameState, events: DomainEvent[]) {
     const mutable = state as Mutable<GameState>
     mutable.turnCount += 1
     mutable.currentRound = Math.min(
-      state.spec.rules.rounds,
+      state.config.rounds,
       Math.floor(state.turnCount / 2) + 1,
     )
     if (state.turnCount >= state.maxTurns) {
@@ -619,6 +657,7 @@ function resolveConflict(state: GameState, locationId: LocationId, events: Domai
 }
 
 function maybeUnlockPowerup(state: GameState, seat: Seat, events: DomainEvent[]) {
+  if (!state.config.powerupsEnabled) return
   for (const pattern of state.mode.topology.winningPatterns) {
     const locations = pattern.map(
       (locationId) => state.boards[seat].locations[locationIndex(state, seat, locationId)],
@@ -626,6 +665,9 @@ function maybeUnlockPowerup(state: GameState, seat: Seat, events: DomainEvent[])
     const symbol = locations[0]?.symbol
     if (!symbol || locations.some((location) => location?.symbol !== symbol)) continue
     const powerup = state.mode.powerupBySymbol[symbol]
+    // `continue`, not `return`: a line for a disabled power-up must not block
+    // a different line from unlocking an enabled one on the same turn.
+    if (!state.config.powerups[powerup]) continue
     if (state.powerups[seat].unlocked[powerup]) continue
     const playerPowerups = state.powerups[seat] as Mutable<PlayerPowerups>
     playerPowerups.unlocked = { ...playerPowerups.unlocked, [powerup]: true }
@@ -638,6 +680,12 @@ function place(state: GameState, seat: Seat, command: Extract<GameCommand, { typ
   if (state.powerups[seat].shieldSelectionPending) {
     return reject(state, 'shield-selection-pending')
   }
+  if (
+    state.config.forbidImmediateRepeat &&
+    state.lastPlacedLocation[seat] === command.locationId
+  ) {
+    return reject(state, 'repeat-location')
+  }
   const index = locationIndex(state, seat, command.locationId)
   if (index < 0) return reject(state, 'unknown-location')
   if (state.boards[seat].locations[index]?.symbol !== null) {
@@ -647,6 +695,14 @@ function place(state: GameState, seat: Seat, command: Extract<GameCommand, { typ
   const next = cloneState(state)
   const events: DomainEvent[] = []
   setLocation(next, seat, command.locationId, { symbol: command.symbol })
+  // Recorded here rather than at the call site so timeouts, which delegate to
+  // `place`, are covered by the no-repeat rule too.
+  const placedLocations = [...next.lastPlacedLocation] as [
+    LocationId | null,
+    LocationId | null,
+  ]
+  placedLocations[seat] = command.locationId
+  ;(next as Mutable<GameState>).lastPlacedLocation = placedLocations
   const playerPowerups = next.powerups[seat] as Mutable<PlayerPowerups>
   playerPowerups.revealActive = false
   resolveConflict(next, command.locationId, events)
@@ -687,6 +743,7 @@ function activatePowerup(
   seat: Seat,
   powerup: PowerupKey,
 ): ApplyResult {
+  if (!state.config.powerupsEnabled) return reject(state, 'powerup-locked')
   const current = state.powerups[seat]
   if (!current.unlocked[powerup]) return reject(state, 'powerup-locked')
   if (current.used[powerup]) return reject(state, 'powerup-used')
