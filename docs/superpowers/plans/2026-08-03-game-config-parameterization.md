@@ -33,6 +33,29 @@ MessagePack 3, Node 24.
 - Default configuration must reproduce today's game exactly. Any task that
   changes observable default behavior is a defect.
 
+## Status as of 2026-08-03
+
+Done, each committed and verified green in all three packages:
+
+- Task 1 — `createTopology`, engine constants (`c5f73a2`).
+- Task 2 — `GameConfig`, defaults, decode, clamp (`885bedc`).
+- Task 3 — engine driven by config, power-up toggles, no-repeat rule
+  (`deccaea`).
+- Tasks 5, 6, 7 — web protocol/adapter, board sizing, setup panel (`6b0580e`),
+  plus power-up tray hiding (`988c0ed`) and a dev-server fix (`057472a`).
+
+**Tasks 5-7 were done before Task 4**, contrary to the order below, so the
+solo testbed became usable sooner. `createOnlineMatchConfig` therefore fills
+the knobs the server does not yet send from `DEFAULT_GAME_CONFIG`, and
+`App.tsx` still sends only `{ rounds, turnSeconds, blindMode }` on the
+matchmaking packet. Task 4 replaces both.
+
+Remaining: **Task 4** (server) and **Task 8** (delete the registry, the
+legacy `MatchRules` exports, and the `createGame` compatibility shim).
+
+Verified in the running app, not only in tests: a 5x5 no-power-up practice
+match renders 25 cells across 5 columns with no power-up tray.
+
 ## Correction: game-core test framework
 
 `packages/game-core` does **not** use Vitest. It runs `node --test` with
