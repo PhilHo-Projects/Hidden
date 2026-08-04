@@ -23,6 +23,28 @@ export enum PacketType {
   GAME_MOVES = 18,
   GAME_COMMAND = 19,
   GAME_UPDATE = 20,
+  LOBBY_CREATE = 21,
+  LOBBY_CREATED = 22,
+  LOBBY_LIST = 23,
+  LOBBY_JOIN = 24,
+  LOBBY_CANCEL = 25,
+  LOBBY_SUBSCRIBE = 26,
+  LOBBY_ERROR = 27,
+}
+
+// Five characters from an unambiguous alphabet. Validated here so a malformed
+// code is rejected at the protocol edge rather than reaching the registry.
+const JOIN_CODE_PATTERN = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$/
+
+export function assertJoinCode(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new ProtocolError('Join code must be a string.')
+  }
+  const code = value.trim().toUpperCase()
+  if (!JOIN_CODE_PATTERN.test(code)) {
+    throw new ProtocolError('Join code must be five valid characters.')
+  }
+  return code
 }
 
 export type PaintColor = 'green' | 'blue' | 'red'
@@ -83,6 +105,10 @@ export type ClientPacket =
     }
   | { type: PacketType.IMMUNE_UPDATE; indices: number[] }
   | { type: PacketType.GAME_COMMAND; envelope: GameCommandEnvelope }
+  | { type: PacketType.LOBBY_CREATE; config: GameConfig; isPrivate: boolean }
+  | { type: PacketType.LOBBY_JOIN; code: string }
+  | { type: PacketType.LOBBY_CANCEL }
+  | { type: PacketType.LOBBY_SUBSCRIBE; subscribed: boolean }
 
 export class ProtocolError extends Error {
   constructor(message: string) {
@@ -288,6 +314,26 @@ export function decodeClientPacket(bytes: Uint8Array): ClientPacket {
     }
     case PacketType.GAME_COMMAND:
       return { type, envelope: decodeGameCommandEnvelope(packet[2]) }
+    case PacketType.LOBBY_CREATE: {
+      const config = decodeGameConfig(packet[2])
+      if (!config) {
+        throw new ProtocolError('Lobby create requires a config object.')
+      }
+      return {
+        type,
+        config,
+        isPrivate: assertBoolean(packet[3], 'Private flag'),
+      }
+    }
+    case PacketType.LOBBY_JOIN:
+      return { type, code: assertJoinCode(packet[2]) }
+    case PacketType.LOBBY_CANCEL:
+      return { type }
+    case PacketType.LOBBY_SUBSCRIBE:
+      return {
+        type,
+        subscribed: assertBoolean(packet[2], 'Lobby subscription state'),
+      }
     default:
       throw new ProtocolError(`Unsupported packet type: ${type}.`)
   }

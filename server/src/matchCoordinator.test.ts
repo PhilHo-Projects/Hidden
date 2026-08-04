@@ -1021,3 +1021,138 @@ describe('MatchCoordinator finish, rematch, and legacy lifecycle', () => {
     expect(fixture.run.revision).toBe(0)
   })
 })
+
+describe('MatchCoordinator private lobby', () => {
+  const host = { connectionId: 1, username: 'Host' }
+  const joiner = { connectionId: 2, username: 'Joiner' }
+
+  function lobbyCoordinator(codes = ['AAAAA', 'BBBBB', 'CCCCC']) {
+    const queue = [...codes]
+    return new MatchCoordinator({
+      createUuid: () => 'room-1',
+      createJoinCode: () => queue.shift() ?? 'ZZZZZ',
+      now: () => 1_000,
+    })
+  }
+
+  function asPending(result: ReturnType<MatchCoordinator['createPendingGame']>) {
+    if ('error' in result) throw new Error(`Unexpected error: ${result.error}`)
+    return result
+  }
+
+  it('creates a game with a join code and the host config', () => {
+    const coordinator = lobbyCoordinator()
+    const pending = asPending(
+      coordinator.createPendingGame(
+        host,
+        { ...DEFAULT_GAME_CONFIG, boardSize: 5, streak: 4 },
+        false,
+      ),
+    )
+    expect(pending.code).toBe('AAAAA')
+    expect(pending.config.boardSize).toBe(5)
+    expect(pending.host.username).toBe('Host')
+  })
+
+  it('clamps a hostile host config rather than trusting it', () => {
+    const coordinator = lobbyCoordinator()
+    const pending = asPending(
+      coordinator.createPendingGame(
+        host,
+        { ...DEFAULT_GAME_CONFIG, rounds: 9_999, boardSize: 99 } as never,
+        false,
+      ),
+    )
+    expect(pending.config.rounds).toBe(20)
+    expect(pending.config.boardSize).toBe(5)
+  })
+
+  it('lists public games and omits private ones', () => {
+    const coordinator = lobbyCoordinator()
+    coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, false)
+    coordinator.createPendingGame(
+      { connectionId: 3, username: 'Secret' },
+      DEFAULT_GAME_CONFIG,
+      true,
+    )
+
+    const listed = coordinator.listPublicGames()
+    expect(listed).toHaveLength(1)
+    expect(listed[0]).toMatchObject({ code: 'AAAAA', hostName: 'Host' })
+  })
+
+  it('joins a private game by code even though it is unlisted', () => {
+    const coordinator = lobbyCoordinator()
+    coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, true)
+    const room = coordinator.joinPendingGame('AAAAA', joiner)
+    if ('error' in room) throw new Error('Expected a room.')
+    expect(room.participants.map((p) => p.username)).toEqual(['Host', 'Joiner'])
+  })
+
+  it('gives the created room the host config, not the default', () => {
+    const coordinator = lobbyCoordinator()
+    coordinator.createPendingGame(
+      host,
+      { ...DEFAULT_GAME_CONFIG, boardSize: 4, streak: 3, powerupsEnabled: false },
+      false,
+    )
+    const room = coordinator.joinPendingGame('AAAAA', joiner)
+    if ('error' in room) throw new Error('Expected a room.')
+    expect(room.config.boardSize).toBe(4)
+    expect(room.config.powerupsEnabled).toBe(false)
+  })
+
+  it('removes the game from the list once joined', () => {
+    const coordinator = lobbyCoordinator()
+    coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, false)
+    coordinator.joinPendingGame('AAAAA', joiner)
+    expect(coordinator.listPublicGames()).toEqual([])
+  })
+
+  it('rejects an unknown code, your own game, and hosting twice', () => {
+    const coordinator = lobbyCoordinator()
+    expect(coordinator.joinPendingGame('NOPE1', joiner)).toEqual({
+      error: 'not-found',
+    })
+    coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, false)
+    expect(coordinator.joinPendingGame('AAAAA', host)).toEqual({
+      error: 'own-game',
+    })
+    expect(
+      coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, false),
+    ).toEqual({ error: 'already-hosting' })
+  })
+
+  it('cancels a hosted game', () => {
+    const coordinator = lobbyCoordinator()
+    coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, false)
+    expect(coordinator.cancelPendingGame(host.connectionId)).toBe(true)
+    expect(coordinator.listPublicGames()).toEqual([])
+    expect(coordinator.cancelPendingGame(host.connectionId)).toBe(false)
+  })
+
+  it('drops a hosted game when the host disconnects', () => {
+    const coordinator = lobbyCoordinator()
+    coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, false)
+    coordinator.abandon(host.connectionId)
+    expect(coordinator.listPublicGames()).toEqual([])
+    expect(coordinator.joinPendingGame('AAAAA', joiner)).toEqual({
+      error: 'not-found',
+    })
+  })
+
+  it('retries until it finds an unused join code', () => {
+    // Both hosts draw 'AAAAA' first; the second must not overwrite the first.
+    const coordinator = lobbyCoordinator(['AAAAA', 'AAAAA', 'BBBBB'])
+    coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, false)
+    const second = asPending(
+      coordinator.createPendingGame(
+        { connectionId: 3, username: 'Other' },
+        DEFAULT_GAME_CONFIG,
+        false,
+      ),
+    )
+    expect(second.code).toBe('BBBBB')
+    expect(coordinator.listPublicGames()).toHaveLength(2)
+  })
+})

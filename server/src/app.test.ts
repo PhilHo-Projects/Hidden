@@ -1102,3 +1102,109 @@ describe.sequential('Hidden server', () => {
     guest.close()
   })
 })
+
+describe.sequential('Hidden lobby', () => {
+  async function lobbyProbe(port: number, guestUsername: string) {
+    const probe = await connectProbe(port, ORIGIN, '/ws')
+    await probe.waitFor(PacketType.ID_ASSIGN)
+    probe.send([999, PacketType.USER_INFO, guestUsername])
+    await probe.waitFor(PacketType.SERVER_RESPONSE)
+    probe.send([999, PacketType.ROOM_JOIN, 'lobby'])
+    await probe.waitFor(PacketType.SERVER_RESPONSE)
+    return probe
+  }
+
+  it('lets a guest host a listed game that another guest joins with the host config', async () => {
+    const { port } = await startServer()
+    const host = await lobbyProbe(port, 'Guest#2001')
+    const joiner = await lobbyProbe(port, 'Guest#2002')
+
+    joiner.send([999, PacketType.LOBBY_SUBSCRIBE, true])
+    await joiner.waitFor(PacketType.LOBBY_LIST)
+
+    const hostConfig = {
+      ...DEFAULT_GAME_CONFIG,
+      boardSize: 5,
+      streak: 4,
+      powerupsEnabled: false,
+    }
+    host.send([999, PacketType.LOBBY_CREATE, hostConfig, false])
+    const created = await host.waitFor(PacketType.LOBBY_CREATED)
+    const { code } = created[2] as { code: string }
+    expect(code).toMatch(/^[A-Z2-9]{5}$/)
+
+    // The subscriber is pushed the updated list without asking again.
+    const listed = (await joiner.waitFor(PacketType.LOBBY_LIST))[2] as Array<{
+      code: string
+      hostName: string
+      config: { boardSize: number }
+    }>
+    expect(listed).toHaveLength(1)
+    expect(listed[0]?.hostName).toBe('Guest#2001')
+    expect(listed[0]?.config.boardSize).toBe(5)
+
+    joiner.send([999, PacketType.LOBBY_JOIN, code])
+    const [hostMatch, joinerMatch] = await Promise.all([
+      host.waitFor(PacketType.MATCH_FOUND),
+      joiner.waitFor(PacketType.MATCH_FOUND),
+    ])
+
+    // Both players get the host's rules, not the defaults.
+    expect(hostMatch[3]).toEqual(hostConfig)
+    expect(joinerMatch[3]).toEqual(hostConfig)
+    host.close()
+    joiner.close()
+  })
+
+  it('keeps a private game out of the list but joinable by code', async () => {
+    const { port } = await startServer()
+    const host = await lobbyProbe(port, 'Guest#2003')
+    const joiner = await lobbyProbe(port, 'Guest#2004')
+
+    joiner.send([999, PacketType.LOBBY_SUBSCRIBE, true])
+    await joiner.waitFor(PacketType.LOBBY_LIST)
+
+    host.send([999, PacketType.LOBBY_CREATE, DEFAULT_GAME_CONFIG, true])
+    const created = await host.waitFor(PacketType.LOBBY_CREATED)
+    const { code } = created[2] as { code: string }
+
+    const listed = (await joiner.waitFor(PacketType.LOBBY_LIST))[2] as unknown[]
+    expect(listed).toEqual([])
+
+    joiner.send([999, PacketType.LOBBY_JOIN, code])
+    await Promise.all([
+      host.waitFor(PacketType.MATCH_FOUND),
+      joiner.waitFor(PacketType.MATCH_FOUND),
+    ])
+    host.close()
+    joiner.close()
+  })
+
+  it('reports an unknown join code without closing the socket', async () => {
+    const { port } = await startServer()
+    const joiner = await lobbyProbe(port, 'Guest#2005')
+
+    joiner.send([999, PacketType.LOBBY_JOIN, 'ZZZZZ'])
+    const error = await joiner.waitFor(PacketType.LOBBY_ERROR)
+    expect(error[2]).toBe('not-found')
+    expect(joiner.socket.readyState).toBe(WebSocket.OPEN)
+    joiner.close()
+  })
+
+  it('drops a hosted game from the list when the host disconnects', async () => {
+    const { port } = await startServer()
+    const host = await lobbyProbe(port, 'Guest#2006')
+    const watcher = await lobbyProbe(port, 'Guest#2007')
+
+    watcher.send([999, PacketType.LOBBY_SUBSCRIBE, true])
+    await watcher.waitFor(PacketType.LOBBY_LIST)
+
+    host.send([999, PacketType.LOBBY_CREATE, DEFAULT_GAME_CONFIG, false])
+    await host.waitFor(PacketType.LOBBY_CREATED)
+    expect((await watcher.waitFor(PacketType.LOBBY_LIST))[2]).toHaveLength(1)
+
+    host.close()
+    expect((await watcher.waitFor(PacketType.LOBBY_LIST))[2]).toEqual([])
+    watcher.close()
+  })
+})

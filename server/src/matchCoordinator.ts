@@ -140,6 +140,7 @@ export interface MatchCoordinatorDependencies {
   readonly scheduleTimeout: (callback: () => void, delayMs: number) => unknown
   readonly clearTimeout: (handle: unknown) => void
   readonly commandCacheSize: number
+  readonly createJoinCode: () => string
   readonly deliverySink: (deliveries: readonly GameUpdateDelivery[]) => void
   readonly onDeadline?: (room: MatchRoom, run: MatchRun) => void
   readonly roomFactory?: MatchRoomFactory
@@ -148,6 +149,38 @@ export interface MatchCoordinatorDependencies {
 interface QuickMatchEntry {
   readonly participant: QuickMatchParticipant
   readonly proposedConfig: GameConfig | undefined
+}
+
+export interface PendingGame {
+  readonly code: string
+  readonly host: QuickMatchParticipant
+  readonly config: GameConfig
+  readonly isPrivate: boolean
+  readonly createdAt: number
+}
+
+export interface PublicGameSummary {
+  readonly code: string
+  readonly hostName: string
+  readonly config: GameConfig
+}
+
+export type LobbyErrorReason =
+  | 'not-found'
+  | 'already-hosting'
+  | 'already-in-match'
+  | 'own-game'
+
+// Ambiguous glyphs are omitted so a code read aloud or off a phone screen is
+// unambiguous: no O/0, no I/1.
+const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+function defaultCreateJoinCode() {
+  let code = ''
+  for (let index = 0; index < 5; index += 1) {
+    code += JOIN_CODE_ALPHABET[randomInt(JOIN_CODE_ALPHABET.length)]
+  }
+  return code
 }
 
 function freezeParticipant(
@@ -198,12 +231,15 @@ const DEFAULT_DEPENDENCIES: MatchCoordinatorDependencies = {
   scheduleTimeout: defaultScheduleTimeout,
   clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout),
   commandCacheSize: 128,
+  createJoinCode: defaultCreateJoinCode,
   deliverySink: () => undefined,
 }
 
 export class MatchCoordinator {
   private readonly dependencies: MatchCoordinatorDependencies
   private readonly matchmakingQueue = new Map<number, QuickMatchEntry>()
+  private readonly pendingGames = new Map<string, PendingGame>()
+  private readonly pendingCodeByConnectionId = new Map<number, string>()
   private readonly roomByConnectionId = new Map<number, MatchRoom>()
   private readonly roomsById = new Map<string, MatchRoom>()
   private readonly timerByRoomId = new Map<string, unknown>()
@@ -252,6 +288,89 @@ export class MatchCoordinator {
 
   cancelQuickMatch(connectionId: number) {
     this.matchmakingQueue.delete(connectionId)
+  }
+
+  createPendingGame(
+    host: QuickMatchParticipant,
+    config: GameConfig,
+    isPrivate: boolean,
+  ): PendingGame | { readonly error: LobbyErrorReason } {
+    if (this.roomByConnectionId.has(host.connectionId)) {
+      return { error: 'already-in-match' }
+    }
+    if (this.pendingCodeByConnectionId.has(host.connectionId)) {
+      return { error: 'already-hosting' }
+    }
+
+    // Hosting and queueing at once would let one connection be pulled into two
+    // rooms, so creating a game leaves the Quick Match queue.
+    this.matchmakingQueue.delete(host.connectionId)
+
+    let code = this.dependencies.createJoinCode()
+    while (this.pendingGames.has(code)) {
+      code = this.dependencies.createJoinCode()
+    }
+
+    const pending: PendingGame = Object.freeze({
+      code,
+      host: Object.freeze({
+        ...(host.accountId ? { accountId: host.accountId } : {}),
+        connectionId: host.connectionId,
+        username: host.username,
+      }),
+      config: freezeConfig(clampGameConfig(config)),
+      isPrivate,
+      createdAt: this.dependencies.now(),
+    })
+    this.pendingGames.set(code, pending)
+    this.pendingCodeByConnectionId.set(host.connectionId, code)
+    return pending
+  }
+
+  listPublicGames(): PublicGameSummary[] {
+    return [...this.pendingGames.values()]
+      .filter((pending) => !pending.isPrivate)
+      .sort((left, right) => left.createdAt - right.createdAt)
+      .map((pending) => ({
+        code: pending.code,
+        hostName: pending.host.username,
+        config: pending.config,
+      }))
+  }
+
+  getPendingGame(code: string) {
+    return this.pendingGames.get(code)
+  }
+
+  joinPendingGame(
+    code: string,
+    joiner: QuickMatchParticipant,
+  ): MatchRoom | { readonly error: LobbyErrorReason } {
+    const pending = this.pendingGames.get(code)
+    if (!pending) {
+      return { error: 'not-found' }
+    }
+    if (pending.host.connectionId === joiner.connectionId) {
+      return { error: 'own-game' }
+    }
+    if (this.roomByConnectionId.has(joiner.connectionId)) {
+      return { error: 'already-in-match' }
+    }
+
+    this.pendingGames.delete(code)
+    this.pendingCodeByConnectionId.delete(pending.host.connectionId)
+    this.matchmakingQueue.delete(joiner.connectionId)
+    return this.createRoom([pending.host, joiner], pending.config)
+  }
+
+  cancelPendingGame(connectionId: number) {
+    const code = this.pendingCodeByConnectionId.get(connectionId)
+    if (code === undefined) {
+      return false
+    }
+    this.pendingGames.delete(code)
+    this.pendingCodeByConnectionId.delete(connectionId)
+    return true
   }
 
   createRoom(
@@ -502,6 +621,8 @@ export class MatchCoordinator {
 
   abandon(connectionId: number): AbandonedRoom | undefined {
     this.cancelQuickMatch(connectionId)
+    // A host that drops must not leave an unjoinable game in the list.
+    this.cancelPendingGame(connectionId)
     const room = this.roomByConnectionId.get(connectionId)
     if (!room) {
       return undefined

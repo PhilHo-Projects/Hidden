@@ -4,6 +4,7 @@ import { type Logger } from './logger'
 import {
   MatchCoordinator,
   type GameUpdateDelivery,
+  type MatchRoom,
 } from './matchCoordinator'
 import { type GameConfig } from './matchRules'
 import {
@@ -41,6 +42,7 @@ export interface GameHandlerOptions {
 export class GameHandler {
   private readonly sessionsById = new Map<number, ClientSession>()
   private readonly lobby = new Set<number>()
+  private readonly lobbySubscribers = new Set<number>()
   private readonly matchCoordinator: MatchCoordinator
   private nextClientId = 1
 
@@ -219,7 +221,96 @@ export class GameHandler {
       case PacketType.IMMUNE_UPDATE:
         this.rejectLegacyGameplay(session)
         break
+      case PacketType.LOBBY_CREATE:
+        this.createPrivateGame(session, packet.config, packet.isPrivate)
+        break
+      case PacketType.LOBBY_JOIN:
+        this.joinPrivateGame(session, packet.code)
+        break
+      case PacketType.LOBBY_CANCEL:
+        if (this.matchCoordinator.cancelPendingGame(session.id)) {
+          this.broadcastLobbyList()
+        }
+        break
+      case PacketType.LOBBY_SUBSCRIBE:
+        if (packet.subscribed) {
+          this.lobbySubscribers.add(session.id)
+          this.send(session, [
+            0,
+            PacketType.LOBBY_LIST,
+            this.matchCoordinator.listPublicGames(),
+          ])
+        } else {
+          this.lobbySubscribers.delete(session.id)
+        }
+        break
     }
+  }
+
+  private broadcastLobbyList() {
+    const games = this.matchCoordinator.listPublicGames()
+    for (const clientId of this.lobbySubscribers) {
+      const subscriber = this.sessionsById.get(clientId)
+      if (subscriber) {
+        this.send(subscriber, [0, PacketType.LOBBY_LIST, games])
+      }
+    }
+  }
+
+  private createPrivateGame(
+    session: ClientSession,
+    config: GameConfig,
+    isPrivate: boolean,
+  ) {
+    if (!session.username || session.roomId !== 'lobby') {
+      throw new ProtocolError('Join the lobby before creating a game.')
+    }
+
+    // Unlike Quick Match, the config is accepted from any player, guests
+    // included: a host sets the rules of their own game.
+    const result = this.matchCoordinator.createPendingGame(
+      {
+        ...(session.accountId ? { accountId: session.accountId } : {}),
+        connectionId: session.id,
+        username: session.username,
+      },
+      config,
+      isPrivate,
+    )
+    if ('error' in result) {
+      this.send(session, [0, PacketType.LOBBY_ERROR, result.error])
+      return
+    }
+
+    this.send(session, [
+      0,
+      PacketType.LOBBY_CREATED,
+      { code: result.code, config: result.config, isPrivate: result.isPrivate },
+    ])
+    this.options.logger('info', 'lobby.game_created', {
+      clientId: session.id,
+      isPrivate,
+    })
+    this.broadcastLobbyList()
+  }
+
+  private joinPrivateGame(session: ClientSession, code: string) {
+    if (!session.username || session.roomId !== 'lobby') {
+      throw new ProtocolError('Join the lobby before joining a game.')
+    }
+
+    const result = this.matchCoordinator.joinPendingGame(code, {
+      ...(session.accountId ? { accountId: session.accountId } : {}),
+      connectionId: session.id,
+      username: session.username,
+    })
+    if ('error' in result) {
+      this.send(session, [0, PacketType.LOBBY_ERROR, result.error])
+      return
+    }
+
+    this.announceMatch(result)
+    this.broadcastLobbyList()
   }
 
   private joinLobby(session: ClientSession, responseType: PacketType) {
@@ -285,6 +376,12 @@ export class GameHandler {
       return
     }
 
+    this.announceMatch(room)
+  }
+
+  // Shared by Quick Match and the private lobby so both produce an identical
+  // MATCH_FOUND and reuse the existing ready/start flow unchanged.
+  private announceMatch(room: MatchRoom) {
     const playerIds = room.participants.map(
       (participant) => participant.connectionId,
     )
@@ -294,6 +391,7 @@ export class GameHandler {
         continue
       }
       this.lobby.delete(playerId)
+      this.lobbySubscribers.delete(playerId)
       player.roomId = room.id
       this.send(player, [0, PacketType.MATCH_FOUND, room.id, room.config])
     }
@@ -398,6 +496,11 @@ export class GameHandler {
   private detachFromRoom(session: ClientSession, notifyOpponent: boolean) {
     this.matchCoordinator.cancelQuickMatch(session.id)
     this.lobby.delete(session.id)
+    this.lobbySubscribers.delete(session.id)
+    // A dropped host must not leave an unjoinable game in everyone's list.
+    if (this.matchCoordinator.cancelPendingGame(session.id)) {
+      this.broadcastLobbyList()
+    }
 
     const roomId = session.roomId
     session.roomId = undefined
