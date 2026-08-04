@@ -29,6 +29,30 @@ transmit the host's rules is pointless.
 - Verify: `npm test` + `npm run build` in `server/`; `npm test`,
   `npm run lint`, `npm run build` in `web/`.
 
+## Status as of 2026-08-04
+
+Tasks 1 through 5 are delivered, committed, and green in all three packages.
+
+Verified by driving two real browser tabs against the running server, not only
+by tests:
+
+- A guest hosts a public 5x5 no-power-up game; a second guest sees it listed
+  with its rules, joins, and both play that config.
+- A guest hosts a private 4x4 game; it does not appear in the list
+  (`listedBefore: 0`) and the join code reaches it. The battle screen renders
+  16 cells across 4 columns with no power-up tray.
+
+One real bug was found this way and fixed in `988c0ed`'s follow-up:
+`createOnlineMatchConfig` cherry-picked three fields, so an online match's
+presentation config disagreed with its engine.
+
+**Task 6 (delete the mode registry, `MatchRules`, and the `createGame`
+compatibility shim) is NOT done.** It is the only remaining item. The shim in
+`packages/game-core/src/index.ts` still accepts the legacy `{ mode, rules }`
+spec, and `MODE_REGISTRY` / `CLASSIC_V1` / `decodeMatchRules` /
+`clampMatchRules` are still exported and still referenced by a few tests.
+Nothing in the runtime path uses them.
+
 ## Packet IDs
 
 | ID | Name | Direction | Payload |
