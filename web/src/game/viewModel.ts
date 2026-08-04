@@ -6,6 +6,8 @@ export type Screen =
   | 'account'
   | 'mode-select'
   | 'online-menu'
+  | 'lobby-create'
+  | 'lobby-find'
   | 'offline-setup'
   | 'matchmaking'
   | 'ready'
@@ -21,6 +23,8 @@ export function getScreenLabel(screen: Screen) {
     account: 'Account',
     'mode-select': 'Play',
     'online-menu': 'Online',
+    'lobby-create': 'Create Game',
+    'lobby-find': 'Find Game',
     'offline-setup': 'Offline',
     matchmaking: 'Searching',
     ready: 'Ready',
@@ -59,6 +63,8 @@ export function getBackTarget(screen: Screen, isOnlineMatch = false): Screen {
     account: 'intro',
     'mode-select': 'intro',
     'online-menu': 'mode-select',
+    'lobby-create': 'online-menu',
+    'lobby-find': 'online-menu',
     'offline-setup': 'mode-select',
     matchmaking: 'online-menu',
     ready: 'online-menu',

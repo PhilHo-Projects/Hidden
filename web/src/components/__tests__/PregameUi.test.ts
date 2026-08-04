@@ -90,7 +90,7 @@ describe('pre-game UI', () => {
   it('shows the server-resolved rules before players ready', () => {
     const markup = renderToStaticMarkup(
       createElement(MatchRulesSummary, {
-        rules: { rounds: 8, turnSeconds: 15, blindMode: false },
+        config: { ...DEFAULT_GAME_CONFIG, rounds: 8, turnSeconds: 15, blindMode: false },
       }),
     )
 

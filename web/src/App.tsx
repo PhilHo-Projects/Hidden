@@ -41,10 +41,6 @@ import {
 } from './game/engine'
 import { NetworkClient, resolveWebSocketUrl, type ClientEvent } from './game/networkClient'
 import {
-  DEFAULT_MATCH_RULES,
-  type MatchRules,
-} from './game/matchRules'
-import {
   clampGameConfig,
   DEFAULT_GAME_CONFIG,
   type GameConfig,
@@ -64,7 +60,12 @@ import {
   queueOnlineCommand,
   type OnlineAuthorityState,
 } from './game/onlineAuthority'
-import { LOBBY_ROOM_ID, type UserEntry } from './game/protocol'
+import {
+  LOBBY_ROOM_ID,
+  type LobbyErrorReason,
+  type PublicGameSummary,
+  type UserEntry,
+} from './game/protocol'
 import type { EngineResult, GameState, MatchConfig, PaintColor, PowerupKey } from './game/types'
 import {
   createGuestName,
@@ -100,6 +101,13 @@ const wsUrl = () =>
     host: window.location.host,
   })
 
+const LOBBY_ERROR_MESSAGES: Record<LobbyErrorReason, string> = {
+  'not-found': 'No game with that code. It may have started or been cancelled.',
+  'already-hosting': 'You are already hosting a game.',
+  'already-in-match': 'You are already in a match.',
+  'own-game': 'You cannot join your own game.',
+}
+
 function makeConfig(
   config: GameConfig,
   isOnline: boolean,
@@ -132,11 +140,17 @@ function App() {
   // One config object rather than one state hook per knob: the knob count grows
   // with every rule experiment, the call sites should not.
   const [config, setConfig] = useState<GameConfig>(DEFAULT_GAME_CONFIG)
+  const [lobbyGames, setLobbyGames] = useState<PublicGameSummary[]>([])
+  const [hostedCode, setHostedCode] = useState<string | null>(null)
+  const [hostingStarted, setHostingStarted] = useState(false)
+  const [isPrivateGame, setIsPrivateGame] = useState(false)
+  const [joinCodeInput, setJoinCodeInput] = useState('')
+  const [lobbyError, setLobbyError] = useState<string | null>(null)
   const applyConfigPatch = (patch: Partial<GameConfig>) =>
     // Clamping here means the UI cannot produce an invalid config, so the
     // server clamp becomes a defence rather than the only guard.
     setConfig((current) => clampGameConfig({ ...current, ...patch }))
-  const [onlineRules, setOnlineRules] = useState<MatchRules | null>(null)
+  const [onlineRules, setOnlineRules] = useState<GameConfig | null>(null)
   const [match, setMatch] = useState<GameState | null>(null)
   const [status, setStatus] = useState<UiStatus>({
     tone: 'neutral',
@@ -381,7 +395,24 @@ function App() {
         return
       }
 
+      if (event.type === 'lobby-created') {
+        setHostedCode(event.code)
+        return
+      }
+
+      if (event.type === 'lobby-list') {
+        setLobbyGames(event.games)
+        return
+      }
+
+      if (event.type === 'lobby-error') {
+        setLobbyError(LOBBY_ERROR_MESSAGES[event.reason])
+        return
+      }
+
       if (event.type === 'match-found') {
+        setLobbyError(null)
+        setHostedCode(null)
         setOnlineRules(event.config)
         setReadyLocked(false)
         setStatus({
@@ -711,6 +742,105 @@ function App() {
     })
     setAnnouncement('Battle starting.')
     await beginCountdown(makeConfig(config, false, true), true)
+  }
+
+  // Connect, identify, and enter the lobby room. Shared by Quick Match and both
+  // private-lobby screens so they cannot drift apart.
+  const connectAndEnterLobby = async () => {
+    const client = new NetworkClient()
+    client.subscribe((event) => onClientEvent(event))
+    clientRef.current = client
+
+    await client.connect(wsUrl())
+    setStatus({
+      tone: 'working',
+      label: 'CONNECTED',
+      detail: `Registering ${username}…`,
+    })
+    const named = await client.sendUserName(username)
+    if (!named) throw new Error('Username rejected.')
+    const joined = await client.joinRoom(LOBBY_ROOM_ID)
+    if (!joined) throw new Error('Could not join the lobby.')
+    return client
+  }
+
+  const resetOnlineState = () => {
+    setUsers([])
+    setReadyLocked(false)
+    setSearchSeconds(0)
+    setAnnouncement('')
+    onlineAuthorityRef.current = null
+    setOnlineInputPending(false)
+    setOnlineRules(null)
+    setLobbyError(null)
+  }
+
+  const hostGame = async () => {
+    resetOnlineState()
+    setHostedCode(null)
+    setHostingStarted(true)
+    setStatus({
+      tone: 'working',
+      label: 'CONNECTING',
+      detail: 'Reaching the Hidden server…',
+    })
+    setScreen('lobby-create')
+    try {
+      const client = await connectAndEnterLobby()
+      client.createLobbyGame(config, isPrivateGame)
+      setStatus({
+        tone: 'working',
+        label: 'HOSTING',
+        detail: 'Waiting for a player to join…',
+      })
+    } catch (cause) {
+      closeClient()
+      setScreen('online-menu')
+      setStatus({
+        tone: 'error',
+        label: 'OFFLINE',
+        detail: cause instanceof Error ? cause.message : 'Could not host a game.',
+      })
+    }
+  }
+
+  const findGames = async () => {
+    resetOnlineState()
+    setLobbyGames([])
+    setStatus({
+      tone: 'working',
+      label: 'CONNECTING',
+      detail: 'Reaching the Hidden server…',
+    })
+    setScreen('lobby-find')
+    try {
+      const client = await connectAndEnterLobby()
+      client.subscribeLobby(true)
+      setStatus({
+        tone: 'neutral',
+        label: 'LOBBY',
+        detail: 'Pick a game to join.',
+      })
+    } catch (cause) {
+      closeClient()
+      setScreen('online-menu')
+      setStatus({
+        tone: 'error',
+        label: 'OFFLINE',
+        detail: cause instanceof Error ? cause.message : 'Could not open the lobby.',
+      })
+    }
+  }
+
+  const leaveLobbyScreen = () => {
+    clientRef.current?.cancelLobbyGame()
+    closeClient()
+    setHostedCode(null)
+    setHostingStarted(false)
+    setLobbyGames([])
+    setLobbyError(null)
+    setScreen('online-menu')
+    setStatus({ tone: 'neutral', label: 'ONLINE', detail: 'Choose how to play.' })
   }
 
   const startOnline = async () => {
@@ -1079,17 +1209,20 @@ function App() {
             />
             <ActionChoice
               label="CREATE GAME"
-              description="Make a private match."
-              badge="Coming soon"
+              description="Host with your own rules."
               tone="secondary"
-              disabled
+              onClick={() => {
+                setHostedCode(null)
+                setHostingStarted(false)
+                setLobbyError(null)
+                setScreen('lobby-create')
+              }}
             />
             <ActionChoice
               label="FIND GAME"
-              description="Join a private match."
-              badge="Coming soon"
+              description="Join someone else's game."
               tone="secondary"
-              disabled
+              onClick={() => void findGames()}
             />
           </div>
           <OnlineAdminSettings
@@ -1097,6 +1230,99 @@ function App() {
             config={config}
             onConfigChange={applyConfigPatch}
           />
+        </section>
+      ) : null}
+
+      {screen === 'lobby-create' ? (
+        <section className="setup-screen pregame-screen">
+          <GameMasthead compact />
+          <GuestIdentity name={username} />
+          {!hostingStarted ? (
+            <div className="lobby-host-setup">
+              <p>Set the rules for your game, then host it.</p>
+              {/* Ungated, unlike Quick Match: a host owns their own rules. */}
+              <AdvancedSettings config={config} onConfigChange={applyConfigPatch} />
+              <div className="toggle-row">
+                <span>Private (code only)</span>
+                <button
+                  type="button"
+                  className={`unity-toggle ${isPrivateGame ? 'unity-toggle-on' : ''}`}
+                  aria-pressed={isPrivateGame}
+                  onClick={() => setIsPrivateGame(!isPrivateGame)}
+                >
+                  <span />
+                </button>
+              </div>
+              <BrushButton onClick={() => void hostGame()}>HOST GAME</BrushButton>
+            </div>
+          ) : null}
+          {hostedCode ? (
+            <div className="lobby-waiting">
+              <p>Waiting for a player…</p>
+              {isPrivateGame ? (
+                <>
+                  <p className="lobby-code-label">Share this code</p>
+                  <p className="lobby-code">{hostedCode}</p>
+                </>
+              ) : (
+                <p className="lobby-code-label">
+                  Your game is listed under Find Game.
+                </p>
+              )}
+              <MatchRulesSummary config={config} />
+            </div>
+          ) : null}
+          <BrushButton tone="red" onClick={leaveLobbyScreen}>
+            CANCEL
+          </BrushButton>
+        </section>
+      ) : null}
+
+      {screen === 'lobby-find' ? (
+        <section className="setup-screen pregame-screen">
+          <GameMasthead compact />
+          <GuestIdentity name={username} />
+          {lobbyError ? <p className="lobby-error">{lobbyError}</p> : null}
+          <div className="lobby-list" aria-label="Open games">
+            {lobbyGames.length === 0 ? (
+              <p className="lobby-empty">No open games right now.</p>
+            ) : (
+              lobbyGames.map((game) => (
+                <button
+                  key={game.code}
+                  type="button"
+                  className="lobby-row"
+                  onClick={() => clientRef.current?.joinLobbyGame(game.code)}
+                >
+                  <strong>{game.hostName}</strong>
+                  <MatchRulesSummary config={game.config} />
+                </button>
+              ))
+            )}
+          </div>
+          <label className="lobby-code-entry">
+            <span>Join by code</span>
+            <input
+              value={joinCodeInput}
+              maxLength={5}
+              placeholder="ABC12"
+              onChange={(event) =>
+                setJoinCodeInput(event.target.value.toUpperCase())
+              }
+            />
+            <BrushButton
+              onClick={() => {
+                if (joinCodeInput.length === 5) {
+                  clientRef.current?.joinLobbyGame(joinCodeInput)
+                }
+              }}
+            >
+              JOIN
+            </BrushButton>
+          </label>
+          <BrushButton tone="red" onClick={leaveLobbyScreen}>
+            BACK
+          </BrushButton>
         </section>
       ) : null}
 
@@ -1140,7 +1366,7 @@ function App() {
             <p className="brush-subtitle">QUICK MATCH</p>
             <h1>Opponent found</h1>
             <MatchRulesSummary
-              rules={onlineRules ?? DEFAULT_MATCH_RULES}
+              config={onlineRules ?? DEFAULT_GAME_CONFIG}
             />
             <BrushButton disabled={readyLocked} onClick={onReady}>
               {readyLocked ? 'READY...' : 'READY'}

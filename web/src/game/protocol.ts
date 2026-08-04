@@ -59,7 +59,33 @@ export enum PacketType {
   GAME_MOVES = 18,
   GAME_COMMAND = 19,
   GAME_UPDATE = 20,
+  LOBBY_CREATE = 21,
+  LOBBY_CREATED = 22,
+  LOBBY_LIST = 23,
+  LOBBY_JOIN = 24,
+  LOBBY_CANCEL = 25,
+  LOBBY_SUBSCRIBE = 26,
+  LOBBY_ERROR = 27,
 }
+
+export interface PublicGameSummary {
+  readonly code: string
+  readonly hostName: string
+  readonly config: GameConfig
+}
+
+export type LobbyErrorReason =
+  | 'not-found'
+  | 'already-hosting'
+  | 'already-in-match'
+  | 'own-game'
+
+const LOBBY_ERROR_REASONS: readonly LobbyErrorReason[] = [
+  'not-found',
+  'already-hosting',
+  'already-in-match',
+  'own-game',
+]
 
 export interface UserEntry {
   userId: number
@@ -132,6 +158,14 @@ export type DecodedPacket =
   | { type: PacketType.GAME_MOVES; senderId: number; moves: QueuedMove[] }
   | { type: PacketType.OPPONENT_DISCONNECTED; value: boolean }
   | { type: PacketType.GAME_UPDATE; update: GameUpdate }
+  | {
+      type: PacketType.LOBBY_CREATED
+      code: string
+      config: GameConfig
+      isPrivate: boolean
+    }
+  | { type: PacketType.LOBBY_LIST; games: PublicGameSummary[] }
+  | { type: PacketType.LOBBY_ERROR; reason: LobbyErrorReason }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -459,6 +493,34 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
         roomId: String(decoded[2]),
         config: clampGameConfig(decodeGameConfig(decoded[3]) ?? DEFAULT_GAME_CONFIG),
       }
+    case PacketType.LOBBY_CREATED: {
+      const payload = decoded[2]
+      if (!isRecord(payload)) throw new Error('Lobby created payload is required.')
+      return {
+        type: packetType,
+        code: String(payload.code),
+        config: clampGameConfig(payload.config),
+        isPrivate: payload.isPrivate === true,
+      }
+    }
+    case PacketType.LOBBY_LIST: {
+      const rows = Array.isArray(decoded[2]) ? decoded[2] : []
+      return {
+        type: packetType,
+        games: rows.filter(isRecord).map((row) => ({
+          code: String(row.code),
+          hostName: String(row.hostName),
+          config: clampGameConfig(row.config),
+        })),
+      }
+    }
+    case PacketType.LOBBY_ERROR: {
+      const reason = decoded[2]
+      if (!LOBBY_ERROR_REASONS.includes(reason as LobbyErrorReason)) {
+        throw new Error('Unsupported lobby error reason.')
+      }
+      return { type: packetType, reason: reason as LobbyErrorReason }
+    }
     case PacketType.GAME_START:
       return {
         type: packetType,
@@ -545,6 +607,29 @@ export function encodeMatchmakingPacket(
 
 export function encodeReadyPacket(senderId: number, isReady: boolean) {
   return encode([senderId, PacketType.READY_STATE, isReady])
+}
+
+export function encodeLobbyCreatePacket(
+  senderId: number,
+  config: GameConfig,
+  isPrivate: boolean,
+) {
+  return encode([senderId, PacketType.LOBBY_CREATE, config, isPrivate])
+}
+
+export function encodeLobbyJoinPacket(senderId: number, code: string) {
+  return encode([senderId, PacketType.LOBBY_JOIN, code.trim().toUpperCase()])
+}
+
+export function encodeLobbyCancelPacket(senderId: number) {
+  return encode([senderId, PacketType.LOBBY_CANCEL])
+}
+
+export function encodeLobbySubscribePacket(
+  senderId: number,
+  subscribed: boolean,
+) {
+  return encode([senderId, PacketType.LOBBY_SUBSCRIBE, subscribed])
 }
 
 export function encodeGameMovePacket(senderId: number, index: number, color: PaintColor) {

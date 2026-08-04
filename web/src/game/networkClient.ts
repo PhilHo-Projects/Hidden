@@ -2,6 +2,10 @@ import type { GameConfig } from '@hidden/game-core'
 import {
   decodePacket,
   encodeGameCommandPacket,
+  encodeLobbyCancelPacket,
+  encodeLobbyCreatePacket,
+  encodeLobbyJoinPacket,
+  encodeLobbySubscribePacket,
   encodeMatchmakingPacket,
   encodeReadyPacket,
   encodeRoomJoinPacket,
@@ -12,6 +16,8 @@ import {
   type GameCommandEnvelope,
   type GameStartDescriptor,
   type GameUpdate,
+  type LobbyErrorReason,
+  type PublicGameSummary,
   type UserEntry,
 } from './protocol'
 
@@ -30,6 +36,14 @@ export type ClientEvent =
   | { type: 'game-update'; update: GameUpdate }
   | { type: 'sync-lost'; message: string }
   | { type: 'opponent-disconnected' }
+  | {
+      type: 'lobby-created'
+      code: string
+      config: GameConfig
+      isPrivate: boolean
+    }
+  | { type: 'lobby-list'; games: PublicGameSummary[] }
+  | { type: 'lobby-error'; reason: LobbyErrorReason }
 
 type EventListener = (event: ClientEvent) => void
 
@@ -204,6 +218,22 @@ export class NetworkClient {
     this.send(encodeGameCommandPacket(this.clientId ?? 0, envelope))
   }
 
+  createLobbyGame(config: GameConfig, isPrivate: boolean) {
+    this.send(encodeLobbyCreatePacket(this.clientId ?? 0, config, isPrivate))
+  }
+
+  joinLobbyGame(code: string) {
+    this.send(encodeLobbyJoinPacket(this.clientId ?? 0, code))
+  }
+
+  cancelLobbyGame() {
+    this.send(encodeLobbyCancelPacket(this.clientId ?? 0))
+  }
+
+  subscribeLobby(subscribed: boolean) {
+    this.send(encodeLobbySubscribePacket(this.clientId ?? 0, subscribed))
+  }
+
   private handleServerResponse(packet: Extract<DecodedPacket, { type: PacketType.SERVER_RESPONSE }>) {
     if (packet.originalPacketType === PacketType.OPPONENT_DISCONNECTED) {
       this.emit({ type: 'opponent-disconnected' })
@@ -250,6 +280,20 @@ export class NetworkClient {
         break
       case PacketType.GAME_UPDATE:
         this.emit({ type: 'game-update', update: packet.update })
+        break
+      case PacketType.LOBBY_CREATED:
+        this.emit({
+          type: 'lobby-created',
+          code: packet.code,
+          config: packet.config,
+          isPrivate: packet.isPrivate,
+        })
+        break
+      case PacketType.LOBBY_LIST:
+        this.emit({ type: 'lobby-list', games: packet.games })
+        break
+      case PacketType.LOBBY_ERROR:
+        this.emit({ type: 'lobby-error', reason: packet.reason })
         break
       case PacketType.GAME_MOVE:
         break

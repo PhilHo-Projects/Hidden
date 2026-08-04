@@ -2,7 +2,6 @@ import type { ButtonHTMLAttributes } from 'react'
 import type { GameConfig } from '@hidden/game-core'
 import type { AuthUser } from '../auth/authClient'
 import { POWERUP_LABELS } from '../game/constants'
-import type { MatchRules } from '../game/matchRules'
 
 export type StatusTone = 'neutral' | 'working' | 'success' | 'error'
 
@@ -219,12 +218,16 @@ export function OnlineAdminSettings({
   return user?.role === 'admin' ? <AdvancedSettings {...settings} /> : null
 }
 
-export function MatchRulesSummary({ rules }: { rules: MatchRules }) {
+export function MatchRulesSummary({ config }: { config: GameConfig }) {
   return (
     <div className="match-rules-summary" aria-label="Match rules">
-      <span>{rules.rounds} rounds</span>
-      <span>{rules.turnSeconds}s turns</span>
-      <span>{rules.blindMode ? 'Blind boards' : 'Open boards'}</span>
+      <span>
+        {config.boardSize}x{config.boardSize}
+      </span>
+      <span>{config.rounds} rounds</span>
+      <span>{config.turnSeconds}s turns</span>
+      <span>{config.blindMode ? 'Blind boards' : 'Open boards'}</span>
+      <span>{config.powerupsEnabled ? 'Power-ups on' : 'Power-ups off'}</span>
     </div>
   )
 }
