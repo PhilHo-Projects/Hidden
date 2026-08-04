@@ -1,136 +1,146 @@
-# Hidden roadmap and operational backlog
+# Hidden roadmap
 
-Last reviewed: 2026-08-03, after `e92f0ca` (PR #4) reached production.
+Last reviewed: 2026-08-04.
 
-This supersedes the inline roadmap in
-`docs/superpowers/specs/2026-08-01-server-authoritative-match-cycle-design.md`,
-which is a point-in-time spec and is not updated here.
+Read this file to know where the project stands and what to do next. History
+lives in [JOURNAL.md](JOURNAL.md); finished plans are in
+`superpowers/plans/archive/` and are not worth reading.
 
-## Current production state
+## What this project is right now
 
-- Live at `https://hidden.philippeho.dev` (Coolify application id 12).
-- One replica. Matchmaking and match state are process-local and in-memory.
-- Online Quick Match is fully server-authoritative: the server owns board
-  state, turn order, power-ups, deadlines, scoring, and completion.
-- Offline practice and online play share one deterministic `@hidden/game-core`.
-- Accounts and sessions persist in PostgreSQL. Nothing about matches persists.
+Hidden is not a finished game and its rules are not yet known to be good. The
+near-term goal is **not shipping features** — it is being able to try rule
+variants cheaply until one is worth keeping.
 
-## Operational constraints found on 2026-08-03
+Everything below serves that. A feature that does not help answer "is this
+version more fun?" is not a priority.
 
-These were measured or read from the deployed configuration, not estimated
-unless stated.
+## Current state
 
-| Constraint | Value | Notes |
-| --- | --- | --- |
-| `MAX_CONNECTIONS` | 100 | Default; env-overridable, unset in production. Caps play at 50 concurrent matches. |
-| Container memory cap | 256 MiB | Currently using ~30 MiB idle. |
-| Host | 2 vCPU, 3.7 GB RAM | Shared with ~18 other containers; load average ~0.6. |
-| Rate limit | 30 msg/sec/connection | Plus a 16 KiB payload ceiling. |
-| WebSocket compression | disabled | `ws` default. Keeps per-connection memory low; do not enable casually. |
-| Command cache | 128 entries per seat | Bounded. Rooms and timers are deleted on cleanup. |
+- Live at `https://hidden.philippeho.dev`. One replica, process-local state.
+- Rules are data. `GameConfig` carries board size, streak length, rounds, turn
+  seconds, blind mode, power-up toggles, and the no-repeat-cell rule. It is
+  stored on the match and sent over the wire.
+- Versioning is on the **engine** (`ENGINE_ID` / `ENGINE_REVISION`), not on
+  variants. Bump it only when placement resolution, scoring, or the RNG
+  changes — never when a board or a toggle changes.
+- Offline practice exposes every knob. Online matches carry the host's config.
+- Create Game / Find Game work. Any player can host, guests included. Public
+  games appear in a list; private games are reachable by a 5-character code.
+- Accounts and sessions persist in PostgreSQL. **Nothing about matches
+  persists.** A deploy or restart destroys in-progress matches.
 
-Estimated, not load-tested: roughly 1,000-2,000 concurrent connections before
-this host becomes the limit. Throughput is not the near-term risk.
+## The one rule that must not be broken
 
-## Backlog, in recommended order
+Never edit a published engine revision's behaviour in place. A stored match is
+reconstructable from `engine revision + config + seed + ordered commands`. The
+config travels with the match, so board and toggle changes are safe. Changing
+how the engine resolves placements without bumping the revision would make
+every past match silently replay into a different game.
 
-### 0. Cross-cutting decision: durable player identity
+## Next up
 
-This is the only real prerequisite shared by the items below, and it is small.
+### 1. Delete the mode registry and MatchRules
 
-Guest names are generated per page load (`useState(createGuestName)` in
-`web/src/App.tsx`) and stored nowhere. Accounts persist; guests do not. Before
-match rows are written, decide whether guest matches are recorded at all, and
-if so give guests a stable token. Deciding late means a schema migration.
+The only unfinished item from the parameterization work. `packages/game-core`
+still exports `ModeRef`, `ModeRegistry`, `MODE_REGISTRY`, `CLASSIC_V1`,
+`MatchRules`, `DEFAULT_MATCH_RULES`, `decodeMatchRules`, and `clampMatchRules`,
+plus a `resolveSpec` shim in `createGame` that accepts the legacy
+`{ mode, rules }` spec shape.
 
-Settle this as part of match history design (item 3), not before it.
+Nothing in the runtime path uses any of it. A few tests still do. Make
+`GameSpec` non-optional `{ engine, config, seed, firstSeat }` and delete the
+shim.
 
-### 1. Parameterize the game — the design testbed
+Keep the `createTopology(3, 3)` test that asserts the legacy 3x3 pattern order
+— it uses a literal, not `CLASSIC_V1`, and it is the guard that the original
+game still plays identically.
 
-The near-term goal is not shipping features, it is being able to test variants
-of the core idea: different board sizes and shapes, power-ups on or off,
-different turn lengths. The current game is not yet fun and cannot be fixed
-without a way to try alternatives.
+### 2. Match history and replay
 
-Already data-driven and reusable:
+The hard prerequisite is already delivered: matches are deterministic from
+seed plus commands, and every match has a UUID and an engine revision.
 
-- `topology` is `{ locationIds, winningPatterns }`. Win detection loops over
-  `winningPatterns` generically; nothing in the engine hardcodes 3x3.
-- `powerupBySymbol` maps symbols to power-ups as data.
-- `BoardGrid` maps over `grid.cells` without assuming a count.
+Deliberately ephemeral for now. No database work:
 
-Blocking work:
+- On match completion the server sends a `MATCH_RECORD` packet carrying
+  `{ matchId, engineRevision, config, seed, firstSeat, commands, result }`.
+- `commands` must include server-generated `timeout` commands with their acting
+  seat. `applyTimeout` consumes the seeded RNG, so omitting them desynchronises
+  reconstruction.
+- The client keeps the last ~20 records in `sessionStorage`. Lost on deploy and
+  on closing the tab, which is intended.
+- The review screen replays through the same core with both boards revealed.
+- **"Try from here"** hands the reconstructed state at turn N to the offline
+  practice path, so a hypothetical is played out rather than argued about.
 
-- `ModeRegistry` is typed `Record<'classic@1', ClassicMode>`, and `ClassicMode`
-  pins `id: 'classic'` and `revision: 1` as literal types. Widen to admit more
-  modes.
-- The mode is hardcoded in five places: `matchCoordinator.ts`,
-  `web/src/game/coreAdapter.ts`, and `web/src/game/protocol.ts` (x3).
-- `MatchRules` is only `{ rounds, turnSeconds, blindMode }`. Needs a mode
-  selector and power-up toggles.
-- `.unity-board-grid` in `web/src/index.css` hardcodes
-  `grid-template-columns: repeat(3, ...)`.
+Durable, deploy-proof history is a later concern, and only worth building once
+the rules are settled.
 
-Do this first because offline practice already exposes full parameter control
-and runs the identical core. Parameterizing first makes variants testable solo
-against the bot immediately, without waiting on a lobby or a second player.
+### 3. Simultaneous conflict resolution
 
-### 2. Private games — route Create/Find Game through the room factory
+Conflicts resolve at placement time today, so placing on a contested cell
+instantly reveals that it was contested. That information leak is what the
+known degenerate loop feeds on.
 
-`createRoom()` is already public and discovery-agnostic; Quick Match is just
-one caller. Remaining work:
+Buffering both placements and resolving at round end is the principled fix, but
+it restructures turn flow and collides with `extraTurn` and shield timing.
+`forbidImmediateRepeat` is the cheap partial mitigation and already ships.
 
-- A pending-code registry mapping a join code to the waiting creator.
-  `createRoom()` needs both participants at once, so the creator waits outside
-  a room until a joiner arrives.
-- Two appended packet IDs (21+). Never renumber an active ID.
-- UI behind the two `Coming soon` buttons.
-- Decide who sets rules for a private game. Quick Match currently uses the
-  first queuer's proposal.
-
-### 3. Match history and replay
-
-The hard prerequisite is already delivered: every match has a UUID, a uint32
-seed, a mode revision, and an ordered command stream with monotonic revisions,
-and the core is deterministic, so seed plus commands fully reconstruct a match.
-`accountId` is already carried on every participant.
-
-Missing entirely:
-
-- No match schema. Only `users` and `sessions` tables exist.
-- No write path. `MatchCoordinator` performs zero database work; domain events
-  are broadcast and then discarded.
-- Guests have no durable identity, so guest matches cannot be attributed.
+Play real games with it on before deciding this is worth the rebuild.
 
 ### 4. Match durability and reconnect
 
-State is process-local and there is no reconnect, so every deploy, restart, or
-network drop destroys in-progress matches. This is a real defect but a low one:
-matches run about two minutes at the default 6 rounds x 10s, so an interrupted
-match is cheap to abandon and re-queue. Match history can record it as
-abandoned rather than pretending it finished.
+Every deploy, restart, or network drop destroys in-progress matches. Real, but
+low: a match runs about two minutes, so an interrupted one is cheap to abandon.
 
-Deliberately sequenced after match history. Persisting matches and their
-command streams for history turns "survive a server restart" into "load
-unfinished matches on boot and rehydrate", which is far cheaper than building
-durable match state on its own.
+Sequenced after replay on purpose. Persisting matches and their command streams
+turns "survive a restart" into "load unfinished matches on boot", which is far
+cheaper than building durable match state on its own.
 
-Client-level reconnect (the process still holds the room) is independent of
-persistence and can be done at any point as a UX improvement.
+Client-level reconnect, where the process still holds the room, is independent
+and can be done any time as a UX improvement.
 
 ### 5. Horizontal scaling
 
-Requires shared matchmaking and match state before a second replica is
-possible. Do not raise the replica count before this exists. Raising
-`MAX_CONNECTIONS` on the single replica is the cheap intermediate step.
+Needs shared matchmaking and match state first. Do not raise the replica count
+before that exists. Raising `MAX_CONNECTIONS` on the single replica is the
+cheap intermediate step. Throughput is not the near-term risk.
 
-### 6. Deferred experiments
+## Deferred experiments
 
-Versioned balance variants and hex or irregular topologies, once item 1 has
-made modes additive. Anything here that turns out to be needed for design
-testing should be pulled forward into item 1 instead of waiting.
+Non-square and irregular topologies (hex, Tetris-shaped, Catan-like). The
+config shape leaves room for them: `createTopology` is the only thing that
+assumes a square board. Not worth building until a square variant is fun.
 
-## Documentation debt
+## Operational constraints
 
-- `DESIGN.md` still states that accounts are not implemented. Accounts shipped
-  in PR #1.
+Measured on 2026-08-03 unless noted.
+
+| Constraint | Value | Notes |
+| --- | --- | --- |
+| `MAX_CONNECTIONS` | 100 | Default, env-overridable, unset in production. Caps play at 50 concurrent matches. |
+| Container memory cap | 256 MiB | ~30 MiB idle. |
+| Host | 2 vCPU, 3.7 GB RAM | Shared with ~18 other containers. |
+| Rate limit | 30 msg/sec/connection | Plus a 16 KiB payload ceiling. |
+| WebSocket compression | disabled | `ws` default. Keeps per-connection memory low. |
+| Command cache | 128 entries per seat | Bounded; rooms and timers deleted on cleanup. |
+
+Estimated, not load-tested: roughly 1,000–2,000 concurrent connections before
+this host is the limit.
+
+## Local development
+
+`web/`'s dev server needs `optimizeDeps.include: ['@hidden/game-core']` because
+that package emits CommonJS and Vite leaves linked workspace packages
+unbundled. Without it the page loads, React never mounts, and **no console
+error is printed**. If you ever see a blank app with a clean console, check
+that first.
+
+Two-player testing: build and start the server (`npm run build && npm start` in
+`server/`), run `npm run dev` in `web/`, open two tabs. Vite proxies `/api` and
+`/ws` to port 8080. No database needed — the server logs
+`auth.disabled_guest_only` and guests can play online.
+
+If the server rejects packets as invalid, check for a stale `node dist/server.js`
+still holding port 8080 from an earlier build.

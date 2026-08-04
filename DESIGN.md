@@ -17,8 +17,10 @@ The pre-game path is staged:
 4. Connect, ready up, and enter the match.
 
 Guest play generates an in-memory `Guest#NNNN` name for the current page load.
-Accounts are not implemented. Quick Match is the only available online mode;
-Create Game and Find Game remain visible as clearly unavailable future modes.
+Accounts persist in PostgreSQL and are optional: guests can queue, host, and
+join. Quick Match, Create Game, and Find Game are all available. Only the Quick
+Match rules panel is account-gated, and only to admins, because a proposal
+there binds a stranger; a host sets the rules of a game they own.
 
 ## Hierarchy and status
 
