@@ -1,8 +1,8 @@
-import { clampGameConfig } from '@hidden/game-core'
 import {
-  DEFAULT_MATCH_RULES,
-  type MatchRules,
-} from './matchRules'
+  clampGameConfig,
+  DEFAULT_GAME_CONFIG,
+  type GameConfig,
+} from '@hidden/game-core'
 import type { MatchConfig } from './types'
 import type { Screen } from './viewModel'
 
@@ -45,24 +45,19 @@ export function tryMarkOnlineTerminalScreen(
 // The server still sends only the three legacy rules. Knobs it does not yet
 // carry fall back to the default game, so an online match plays exactly as it
 // did before. Replaced by a straight config spread once the server migrates.
-export function createOnlineMatchConfig(rules: MatchRules): MatchConfig {
-  return {
-    ...clampGameConfig({
-      rounds: rules.rounds,
-      turnSeconds: rules.turnSeconds,
-      blindMode: rules.blindMode,
-    }),
-    isOnline: true,
-    hasAI: false,
-  }
+// Spreads the whole server config. Cherry-picking fields here silently
+// defaulted the rest, so the UI believed power-ups were on in a match whose
+// engine had them off.
+export function createOnlineMatchConfig(config: GameConfig): MatchConfig {
+  return { ...clampGameConfig(config), isOnline: true, hasAI: false }
 }
 
 export interface OnlineMatchEventState {
-  rules: MatchRules | null
+  config: GameConfig | null
 }
 
 type OnlineMatchEvent =
-  | { type: 'match-found'; rules: MatchRules }
+  | { type: 'match-found'; config: GameConfig }
   | { type: 'game-start'; isMyTurn: boolean }
 
 export type OnlineMatchEventTransition =
@@ -81,14 +76,14 @@ export function transitionOnlineMatchEvent(
   if (event.type === 'match-found') {
     return {
       type: event.type,
-      state: { rules: event.rules },
+      state: { config: event.config },
     }
   }
 
   return {
     type: event.type,
     state,
-    config: createOnlineMatchConfig(state.rules ?? DEFAULT_MATCH_RULES),
+    config: createOnlineMatchConfig(state.config ?? DEFAULT_GAME_CONFIG),
     isMyTurn: event.isMyTurn,
   }
 }

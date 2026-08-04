@@ -27,6 +27,7 @@ describe('online match flow', () => {
   it('builds online config exclusively from the server-resolved rules', () => {
     expect(
       createOnlineMatchConfig({
+        ...DEFAULT_GAME_CONFIG,
         rounds: 3,
         turnSeconds: 25,
         blindMode: false,
@@ -44,10 +45,10 @@ describe('online match flow', () => {
       hasAI: true,
     }
     const matchFound = transitionOnlineMatchEvent(
-      { rules: null },
+      { config: null },
       {
         type: 'match-found',
-        rules: { rounds: 4, turnSeconds: 18, blindMode: true },
+        config: { ...DEFAULT_GAME_CONFIG, rounds: 4, turnSeconds: 18, blindMode: true },
       },
     )
     if (matchFound.type !== 'match-found') {
@@ -65,7 +66,7 @@ describe('online match flow', () => {
     expect(gameStart).toEqual({
       type: 'game-start',
       state: {
-        rules: { rounds: 4, turnSeconds: 18, blindMode: true },
+        config: { ...DEFAULT_GAME_CONFIG, rounds: 4, turnSeconds: 18, blindMode: true },
       },
       config: {
         // Knobs the server does not yet transmit fall back to the defaults,
