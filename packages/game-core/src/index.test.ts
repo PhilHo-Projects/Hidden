@@ -3,6 +3,9 @@ import { describe, it } from 'node:test'
 
 import {
   CLASSIC_V1,
+  ENGINE_ID,
+  ENGINE_REVISION,
+  createTopology,
   DEFAULT_MATCH_RULES,
   MODE_REGISTRY,
   applyCommand,
@@ -442,5 +445,54 @@ describe('shared match rules', () => {
       clampMatchRules({ rounds: Number.NaN, turnSeconds: 'fast', blindMode: 1 }),
       DEFAULT_MATCH_RULES,
     )
+  })
+})
+
+// Written as a literal rather than imported from CLASSIC_V1 so it keeps
+// guarding the 3x3 board after the mode registry is deleted.
+const LEGACY_3X3_PATTERNS = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6],
+]
+
+describe('topology generation', () => {
+  it('reproduces the legacy 3x3 topology exactly, including pattern order', () => {
+    const topology = createTopology(3, 3)
+    assert.deepEqual(topology.locationIds, [0, 1, 2, 3, 4, 5, 6, 7, 8])
+    assert.deepEqual(topology.winningPatterns, LEGACY_3X3_PATTERNS)
+  })
+
+  it('numbers every cell of a larger board', () => {
+    assert.equal(createTopology(4, 3).locationIds.length, 16)
+    assert.equal(createTopology(5, 3).locationIds.length, 25)
+  })
+
+  it('emits every sliding window of the requested streak length', () => {
+    // 4x4 streak 4: 4 rows + 4 columns + 1 diagonal each way.
+    assert.equal(createTopology(4, 4).winningPatterns.length, 10)
+    // 4x4 streak 3: 4 rows x 2 + 4 columns x 2 + 4 diagonals each way.
+    assert.equal(createTopology(4, 3).winningPatterns.length, 24)
+  })
+
+  it('produces patterns of exactly the streak length', () => {
+    for (const pattern of createTopology(5, 4).winningPatterns) {
+      assert.equal(pattern.length, 4)
+    }
+  })
+
+  it('rejects a streak that cannot fit on the board', () => {
+    assert.throws(() => createTopology(3, 4), /streak/i)
+    assert.throws(() => createTopology(3, 1), /streak/i)
+  })
+
+  it('exposes the engine identity', () => {
+    assert.equal(ENGINE_ID, 'classic')
+    assert.equal(ENGINE_REVISION, 1)
   })
 })

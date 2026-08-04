@@ -33,6 +33,16 @@ MessagePack 3, Node 24.
 - Default configuration must reproduce today's game exactly. Any task that
   changes observable default behavior is a defect.
 
+## Correction: game-core test framework
+
+`packages/game-core` does **not** use Vitest. It runs `node --test` with
+`node:assert/strict` (`npm test` in that package). Task 1, 2, 3, and 8 test
+code below is written in Vitest style; translate it when implementing:
+`expect(a).toBe(b)` becomes `assert.equal(a, b)`, `toEqual` becomes
+`assert.deepEqual`, `toThrow(/x/)` becomes `assert.throws(fn, /x/)`, and
+`toHaveLength(n)` becomes `assert.equal(value.length, n)`. `describe` and `it`
+come from `node:test`. Only `server/` and `web/` use Vitest.
+
 ## Correction to the spec
 
 The spec states that `.unity-board-grid` hardcodes `repeat(3, ...)` in two
