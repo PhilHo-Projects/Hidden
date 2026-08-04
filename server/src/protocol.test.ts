@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { encode } from '@msgpack/msgpack'
 import { describe, expect, it } from 'vitest'
 import {
@@ -175,9 +176,12 @@ describe('decodeClientPacket', () => {
     ).toEqual({
       type: PacketType.MATCHMAKING_REQUEST,
       searching: true,
-      proposedRules: { rounds: 8, turnSeconds: 15, blindMode: false },
+      proposedConfig: { ...DEFAULT_GAME_CONFIG, rounds: 8, turnSeconds: 15, blindMode: false },
     })
 
+    // Config decoding is deliberately tolerant: a malformed field falls back
+    // to its default rather than discarding the whole proposal, so an older or
+    // buggy client degrades to the default game instead of failing to queue.
     expect(
       decodeClientPacket(
         encode([
@@ -186,6 +190,22 @@ describe('decodeClientPacket', () => {
           true,
           { rounds: 8, turnSeconds: 'bad', blindMode: false },
         ]),
+      ),
+    ).toEqual({
+      type: PacketType.MATCHMAKING_REQUEST,
+      searching: true,
+      proposedConfig: {
+        ...DEFAULT_GAME_CONFIG,
+        rounds: 8,
+        turnSeconds: DEFAULT_GAME_CONFIG.turnSeconds,
+        blindMode: false,
+      },
+    })
+
+    // A non-object proposal is still rejected outright.
+    expect(
+      decodeClientPacket(
+        encode([999, PacketType.MATCHMAKING_REQUEST, true, 'garbage']),
       ),
     ).toEqual({
       type: PacketType.MATCHMAKING_REQUEST,

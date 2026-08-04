@@ -1,15 +1,17 @@
 import {
   applyCommand,
   applyTimeout,
-  clampMatchRules,
+  clampGameConfig,
   createGame,
-  DEFAULT_MATCH_RULES,
+  DEFAULT_GAME_CONFIG,
+  ENGINE_ID,
+  ENGINE_REVISION,
   type DomainEvent,
+  type EngineRef,
   type GameCommand,
-  type GameSpec,
+  type GameConfig,
   type GameState,
-  type MatchRules,
-  type ModeRef,
+  type ResolvedGameSpec,
   type Seat,
 } from '@hidden/game-core'
 import { randomBytes, randomInt, randomUUID } from 'node:crypto'
@@ -62,7 +64,7 @@ export interface MatchRun {
   readonly id: string
   phase: MatchLifecyclePhase
   revision: number
-  readonly spec: GameSpec
+  readonly spec: ResolvedGameSpec
   state: GameState
   readonly commandCaches: readonly [
     Map<number, CachedCommand>,
@@ -80,7 +82,7 @@ export interface MatchRoom {
   ]
   phase: MatchLifecyclePhase
   readonly readySeats: Set<Seat>
-  readonly rules: MatchRules
+  readonly config: GameConfig
   currentRun: MatchRun | undefined
 }
 
@@ -90,15 +92,15 @@ export interface RoomFactoryInput {
     TrustedMatchParticipant,
     TrustedMatchParticipant,
   ]
-  readonly rules: MatchRules
+  readonly config: GameConfig
 }
 
 export type MatchRoomFactory = (input: RoomFactoryInput) => MatchRoom
 
 export interface GameStartDescriptor {
   readonly matchId: string
-  readonly mode: ModeRef
-  readonly rules: MatchRules
+  readonly engine: EngineRef
+  readonly config: GameConfig
   readonly seed: number
   readonly firstSeat: Seat
   readonly revision: 0
@@ -145,7 +147,7 @@ export interface MatchCoordinatorDependencies {
 
 interface QuickMatchEntry {
   readonly participant: QuickMatchParticipant
-  readonly proposedRules: MatchRules | undefined
+  readonly proposedConfig: GameConfig | undefined
 }
 
 function freezeParticipant(
@@ -160,15 +162,14 @@ function freezeParticipant(
   })
 }
 
-function freezeRules(rules: MatchRules): MatchRules {
-  return Object.freeze({ ...rules })
+function freezeConfig(config: GameConfig): GameConfig {
+  return Object.freeze({ ...config })
 }
 
-function freezeSpec(spec: GameSpec): GameSpec {
+function freezeSpec(spec: ResolvedGameSpec): ResolvedGameSpec {
   return Object.freeze({
     ...spec,
-    mode: Object.freeze({ ...spec.mode }),
-    rules: spec.rules,
+    engine: Object.freeze({ ...spec.engine }),
   })
 }
 
@@ -178,7 +179,7 @@ export function createMatchRoom(input: RoomFactoryInput): MatchRoom {
     participants: input.participants,
     phase: 'ready',
     readySeats: new Set(),
-    rules: input.rules,
+    config: input.config,
     currentRun: undefined,
   }
 }
@@ -216,7 +217,7 @@ export class MatchCoordinator {
 
   enqueueQuickMatch(
     participant: QuickMatchParticipant,
-    proposedRules?: MatchRules,
+    proposedConfig?: GameConfig,
   ): MatchRoom | undefined {
     if (this.roomByConnectionId.has(participant.connectionId)) {
       return undefined
@@ -229,8 +230,8 @@ export class MatchCoordinator {
     })
     this.matchmakingQueue.set(participant.connectionId, {
       participant: snapshot,
-      proposedRules: proposedRules
-        ? freezeRules(clampMatchRules(proposedRules))
+      proposedConfig: proposedConfig
+        ? freezeConfig(clampGameConfig(proposedConfig))
         : undefined,
     })
 
@@ -245,7 +246,7 @@ export class MatchCoordinator {
     this.matchmakingQueue.delete(second.participant.connectionId)
     return this.createRoom(
       [first.participant, second.participant],
-      first.proposedRules ?? second.proposedRules,
+      first.proposedConfig ?? second.proposedConfig,
     )
   }
 
@@ -255,7 +256,7 @@ export class MatchCoordinator {
 
   createRoom(
     participants: readonly [QuickMatchParticipant, QuickMatchParticipant],
-    proposedRules: MatchRules = DEFAULT_MATCH_RULES,
+    proposedConfig: GameConfig = DEFAULT_GAME_CONFIG,
   ): MatchRoom {
     const trustedParticipants = Object.freeze([
       freezeParticipant(participants[0], 0),
@@ -267,7 +268,7 @@ export class MatchCoordinator {
     const input: RoomFactoryInput = {
       id: this.dependencies.createUuid(),
       participants: trustedParticipants,
-      rules: freezeRules(clampMatchRules(proposedRules)),
+      config: freezeConfig(clampGameConfig(proposedConfig)),
     }
     const room = (this.dependencies.roomFactory ?? createMatchRoom)(input)
     this.roomsById.set(room.id, room)
@@ -785,10 +786,10 @@ export class MatchCoordinator {
 
     const startedAt = this.dependencies.now()
     const turnTimeRemainingMs =
-      MATCH_START_GRACE_MS + room.rules.turnSeconds * 1_000
+      MATCH_START_GRACE_MS + room.config.turnSeconds * 1_000
     const spec = freezeSpec({
-      mode: { id: 'classic', revision: 1 },
-      rules: room.rules,
+      engine: { id: ENGINE_ID, revision: ENGINE_REVISION },
+      config: room.config,
       seed: this.dependencies.createSeed() >>> 0,
       firstSeat: this.dependencies.chooseFirstSeat(),
     })
@@ -813,8 +814,8 @@ export class MatchCoordinator {
     )!.connectionId
     const descriptor: GameStartDescriptor = Object.freeze({
       matchId: run.id,
-      mode: spec.mode,
-      rules: spec.rules,
+      engine: spec.engine,
+      config: spec.config,
       seed: spec.seed,
       firstSeat: spec.firstSeat,
       revision: 0,
@@ -826,7 +827,7 @@ export class MatchCoordinator {
 
   private resetPlacementWindow(room: MatchRoom, run: MatchRun) {
     this.clearRoomTimer(room)
-    const duration = room.rules.turnSeconds * 1_000
+    const duration = room.config.turnSeconds * 1_000
     run.deadline = this.dependencies.now() + duration
     this.scheduleRunTimer(room, run, duration)
   }

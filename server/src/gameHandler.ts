@@ -5,7 +5,7 @@ import {
   MatchCoordinator,
   type GameUpdateDelivery,
 } from './matchCoordinator'
-import { type MatchRules } from './matchRules'
+import { type GameConfig } from './matchRules'
 import {
   decodeClientPacket,
   encodePacket,
@@ -196,7 +196,7 @@ export class GameHandler {
         this.updateMatchmaking(
           session,
           packet.searching,
-          packet.proposedRules,
+          packet.proposedConfig,
         )
         break
       case PacketType.READY_STATE:
@@ -251,19 +251,19 @@ export class GameHandler {
   private updateMatchmaking(
     session: ClientSession,
     searching: boolean,
-    proposedRules?: MatchRules,
+    proposedConfig?: GameConfig,
   ) {
     if (!searching) {
       this.matchCoordinator.cancelQuickMatch(session.id)
       return
     }
 
-    let trustedRules: MatchRules | undefined
-    if (proposedRules) {
+    let trustedConfig: GameConfig | undefined
+    if (proposedConfig) {
       if (session.role === 'admin') {
-        trustedRules = proposedRules
+        trustedConfig = proposedConfig
       } else {
-        this.options.logger('debug', 'matchmaking.rules_ignored', {
+        this.options.logger('debug', 'matchmaking.config_ignored', {
           clientId: session.id,
         })
       }
@@ -279,7 +279,7 @@ export class GameHandler {
         connectionId: session.id,
         username: session.username,
       },
-      trustedRules,
+      trustedConfig,
     )
     if (!room) {
       return
@@ -295,12 +295,12 @@ export class GameHandler {
       }
       this.lobby.delete(playerId)
       player.roomId = room.id
-      this.send(player, [0, PacketType.MATCH_FOUND, room.id, room.rules])
+      this.send(player, [0, PacketType.MATCH_FOUND, room.id, room.config])
     }
     this.options.logger('info', 'match.created', {
       roomId: room.id,
       playerIds,
-      rules: room.rules,
+      config: room.config,
     })
   }
 

@@ -5,7 +5,7 @@ import type {
   RejectionReason,
   Seat,
 } from '@hidden/game-core'
-import { decodeMatchRules, type MatchRules } from './matchRules'
+import { decodeGameConfig, type GameConfig } from './matchRules'
 
 export enum PacketType {
   ID_ASSIGN = 2,
@@ -73,7 +73,7 @@ export type ClientPacket =
   | {
       type: PacketType.MATCHMAKING_REQUEST
       searching: boolean
-      proposedRules?: MatchRules
+      proposedConfig?: GameConfig
     }
   | { type: PacketType.READY_STATE; ready: boolean }
   | { type: PacketType.GAME_MOVE; index: number; color: PaintColor }
@@ -245,11 +245,11 @@ export function decodeClientPacket(bytes: Uint8Array): ClientPacket {
     case PacketType.ROOM_LEAVE:
       return { type, roomId: assertRoomId(packet[2]) }
     case PacketType.MATCHMAKING_REQUEST: {
-      const proposedRules = decodeMatchRules(packet[3])
+      const proposedConfig = decodeGameConfig(packet[3])
       return {
         type,
         searching: assertBoolean(packet[2], 'Searching state'),
-        ...(proposedRules ? { proposedRules } : {}),
+        ...(proposedConfig ? { proposedConfig } : {}),
       }
     }
     case PacketType.READY_STATE:

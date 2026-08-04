@@ -1,3 +1,4 @@
+import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import {
   applyCommand,
   applyTimeout,
@@ -63,13 +64,13 @@ describe('MatchCoordinator discovery and trusted rooms', () => {
     })
     const coordinator = new MatchCoordinator(dependencies)
     const mutableFirst = { ...firstParticipant }
-    const proposedRules = {
+    const proposedConfig = {
       rounds: 999,
       turnSeconds: 0,
       blindMode: false,
     } satisfies MatchRules
 
-    expect(coordinator.enqueueQuickMatch(mutableFirst, proposedRules)).toBeUndefined()
+    expect(coordinator.enqueueQuickMatch(mutableFirst, proposedConfig)).toBeUndefined()
     const room = coordinator.enqueueQuickMatch(secondParticipant)
 
     expect(roomFactory).toHaveBeenCalledOnce()
@@ -79,7 +80,7 @@ describe('MatchCoordinator discovery and trusted rooms', () => {
         { ...firstParticipant, seat: 0 },
         { accountId: undefined, ...secondParticipant, seat: 1 },
       ],
-      rules: { rounds: 20, turnSeconds: 2, blindMode: false },
+      config: { ...DEFAULT_GAME_CONFIG, rounds: 20, turnSeconds: 2, blindMode: false },
     })
     expect(room?.id).toBe('stable-room-id')
     expect(coordinator.getRoomForConnection(11)).toBe(room)
@@ -93,13 +94,13 @@ describe('MatchCoordinator discovery and trusted rooms', () => {
     expect(room?.participants[1]?.accountId).toBeUndefined()
     expect(Object.isFrozen(room?.participants)).toBe(true)
     expect(Object.isFrozen(room?.participants[0])).toBe(true)
-    expect(Object.isFrozen(room?.rules)).toBe(true)
+    expect(Object.isFrozen(room?.config)).toBe(true)
 
     mutableFirst.accountId = 'mutated-account'
     mutableFirst.username = 'Mutated_Name'
-    proposedRules.rounds = 1
+    proposedConfig.rounds = 1
     expect(room?.participants[0]).toMatchObject(firstParticipant)
-    expect(room?.rules).toEqual({ rounds: 20, turnSeconds: 2, blindMode: false })
+    expect(room?.config).toEqual({ ...DEFAULT_GAME_CONFIG, rounds: 20, turnSeconds: 2, blindMode: false })
   })
 })
 
@@ -152,8 +153,8 @@ describe('MatchCoordinator run lifecycle', () => {
     expect(start.run.revision).toBe(0)
     expect(start.run.deadline).toBe(19_000)
     expect(start.run.spec).toEqual({
-      mode: { id: 'classic', revision: 1 },
-      rules: { rounds: 8, turnSeconds: 15, blindMode: false },
+      engine: { id: 'classic', revision: 1 },
+      config: { ...DEFAULT_GAME_CONFIG, rounds: 8, turnSeconds: 15, blindMode: false },
       seed: 5,
       firstSeat: 1,
     })
@@ -164,8 +165,8 @@ describe('MatchCoordinator run lifecycle', () => {
     expect(start.run.state).toEqual(createGame(start.run.spec))
     expect(start.descriptor).toEqual({
       matchId: 'run-uuid-one',
-      mode: { id: 'classic', revision: 1 },
-      rules: { rounds: 8, turnSeconds: 15, blindMode: false },
+      engine: { id: 'classic', revision: 1 },
+      config: { ...DEFAULT_GAME_CONFIG, rounds: 8, turnSeconds: 15, blindMode: false },
       seed: 5,
       firstSeat: 1,
       revision: 0,

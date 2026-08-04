@@ -7,7 +7,7 @@ import WebSocket from 'ws'
 import type { AuthServiceLike } from './auth/http'
 import type { AuthenticatedUser } from './auth/service'
 import { createHiddenServer, type HiddenServer } from './app'
-import { DEFAULT_MATCH_RULES } from './matchRules'
+import { DEFAULT_GAME_CONFIG } from './matchRules'
 import { PacketType } from './protocol'
 import { MatchCoordinator } from './matchCoordinator'
 import {
@@ -152,7 +152,7 @@ async function queueProbe(
   options: {
     cookie?: string
     guestUsername?: string
-    proposedRules?: unknown
+    proposedConfig?: unknown
   } = {},
 ) {
   const probe = await connectProbe(
@@ -174,7 +174,7 @@ async function queueProbe(
     999,
     PacketType.MATCHMAKING_REQUEST,
     true,
-    ...(options.proposedRules === undefined ? [] : [options.proposedRules]),
+    ...(options.proposedConfig === undefined ? [] : [options.proposedConfig]),
   ])
   return probe
 }
@@ -275,8 +275,8 @@ describe.sequential('Hidden server', () => {
     expect(firstStart[3]).toEqual(secondStart[3])
     expect(firstStart[3]).toMatchObject({
       matchId: expect.any(String),
-      mode: { id: 'classic', revision: 1 },
-      rules: DEFAULT_MATCH_RULES,
+      engine: { id: 'classic', revision: 1 },
+      config: DEFAULT_GAME_CONFIG,
       seed: expect.any(Number),
       firstSeat: firstStart[2] === firstId ? 0 : 1,
       revision: 0,
@@ -412,8 +412,8 @@ describe.sequential('Hidden server', () => {
     expect(firstStart[3]).toEqual(secondStart[3])
     const descriptor = firstStart[3] as {
       matchId: string
-      mode: { id: 'classic'; revision: 1 }
-      rules: typeof DEFAULT_MATCH_RULES
+      engine: { id: 'classic'; revision: 1 }
+      config: typeof DEFAULT_GAME_CONFIG
       seed: number
       firstSeat: Seat
       revision: 0
@@ -498,8 +498,8 @@ describe.sequential('Hidden server', () => {
     await sendAccepted(0, { type: 'place', locationId: 3, symbol: 'scissors' })
 
     const activeTimer = [...scheduled].reverse().find((timer) => !timer.cleared)
-    expect(activeTimer?.delayMs).toBe(DEFAULT_MATCH_RULES.turnSeconds * 1_000)
-    now += DEFAULT_MATCH_RULES.turnSeconds * 1_000
+    expect(activeTimer?.delayMs).toBe(DEFAULT_GAME_CONFIG.turnSeconds * 1_000)
+    now += DEFAULT_GAME_CONFIG.turnSeconds * 1_000
     activeTimer?.callback()
     const [timeoutFirst, timeoutSecond] = await Promise.all([
       first.waitFor(PacketType.GAME_UPDATE),
@@ -640,7 +640,7 @@ describe.sequential('Hidden server', () => {
     })
     const player = await queueProbe(port, {
       cookie: `hidden_session=${PLAYER_SESSION_TOKEN}`,
-      proposedRules: { rounds: 3, turnSeconds: 30, blindMode: false },
+      proposedConfig: { rounds: 3, turnSeconds: 30, blindMode: false },
     })
     const guest = await queueProbe(port, { guestUsername: 'Guest#1001' })
 
@@ -649,8 +649,8 @@ describe.sequential('Hidden server', () => {
       guest.waitFor(PacketType.MATCH_FOUND),
     ])
 
-    expect(playerMatch[3]).toEqual(DEFAULT_MATCH_RULES)
-    expect(guestMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    expect(playerMatch[3]).toEqual(DEFAULT_GAME_CONFIG)
+    expect(guestMatch[3]).toEqual(DEFAULT_GAME_CONFIG)
     player.close()
     guest.close()
   })
@@ -674,7 +674,7 @@ describe.sequential('Hidden server', () => {
     })
     const admin = await queueProbe(port, {
       cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
-      proposedRules: { rounds: 999, turnSeconds: 0, blindMode: false },
+      proposedConfig: { rounds: 999, turnSeconds: 0, blindMode: false },
     })
     const guest = await queueProbe(port, { guestUsername: 'Guest#1002' })
 
@@ -683,14 +683,14 @@ describe.sequential('Hidden server', () => {
       guest.waitFor(PacketType.MATCH_FOUND),
     ])
 
-    const expected = { rounds: 20, turnSeconds: 2, blindMode: false }
+    const expected = { ...DEFAULT_GAME_CONFIG, rounds: 20, turnSeconds: 2, blindMode: false }
     expect(adminMatch[3]).toEqual(expected)
     expect(guestMatch[3]).toEqual(expected)
     admin.close()
     guest.close()
   })
 
-  it('defaults a malformed admin proposal without closing the socket', async () => {
+  it('defaults only the malformed fields of an admin proposal without closing the socket', async () => {
     const authService = authServiceForSessions(
       new Map([
         [
@@ -709,7 +709,7 @@ describe.sequential('Hidden server', () => {
     })
     const admin = await queueProbe(port, {
       cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
-      proposedRules: { rounds: 4, turnSeconds: 'bad', blindMode: true },
+      proposedConfig: { rounds: 4, turnSeconds: 'bad', blindMode: true },
     })
     const guest = await queueProbe(port, { guestUsername: 'Guest#1003' })
 
@@ -718,8 +718,16 @@ describe.sequential('Hidden server', () => {
       guest.waitFor(PacketType.MATCH_FOUND),
     ])
 
-    expect(adminMatch[3]).toEqual(DEFAULT_MATCH_RULES)
-    expect(guestMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    // Only the malformed field falls back. `rounds: 4` is valid and survives,
+    // so a client with one bad value still gets the rest of its proposal.
+    const expected = {
+      ...DEFAULT_GAME_CONFIG,
+      rounds: 4,
+      turnSeconds: DEFAULT_GAME_CONFIG.turnSeconds,
+      blindMode: true,
+    }
+    expect(adminMatch[3]).toEqual(expected)
+    expect(guestMatch[3]).toEqual(expected)
     expect(admin.socket.readyState).toBe(WebSocket.OPEN)
     admin.close()
     guest.close()
@@ -752,11 +760,11 @@ describe.sequential('Hidden server', () => {
     })
     const first = await queueProbe(port, {
       cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
-      proposedRules: { rounds: 4, turnSeconds: 12, blindMode: false },
+      proposedConfig: { rounds: 4, turnSeconds: 12, blindMode: false },
     })
     const second = await queueProbe(port, {
       cookie: `hidden_session=${SECOND_ADMIN_SESSION_TOKEN}`,
-      proposedRules: { rounds: 9, turnSeconds: 30, blindMode: true },
+      proposedConfig: { rounds: 9, turnSeconds: 30, blindMode: true },
     })
 
     const [firstMatch, secondMatch] = await Promise.all([
@@ -764,7 +772,7 @@ describe.sequential('Hidden server', () => {
       second.waitFor(PacketType.MATCH_FOUND),
     ])
 
-    const expected = { rounds: 4, turnSeconds: 12, blindMode: false }
+    const expected = { ...DEFAULT_GAME_CONFIG, rounds: 4, turnSeconds: 12, blindMode: false }
     expect(firstMatch[3]).toEqual(expected)
     expect(secondMatch[3]).toEqual(expected)
     first.close()
@@ -790,7 +798,7 @@ describe.sequential('Hidden server', () => {
     })
     const admin = await queueProbe(port, {
       cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
-      proposedRules: { rounds: 4, turnSeconds: 20, blindMode: false },
+      proposedConfig: { rounds: 4, turnSeconds: 20, blindMode: false },
     })
     admin.send([999, PacketType.MATCHMAKING_REQUEST, false])
     admin.send([999, PacketType.MATCHMAKING_REQUEST, true])
@@ -801,8 +809,8 @@ describe.sequential('Hidden server', () => {
       guest.waitFor(PacketType.MATCH_FOUND),
     ])
 
-    expect(adminMatch[3]).toEqual(DEFAULT_MATCH_RULES)
-    expect(guestMatch[3]).toEqual(DEFAULT_MATCH_RULES)
+    expect(adminMatch[3]).toEqual(DEFAULT_GAME_CONFIG)
+    expect(guestMatch[3]).toEqual(DEFAULT_GAME_CONFIG)
     admin.close()
     guest.close()
   })
