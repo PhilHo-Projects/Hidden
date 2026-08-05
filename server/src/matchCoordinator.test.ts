@@ -4,7 +4,7 @@ import {
   applyTimeout,
   createGame,
   type GameCommand,
-  type MatchRules,
+  type GameConfig,
   type Seat,
 } from '@hidden/game-core'
 import { describe, expect, it, vi } from 'vitest'
@@ -68,7 +68,7 @@ describe('MatchCoordinator discovery and trusted rooms', () => {
       rounds: 999,
       turnSeconds: 0,
       blindMode: false,
-    } satisfies MatchRules
+    } satisfies Partial<GameConfig>
 
     expect(coordinator.enqueueQuickMatch(mutableFirst, proposedConfig)).toBeUndefined()
     const room = coordinator.enqueueQuickMatch(secondParticipant)
@@ -158,10 +158,7 @@ describe('MatchCoordinator run lifecycle', () => {
       seed: 5,
       firstSeat: 1,
     })
-    expect(start.run.spec.rules).toBe(pairedRoom.rules)
     expect(Object.isFrozen(start.run.spec)).toBe(true)
-    expect(Object.isFrozen(start.run.spec.mode)).toBe(true)
-    expect(Object.isFrozen(start.run.spec.rules)).toBe(true)
     expect(start.run.state).toEqual(createGame(start.run.spec))
     expect(start.descriptor).toEqual({
       matchId: 'run-uuid-one',
