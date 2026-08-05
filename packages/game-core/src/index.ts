@@ -5,60 +5,6 @@ export type LocationId = number
 export type ClassicSymbol = 'rock' | 'paper' | 'scissors'
 export type PowerupKey = 'shield' | 'reveal' | 'extraTurn'
 
-export interface MatchRules {
-  readonly rounds: number
-  readonly turnSeconds: number
-  readonly blindMode: boolean
-}
-
-export const DEFAULT_MATCH_RULES: Readonly<MatchRules> = Object.freeze({
-  rounds: 6,
-  turnSeconds: 10,
-  blindMode: true,
-})
-
-export function decodeMatchRules(value: unknown): MatchRules | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined
-  }
-
-  const candidate = value as Record<string, unknown>
-  if (
-    typeof candidate.rounds !== 'number' ||
-    !Number.isFinite(candidate.rounds) ||
-    typeof candidate.turnSeconds !== 'number' ||
-    !Number.isFinite(candidate.turnSeconds) ||
-    typeof candidate.blindMode !== 'boolean'
-  ) {
-    return undefined
-  }
-
-  return {
-    rounds: candidate.rounds,
-    turnSeconds: candidate.turnSeconds,
-    blindMode: candidate.blindMode,
-  }
-}
-
-export function clampMatchRules(
-  value: Partial<Record<keyof MatchRules, unknown>> | null | undefined,
-): MatchRules {
-  const rounds = finiteNumberOrDefault(value?.rounds, DEFAULT_MATCH_RULES.rounds)
-  const turnSeconds = finiteNumberOrDefault(
-    value?.turnSeconds,
-    DEFAULT_MATCH_RULES.turnSeconds,
-  )
-
-  return {
-    rounds: Math.min(20, Math.max(1, Math.trunc(rounds))),
-    turnSeconds: Math.min(60, Math.max(2, Math.trunc(turnSeconds))),
-    blindMode:
-      typeof value?.blindMode === 'boolean'
-        ? value.blindMode
-        : DEFAULT_MATCH_RULES.blindMode,
-  }
-}
-
 function finiteNumberOrDefault(value: unknown, fallback: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
@@ -233,43 +179,17 @@ export function decodeGameConfig(value: unknown): GameConfig | undefined {
   return clampGameConfig(value)
 }
 
-export interface ModeRef {
-  readonly id: 'classic'
-  readonly revision: 1
-}
-
 export interface GameSpec {
-  readonly engine?: EngineRef
-  readonly config?: GameConfig
-  /** @deprecated Legacy shape, removed once server and web have migrated. */
-  readonly mode?: ModeRef
-  /** @deprecated Legacy shape, removed once server and web have migrated. */
-  readonly rules?: MatchRules
-  readonly seed: number
-  readonly firstSeat: Seat
-}
-
-export interface ResolvedGameSpec {
   readonly engine: EngineRef
   readonly config: GameConfig
   readonly seed: number
   readonly firstSeat: Seat
 }
 
-// Accepts either the legacy `{ mode, rules }` shape or the current
-// `{ engine, config }` shape. Deleted once server and web have migrated.
-function resolveSpec(spec: GameSpec): ResolvedGameSpec {
-  const engine = spec.engine ?? { id: ENGINE_ID, revision: ENGINE_REVISION }
-  if (engine.id !== ENGINE_ID || engine.revision !== ENGINE_REVISION) {
-    throw new Error(
-      `Unsupported engine ${engine.id}@${engine.revision}; this build runs ${ENGINE_ID}@${ENGINE_REVISION}.`,
-    )
-  }
-  const config = spec.config
-    ? clampGameConfig(spec.config)
-    : clampGameConfig({ ...DEFAULT_GAME_CONFIG, ...(spec.rules ?? {}) })
-  return { engine, config, seed: spec.seed >>> 0, firstSeat: spec.firstSeat }
-}
+// `GameState.spec` and the server's `MatchRun` refer to the spec after
+// `createGame` has normalised it. Normalisation no longer changes the shape,
+// so this is an alias rather than a second interface.
+export type ResolvedGameSpec = GameSpec
 
 export interface ClassicTopology {
   readonly locationIds: readonly LocationId[]
@@ -285,8 +205,6 @@ export interface ClassicMode {
   readonly powerupBySymbol: Readonly<Record<ClassicSymbol, PowerupKey>>
 }
 
-export type ModeRegistry = Readonly<Record<'classic@1', ClassicMode>>
-
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value)
@@ -296,39 +214,6 @@ function deepFreeze<T>(value: T): T {
   }
   return value
 }
-
-export const CLASSIC_V1: ClassicMode = deepFreeze({
-  id: 'classic',
-  revision: 1,
-  randomAlgorithm: 'mulberry32-v1',
-  topology: {
-    locationIds: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-    winningPatterns: [
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8],
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8],
-      [0, 4, 8],
-      [2, 4, 6],
-    ],
-  },
-  defeats: {
-    rock: 'scissors',
-    paper: 'rock',
-    scissors: 'paper',
-  },
-  powerupBySymbol: {
-    rock: 'shield',
-    paper: 'reveal',
-    scissors: 'extraTurn',
-  },
-})
-
-export const MODE_REGISTRY: ModeRegistry = deepFreeze({
-  'classic@1': CLASSIC_V1,
-})
 
 export type GameCommand =
   | { readonly type: 'place'; readonly locationId: LocationId; readonly symbol: ClassicSymbol }
@@ -447,7 +332,17 @@ function buildMode(config: GameConfig): ClassicMode {
 }
 
 export function createGame(spec: GameSpec): GameState {
-  const resolved = resolveSpec(spec)
+  if (spec.engine.id !== ENGINE_ID || spec.engine.revision !== ENGINE_REVISION) {
+    throw new Error(
+      `Unsupported engine ${spec.engine.id}@${spec.engine.revision}; this build runs ${ENGINE_ID}@${ENGINE_REVISION}.`,
+    )
+  }
+  const resolved: ResolvedGameSpec = {
+    engine: spec.engine,
+    config: clampGameConfig(spec.config),
+    seed: spec.seed >>> 0,
+    firstSeat: spec.firstSeat,
+  }
   const mode = buildMode(resolved.config)
 
   return {

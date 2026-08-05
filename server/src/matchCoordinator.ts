@@ -253,7 +253,7 @@ export class MatchCoordinator {
 
   enqueueQuickMatch(
     participant: QuickMatchParticipant,
-    proposedConfig?: GameConfig,
+    proposedConfig?: Partial<GameConfig>,
   ): MatchRoom | undefined {
     if (this.roomByConnectionId.has(participant.connectionId)) {
       return undefined
