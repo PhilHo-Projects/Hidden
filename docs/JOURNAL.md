@@ -4,6 +4,36 @@ Newest first. One entry per stretch of work. Keep entries short — the git log
 holds the detail, and this file exists so nobody has to read a 1,600-line plan
 to learn what happened.
 
+## 2026-08-05 — Mode registry and MatchRules deleted
+
+The last unfinished item from the parameterization work. `GameSpec` is now a
+required `{ engine, config, seed, firstSeat }` and the legacy `{ mode, rules }`
+shim in `createGame` is gone, along with `ModeRef`, `ModeRegistry`,
+`MODE_REGISTRY`, `CLASSIC_V1`, `MatchRules`, `DEFAULT_MATCH_RULES`,
+`decodeMatchRules`, and `clampMatchRules`.
+
+Done in two phases so every commit stays green: migrate all callers off the
+legacy shape while the shim still accepts both, then delete.
+
+Three things surfaced that the roadmap had not recorded:
+
+- `app.test.ts` and `coreAdapter.test.ts` were still building canonical state
+  through the legacy shape. In `app.test.ts` the local descriptor type has no
+  `mode` or `rules` field, so both read `undefined` and the test passed only
+  because the shim fell back to the defaults.
+- Three assertions in `matchCoordinator.test.ts` read `.rules` and `.mode` off
+  a `ResolvedGameSpec` and a `MatchRoom`, neither of which has them. They
+  compared `undefined` to `undefined` and called `Object.isFrozen(undefined)`,
+  which is `true`. They had never tested anything.
+- `web/src/game/matchRules.ts` was dead, imported by nothing but its own test.
+
+Worth noting why that rot survived: `packages/game-core/tsconfig.json` and
+`server/tsconfig.json` both exclude `src/**/*.test.ts`, so core and server
+tests are never typechecked. Only `web` typechecks its tests.
+
+Engine revision deliberately unchanged — no placement, scoring, or RNG
+behaviour was touched.
+
 ## 2026-08-04 — Private lobby
 
 Create Game and Find Game work. Any player can host, guests included.

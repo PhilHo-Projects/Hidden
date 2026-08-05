@@ -1,6 +1,6 @@
 # Hidden roadmap
 
-Last reviewed: 2026-08-04.
+Last reviewed: 2026-08-05.
 
 Read this file to know where the project stands and what to do next. History
 lives in [JOURNAL.md](JOURNAL.md); finished plans are in
@@ -40,23 +40,7 @@ every past match silently replay into a different game.
 
 ## Next up
 
-### 1. Delete the mode registry and MatchRules
-
-The only unfinished item from the parameterization work. `packages/game-core`
-still exports `ModeRef`, `ModeRegistry`, `MODE_REGISTRY`, `CLASSIC_V1`,
-`MatchRules`, `DEFAULT_MATCH_RULES`, `decodeMatchRules`, and `clampMatchRules`,
-plus a `resolveSpec` shim in `createGame` that accepts the legacy
-`{ mode, rules }` spec shape.
-
-Nothing in the runtime path uses any of it. A few tests still do. Make
-`GameSpec` non-optional `{ engine, config, seed, firstSeat }` and delete the
-shim.
-
-Keep the `createTopology(3, 3)` test that asserts the legacy 3x3 pattern order
-— it uses a literal, not `CLASSIC_V1`, and it is the guard that the original
-game still plays identically.
-
-### 2. Match history and replay
+### 1. Match history and replay
 
 The hard prerequisite is already delivered: matches are deterministic from
 seed plus commands, and every match has a UUID and an engine revision.
@@ -77,7 +61,7 @@ Deliberately ephemeral for now. No database work:
 Durable, deploy-proof history is a later concern, and only worth building once
 the rules are settled.
 
-### 3. Simultaneous conflict resolution
+### 2. Simultaneous conflict resolution
 
 Conflicts resolve at placement time today, so placing on a contested cell
 instantly reveals that it was contested. That information leak is what the
@@ -89,7 +73,7 @@ it restructures turn flow and collides with `extraTurn` and shield timing.
 
 Play real games with it on before deciding this is worth the rebuild.
 
-### 4. Match durability and reconnect
+### 3. Match durability and reconnect
 
 Every deploy, restart, or network drop destroys in-progress matches. Real, but
 low: a match runs about two minutes, so an interrupted one is cheap to abandon.
@@ -101,7 +85,7 @@ cheaper than building durable match state on its own.
 Client-level reconnect, where the process still holds the room, is independent
 and can be done any time as a UX improvement.
 
-### 5. Horizontal scaling
+### 4. Horizontal scaling
 
 Needs shared matchmaking and match state first. Do not raise the replica count
 before that exists. Raising `MAX_CONNECTIONS` on the single replica is the
