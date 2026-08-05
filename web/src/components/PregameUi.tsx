@@ -1,7 +1,13 @@
 import type { ButtonHTMLAttributes } from 'react'
 import type { GameConfig } from '@hidden/game-core'
 import type { AuthUser } from '../auth/authClient'
-import { POWERUP_LABELS } from '../game/constants'
+import { RuleFlag, RuleSegments, RuleStepper } from './RuleControls'
+import {
+  RULE_SECTIONS,
+  type FlagField,
+  type RuleField,
+  type RuleSection,
+} from './ruleSchema'
 
 export type StatusTone = 'neutral' | 'working' | 'success' | 'error'
 
@@ -70,138 +76,103 @@ export function GuestIdentity({ name }: GuestIdentityProps) {
 export interface AdvancedSettingsProps {
   config: GameConfig
   onConfigChange: (patch: Partial<GameConfig>) => void
+  /** Defaults to the shipped rules; overridable so a caller can stage new ones. */
+  sections?: readonly RuleSection[]
 }
 
-const BOARD_SIZES = [3, 4, 5] as const
-const POWERUP_KEYS = ['shield', 'reveal', 'extraTurn'] as const
+function RuleFlags({
+  fields,
+  config,
+  onConfigChange,
+}: {
+  fields: readonly RuleField[]
+  config: GameConfig
+  onConfigChange: (patch: Partial<GameConfig>) => void
+}) {
+  const flags = fields.filter((field): field is FlagField => field.kind === 'flag')
+
+  return (
+    <>
+      <div className="rule-chips">
+        {flags.map((field) => (
+          <RuleFlag
+            key={field.id}
+            field={field}
+            config={config}
+            onConfigChange={onConfigChange}
+          />
+        ))}
+      </div>
+      {/*
+       * Sub-rules render below the whole row rather than beside their parent, so
+       * a parent added in the middle of a group cannot split the row in half.
+       */}
+      {flags
+        .filter((field) => field.children?.length && field.value(config))
+        .map((parent) => (
+          <div
+            key={parent.id}
+            className="rule-chips rule-chips-nested"
+            role="group"
+            aria-label={`${parent.label} options`}
+          >
+            {parent.children?.map((child) => (
+              <RuleFlag
+                key={child.id}
+                field={child}
+                config={config}
+                onConfigChange={onConfigChange}
+              />
+            ))}
+          </div>
+        ))}
+    </>
+  )
+}
 
 export function AdvancedSettings({
   config,
   onConfigChange,
+  sections = RULE_SECTIONS,
 }: AdvancedSettingsProps) {
   return (
     <details className="advanced-panel">
       <summary>Advanced</summary>
-      <div className="advanced-grid">
-        <label>
-          <span>Rounds</span>
-          <input
-            type="number"
-            min={1}
-            max={20}
-            value={config.rounds}
-            onChange={(event) =>
-              onConfigChange({ rounds: Math.max(1, Number(event.target.value) || 1) })
-            }
-          />
-        </label>
-        <label>
-          <span>Timer</span>
-          <input
-            type="number"
-            min={2}
-            max={60}
-            value={config.turnSeconds}
-            onChange={(event) =>
-              onConfigChange({
-                turnSeconds: Math.max(2, Number(event.target.value) || 2),
-              })
-            }
-          />
-        </label>
-        <div className="toggle-row">
-          <span>Blind</span>
-          <button
-            type="button"
-            className={`unity-toggle ${config.blindMode ? 'unity-toggle-on' : ''}`}
-            aria-pressed={config.blindMode}
-            onClick={() => onConfigChange({ blindMode: !config.blindMode })}
-          >
-            <span />
-          </button>
-        </div>
-        <div className="toggle-row">
-          <span>Board</span>
-          <div className="board-size-choice">
-            {BOARD_SIZES.map((size) => (
-              <button
-                key={size}
-                type="button"
-                className={`unity-toggle ${config.boardSize === size ? 'unity-toggle-on' : ''}`}
-                aria-pressed={config.boardSize === size}
-                onClick={() =>
-                  onConfigChange(
-                    // A 5-streak is illegal on a 3x3, so shrink it with the board.
-                    config.streak > size
-                      ? { boardSize: size, streak: size }
-                      : { boardSize: size },
-                  )
-                }
-              >
-                {size}x{size}
-              </button>
-            ))}
-          </div>
-        </div>
-        <label>
-          <span>Line</span>
-          <input
-            type="number"
-            min={2}
-            max={config.boardSize}
-            value={config.streak}
-            onChange={(event) =>
-              onConfigChange({ streak: Number(event.target.value) || 2 })
-            }
-          />
-        </label>
-        <div className="toggle-row">
-          <span>Power-ups</span>
-          <button
-            type="button"
-            className={`unity-toggle ${config.powerupsEnabled ? 'unity-toggle-on' : ''}`}
-            aria-pressed={config.powerupsEnabled}
-            onClick={() =>
-              onConfigChange({ powerupsEnabled: !config.powerupsEnabled })
-            }
-          >
-            <span />
-          </button>
-        </div>
-        {config.powerupsEnabled
-          ? POWERUP_KEYS.map((key) => (
-              <div className="toggle-row" key={key}>
-                <span>{POWERUP_LABELS[key]}</span>
-                <button
-                  type="button"
-                  className={`unity-toggle ${config.powerups[key] ? 'unity-toggle-on' : ''}`}
-                  aria-pressed={config.powerups[key]}
-                  onClick={() =>
-                    onConfigChange({
-                      powerups: { ...config.powerups, [key]: !config.powerups[key] },
-                    })
-                  }
-                >
-                  <span />
-                </button>
+      <div className="rule-sections">
+        {sections.map((section) => (
+          <section key={section.id} className="rule-section">
+            {section.label ? (
+              <h3 className="rule-section-label">{section.label}</h3>
+            ) : null}
+            {section.layout === 'flags' ? (
+              <RuleFlags
+                fields={section.fields}
+                config={config}
+                onConfigChange={onConfigChange}
+              />
+            ) : (
+              <div className="rule-pair">
+                {section.fields.map((field) =>
+                  field.kind === 'choice' ? (
+                    <RuleSegments
+                      key={field.id}
+                      field={field}
+                      config={config}
+                      onConfigChange={onConfigChange}
+                    />
+                  ) : field.kind === 'number' ? (
+                    <RuleStepper
+                      key={field.id}
+                      field={field}
+                      config={config}
+                      onConfigChange={onConfigChange}
+                    />
+                  ) : null,
+                )}
               </div>
-            ))
-          : null}
-        <div className="toggle-row">
-          <span>No repeat</span>
-          <button
-            type="button"
-            className={`unity-toggle ${config.forbidImmediateRepeat ? 'unity-toggle-on' : ''}`}
-            aria-pressed={config.forbidImmediateRepeat}
-            onClick={() =>
-              onConfigChange({
-                forbidImmediateRepeat: !config.forbidImmediateRepeat,
-              })
-            }
-          >
-            <span />
-          </button>
-        </div>
+            )}
+          </section>
+        ))}
       </div>
     </details>
   )

@@ -14,6 +14,7 @@ import { AccountForm } from './components/AccountForm'
 import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
 import { PowerupTray } from './components/PowerupTray'
 import { ProfileMenu } from './components/ProfileMenu'
+import { RuleChip } from './components/RuleControls'
 import {
   ActionChoice,
   AdvancedSettings,
@@ -1242,17 +1243,18 @@ function App() {
               <p>Set the rules for your game, then host it.</p>
               {/* Ungated, unlike Quick Match: a host owns their own rules. */}
               <AdvancedSettings config={config} onConfigChange={applyConfigPatch} />
-              <div className="toggle-row">
-                <span>Private (code only)</span>
-                <button
-                  type="button"
-                  className={`unity-toggle ${isPrivateGame ? 'unity-toggle-on' : ''}`}
-                  aria-pressed={isPrivateGame}
-                  onClick={() => setIsPrivateGame(!isPrivateGame)}
-                >
-                  <span />
-                </button>
-              </div>
+              {/* Not a GameConfig rule, but it shares the panel's on/off vocabulary. */}
+              <section className="rule-section lobby-room-section">
+                <h3 className="rule-section-label">Room</h3>
+                <div className="rule-chips">
+                  <RuleChip
+                    id="isPrivateGame"
+                    label="Private (code only)"
+                    pressed={isPrivateGame}
+                    onToggle={() => setIsPrivateGame(!isPrivateGame)}
+                  />
+                </div>
+              </section>
               <BrushButton onClick={() => void hostGame()}>HOST GAME</BrushButton>
             </div>
           ) : null}
@@ -1283,43 +1285,60 @@ function App() {
           <GameMasthead compact />
           <GuestIdentity name={username} />
           {lobbyError ? <p className="lobby-error">{lobbyError}</p> : null}
-          <div className="lobby-list" aria-label="Open games">
-            {lobbyGames.length === 0 ? (
-              <p className="lobby-empty">No open games right now.</p>
-            ) : (
-              lobbyGames.map((game) => (
+          <div className="lobby-browser">
+            <section className="lobby-list-panel">
+              <h3 className="rule-section-label" id="lobby-list-label">
+                Open games{lobbyGames.length ? ` · ${lobbyGames.length}` : ''}
+              </h3>
+              {/* Fixed-height scroller: 3 games and 30 games occupy the same box. */}
+              <div className="lobby-list" aria-labelledby="lobby-list-label">
+                {lobbyGames.length === 0 ? (
+                  <p className="lobby-empty">No open games right now.</p>
+                ) : (
+                  lobbyGames.map((game) => (
+                    <button
+                      key={game.code}
+                      type="button"
+                      className="lobby-row"
+                      onClick={() => clientRef.current?.joinLobbyGame(game.code)}
+                    >
+                      <strong>{game.hostName}</strong>
+                      <MatchRulesSummary config={game.config} />
+                    </button>
+                  ))
+                )}
+              </div>
+            </section>
+            <div className="lobby-code-entry">
+              <label className="rule-section-label" htmlFor="lobby-join-code">
+                Join by code
+              </label>
+              <div className="lobby-code-fields">
+                <input
+                  id="lobby-join-code"
+                  value={joinCodeInput}
+                  maxLength={5}
+                  placeholder="ABC12"
+                  onChange={(event) =>
+                    setJoinCodeInput(event.target.value.toUpperCase())
+                  }
+                />
+                {/* Compact rather than brush: an inline field action, not navigation. */}
                 <button
-                  key={game.code}
                   type="button"
-                  className="lobby-row"
-                  onClick={() => clientRef.current?.joinLobbyGame(game.code)}
+                  className="lobby-join"
+                  disabled={joinCodeInput.length !== 5}
+                  onClick={() => {
+                    if (joinCodeInput.length === 5) {
+                      clientRef.current?.joinLobbyGame(joinCodeInput)
+                    }
+                  }}
                 >
-                  <strong>{game.hostName}</strong>
-                  <MatchRulesSummary config={game.config} />
+                  JOIN
                 </button>
-              ))
-            )}
+              </div>
+            </div>
           </div>
-          <label className="lobby-code-entry">
-            <span>Join by code</span>
-            <input
-              value={joinCodeInput}
-              maxLength={5}
-              placeholder="ABC12"
-              onChange={(event) =>
-                setJoinCodeInput(event.target.value.toUpperCase())
-              }
-            />
-            <BrushButton
-              onClick={() => {
-                if (joinCodeInput.length === 5) {
-                  clientRef.current?.joinLobbyGame(joinCodeInput)
-                }
-              }}
-            >
-              JOIN
-            </BrushButton>
-          </label>
           <BrushButton tone="red" onClick={leaveLobbyScreen}>
             BACK
           </BrushButton>
