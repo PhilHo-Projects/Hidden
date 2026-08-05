@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import {
-  CLASSIC_V1,
   ENGINE_ID,
   ENGINE_REVISION,
   createTopology,
@@ -10,19 +9,13 @@ import {
   decodeGameConfig,
   DEFAULT_GAME_CONFIG,
   type GameConfig,
-  DEFAULT_MATCH_RULES,
-  MODE_REGISTRY,
   applyCommand,
   applyTimeout,
-  clampMatchRules,
   createGame,
-  decodeMatchRules,
   type ApplyResult,
-  type ClassicMode,
   type GameCommand,
   type GameSpec,
   type GameState,
-  type ModeRegistry,
   type Seat,
 } from './index.ts'
 
@@ -73,17 +66,7 @@ function mirrorState(state: GameState) {
   }
 }
 
-describe('classic@1 registry and construction', () => {
-  it('publishes immutable classic mode data with the locked random algorithm', () => {
-    assert.equal(MODE_REGISTRY['classic@1'], CLASSIC_V1)
-    assert.equal(CLASSIC_V1.randomAlgorithm, 'mulberry32-v1')
-    assert.deepEqual(CLASSIC_V1.topology.locationIds, [0, 1, 2, 3, 4, 5, 6, 7, 8])
-    assert.equal(Object.isFrozen(MODE_REGISTRY), true)
-    assert.equal(Object.isFrozen(CLASSIC_V1), true)
-    assert.equal(Object.isFrozen(CLASSIC_V1.topology.locationIds), true)
-    assert.equal(Object.isFrozen(CLASSIC_V1.topology.winningPatterns), true)
-  })
-
+describe('engine construction', () => {
   it('constructs boards from the config topology instead of a nine-cell assumption', () => {
     // Topology now comes from the config rather than an injected registry, so
     // this asserts the same property through the supported entry point.
@@ -431,29 +414,8 @@ describe('classic power-ups and results', () => {
   })
 })
 
-describe('shared match rules', () => {
-  it('decodes complete rules and rejects malformed rules', () => {
-    assert.deepEqual(
-      decodeMatchRules({ rounds: 8, turnSeconds: 15, blindMode: false }),
-      { rounds: 8, turnSeconds: 15, blindMode: false },
-    )
-    assert.equal(decodeMatchRules({ rounds: 8, turnSeconds: '15', blindMode: false }), undefined)
-  })
-
-  it('clamps finite numeric rules and defaults invalid fields independently', () => {
-    assert.deepEqual(
-      clampMatchRules({ rounds: 999, turnSeconds: 0, blindMode: false }),
-      { rounds: 20, turnSeconds: 2, blindMode: false },
-    )
-    assert.deepEqual(
-      clampMatchRules({ rounds: Number.NaN, turnSeconds: 'fast', blindMode: 1 }),
-      DEFAULT_MATCH_RULES,
-    )
-  })
-})
-
-// Written as a literal rather than imported from CLASSIC_V1 so it keeps
-// guarding the 3x3 board after the mode registry is deleted.
+// Written as a literal rather than imported from the deleted CLASSIC_V1 so it
+// keeps guarding the 3x3 board now that the mode registry is gone.
 const LEGACY_3X3_PATTERNS = [
   [0, 1, 2],
   [3, 4, 5],
