@@ -120,8 +120,8 @@ describe('offline core presentation adapter', () => {
 describe('online core presentation adapter', () => {
   it('presents the server-created canonical state without local relay events', () => {
     const canonical = createGame({
-      mode: { id: 'classic', revision: 1 },
-      rules: config,
+      engine: { id: 'classic', revision: 1 },
+      config,
       seed: 42,
       firstSeat: 1,
     })
@@ -139,8 +139,8 @@ describe('online core presentation adapter', () => {
 
   it('maps accepted server effects and never creates legacy send events', () => {
     const canonical = createGame({
-      mode: { id: 'classic', revision: 1 },
-      rules: config,
+      engine: { id: 'classic', revision: 1 },
+      config,
       seed: 42,
       firstSeat: 0,
     })

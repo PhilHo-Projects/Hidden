@@ -27,8 +27,8 @@ import {
 } from './index.ts'
 
 const baseSpec = (overrides: Partial<GameSpec> = {}): GameSpec => ({
-  mode: { id: 'classic', revision: 1 },
-  rules: { rounds: 6, turnSeconds: 10, blindMode: true },
+  engine: { id: ENGINE_ID, revision: ENGINE_REVISION },
+  config: DEFAULT_GAME_CONFIG,
   seed: 0x1234abcd,
   firstSeat: 0,
   ...overrides,
@@ -296,7 +296,7 @@ describe('classic conflict and turn behavior', () => {
 
 describe('classic power-ups and results', () => {
   it('allows other unlocked power-ups while shield target selection remains pending', () => {
-    let state = createGame(baseSpec({ rules: { ...DEFAULT_MATCH_RULES, rounds: 20 } }))
+    let state = createGame(baseSpec({ config: { ...DEFAULT_GAME_CONFIG, rounds: 20 } }))
     state = play(state, 0, 0, 'rock').state
     state = play(state, 1, 3, 'rock').state
     state = play(state, 0, 1, 'rock').state
@@ -342,7 +342,7 @@ describe('classic power-ups and results', () => {
   })
 
   it('unlocks, activates, and resolves reveal plus an extra-turn pair as one counted turn', () => {
-    let state = createGame(baseSpec({ rules: { ...DEFAULT_MATCH_RULES, rounds: 10 } }))
+    let state = createGame(baseSpec({ config: { ...DEFAULT_GAME_CONFIG, rounds: 10 } }))
     state = play(state, 0, 0, 'scissors').state
     state = play(state, 1, 3, 'paper').state
     state = play(state, 0, 1, 'scissors').state
@@ -389,7 +389,7 @@ describe('classic power-ups and results', () => {
   })
 
   it('uses seeded timeout choices, including completing pending shield selection', () => {
-    let state = createGame(baseSpec({ seed: 1, rules: { ...DEFAULT_MATCH_RULES, rounds: 10 } }))
+    let state = createGame(baseSpec({ seed: 1, config: { ...DEFAULT_GAME_CONFIG, rounds: 10 } }))
     state = play(state, 0, 0, 'rock').state
     state = play(state, 1, 3, 'scissors').state
     state = play(state, 0, 1, 'rock').state
@@ -413,7 +413,7 @@ describe('classic power-ups and results', () => {
   })
 
   it('finishes at the configured turn limit with seat-neutral scores, winner, and ties', () => {
-    let win = createGame(baseSpec({ rules: { ...DEFAULT_MATCH_RULES, rounds: 1 } }))
+    let win = createGame(baseSpec({ config: { ...DEFAULT_GAME_CONFIG, rounds: 1 } }))
     win = play(win, 0, 0, 'rock').state
     const finished = play(win, 1, 1, 'paper')
     assert.equal(finished.state.phase, 'finished')
@@ -424,7 +424,7 @@ describe('classic power-ups and results', () => {
       winner: null,
     })
 
-    let decisive = createGame(baseSpec({ rules: { ...DEFAULT_MATCH_RULES, rounds: 1 } }))
+    let decisive = createGame(baseSpec({ config: { ...DEFAULT_GAME_CONFIG, rounds: 1 } }))
     decisive = play(decisive, 0, 0, 'rock').state
     const loss = play(decisive, 1, 0, 'scissors')
     assert.deepEqual(loss.state.result, { scores: [1, 0], winner: 0 })
@@ -593,10 +593,10 @@ const put = (state: GameState, seat: Seat, locationId: number, symbol: 'rock' | 
   applyCommand(state, seat, { type: 'place', locationId, symbol })
 
 describe('config-driven engine', () => {
-  it('accepts a legacy mode+rules spec and produces the default game', () => {
-    const legacy = createGame(baseSpec())
-    assert.deepEqual(legacy.config, DEFAULT_GAME_CONFIG)
-    assert.equal(legacy.boards[0].locations.length, 9)
+  it('produces the default game from the default config', () => {
+    const game = createGame(baseSpec())
+    assert.deepEqual(game.config, DEFAULT_GAME_CONFIG)
+    assert.equal(game.boards[0].locations.length, 9)
   })
 
   it('builds a board sized by the config', () => {

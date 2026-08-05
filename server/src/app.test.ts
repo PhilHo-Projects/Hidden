@@ -423,8 +423,8 @@ describe.sequential('Hidden server', () => {
     const commandIds = [0, 0]
     let revision = 0
     let canonical: CoreGameState = createGame({
-      mode: descriptor.mode,
-      rules: descriptor.rules,
+      engine: descriptor.engine,
+      config: descriptor.config,
       seed: descriptor.seed,
       firstSeat: descriptor.firstSeat,
     })
