@@ -110,11 +110,17 @@ Test *runners* also differ: `game-core` uses bare `node --test`, `web` and
 would like to keep it that way), but it means `npm test` at the root shells out
 to two different runners.
 
-One trap worth knowing, already recorded in `docs/JOURNAL.md`:
-`packages/game-core/tsconfig.json` and `server/tsconfig.json` both **exclude
-`src/**/*.test.ts`**, so core and server tests are never typechecked. Assertions
-have silently compared `undefined` to `undefined` there before. Only `web`
-typechecks its tests.
+Each package carries **two** TypeScript configs, and the split matters.
+`tsconfig.json` builds and excludes `src/**/*.test.ts`, because without that
+exclusion `npm run build` would compile the tests into `dist/` and ship them.
+`tsconfig.test.json` extends it, sets `noEmit`, and puts the tests back, so they
+are typechecked without being emitted. It runs as each package's `typecheck`
+script, ahead of its suite.
+
+That second config exists because for a long time it did not. Untypechecked
+assertions rotted: `expect(rematch.run.spec.rules).toBe(...)` referred to a
+property deleted with the mode registry, compared `undefined` to `undefined`,
+and passed for months. If you add a package, give it both configs.
 
 ---
 
