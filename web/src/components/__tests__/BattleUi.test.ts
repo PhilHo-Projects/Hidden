@@ -109,7 +109,7 @@ describe('battle UI', () => {
       }),
     )
 
-    expect(markup).not.toContain('unity-cell-score-counted')
+    expect(markup).not.toContain('hidden-cell-score-counted')
     expect(markup).toContain('--score-delay:0ms')
   })
 })

@@ -60,11 +60,11 @@
     radial-gradient(circle, rgba(204, 57, 65, 0.72), transparent 68%);
 }
 
-.unity-cell-destroying-loss {
+.hidden-cell-destroying-loss {
   animation: cell-loss-impact 420ms ease-out both;
 }
 
-.unity-cell-destroying-victory {
+.hidden-cell-destroying-victory {
   animation: cell-victory-impact 420ms ease-out both;
 }
 

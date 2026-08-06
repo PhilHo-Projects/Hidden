@@ -1051,7 +1051,7 @@ function App() {
     screen === 'results'
 
   return (
-    <main className={`unity-shell unity-${screen}`}>
+    <main className={`hidden-shell hidden-${screen}`}>
       {screen !== 'intro' ? (
         <header className="top-chrome">
           <nav className="game-navbar" aria-label="Game navigation">

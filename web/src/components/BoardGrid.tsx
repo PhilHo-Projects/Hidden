@@ -68,11 +68,11 @@ export function BoardGrid({
 }: BoardGridProps) {
   return (
     <section
-      className={`unity-board ${interactive ? 'unity-board-interactive' : ''} ${
-        compact ? 'unity-board-compact' : ''
+      className={`hidden-board ${interactive ? 'hidden-board-interactive' : ''} ${
+        compact ? 'hidden-board-compact' : ''
       }`}
     >
-      <header className="unity-board-header">
+      <header className="hidden-board-header">
         <div>
           {title ? <p>{title}</p> : null}
           <h3>{subtitle}</h3>
@@ -89,7 +89,7 @@ export function BoardGrid({
       </header>
 
       <div
-        className="unity-board-grid"
+        className="hidden-board-grid"
         style={
           {
             '--board-size': String(boardColumns(grid.cells.length)),
@@ -112,11 +112,11 @@ export function BoardGrid({
                   ? `Cell ${index + 1}, Point ${scoreCount}`
                   : `Cell ${index + 1}`
               }
-              className={`unity-cell ${cell.occupied ? 'unity-cell-occupied' : ''} ${
-                hidden && cell.occupied ? 'unity-cell-hidden' : ''
-              } ${isClickable ? 'unity-cell-clickable' : ''} ${
-                destructionEffect ? `unity-cell-destroying-${destructionEffect.tone}` : ''
-              } ${scoreCount ? 'unity-cell-score-counted' : ''} unity-cell-v${cellVariant(index)}`}
+              className={`hidden-cell ${cell.occupied ? 'hidden-cell-occupied' : ''} ${
+                hidden && cell.occupied ? 'hidden-cell-hidden' : ''
+              } ${isClickable ? 'hidden-cell-clickable' : ''} ${
+                destructionEffect ? `hidden-cell-destroying-${destructionEffect.tone}` : ''
+              } ${scoreCount ? 'hidden-cell-score-counted' : ''} hidden-cell-v${cellVariant(index)}`}
               style={{
                 background: cellTone(cell.symbol, hidden, cell.occupied),
                 '--score-order': scoreCount ?? 0,

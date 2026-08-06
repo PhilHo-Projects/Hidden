@@ -149,7 +149,7 @@ describe('advanced rules panel', () => {
   it('uses one control vocabulary, with no sliding switches left behind', () => {
     const markup = render(DEFAULT_GAME_CONFIG)
 
-    expect(markup).not.toContain('unity-toggle')
+    expect(markup).not.toContain('hidden-toggle')
   })
 
   it('renders a rule the caller adds without touching the panel', () => {
