@@ -1165,7 +1165,6 @@ function App() {
         <section className="setup-screen pregame-screen mode-select-screen">
           <GameMasthead compact />
           <GuestIdentity name={username} />
-          <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
           <div className="action-grid action-grid-two mode-action-grid">
             <ActionChoice
               label="ONLINE"
