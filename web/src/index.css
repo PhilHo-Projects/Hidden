@@ -2382,42 +2382,35 @@ summary:focus-visible {
  * It shares the navbar's left cell with Back rather than claiming a fourth grid
  * column, which would squeeze the status strip at 320px.
  */
-.howto-nav-group {
-  display: flex;
+/*
+ * The trigger sits in one slot on every pre-game screen: under the identity
+ * line, above that screen's choices. The label rides inside the button so the
+ * words are part of the target rather than dead text beside it.
+ */
+.howto-trigger {
+  display: inline-flex;
+  min-height: 3rem;
   align-items: center;
-  gap: clamp(0.3rem, 1.4vw, 0.7rem);
-  justify-self: start;
+  gap: 0.5rem;
+  /* Padding rather than a min-width: the block is centred in the screen grid,
+   * so a wider box than the content would push the label off centre. */
+  padding: 0.25rem 0.7rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
-/* The landing screen has no top bar, so the trigger appears there in its own
- * right and takes a label: it is an invitation, not a reminder. */
-.welcome-howto {
-  display: flex;
-  align-items: center;
-  gap: 0.15rem;
-  justify-self: center;
-}
-
-.welcome-howto > span {
+.howto-trigger-label {
   color: rgba(255, 255, 255, 0.62);
   font-size: 0.72rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  pointer-events: none;
+  transition: color 160ms ease;
 }
 
-.howto-trigger {
-  display: inline-flex;
-  /* Below the 48px floor at its drawn size, so the tap target is padded out to
-   * meet it without inflating the art. */
-  min-width: 3rem;
-  min-height: 3rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
+.howto-trigger:hover .howto-trigger-label,
+.howto-trigger:focus-visible .howto-trigger-label {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 /*

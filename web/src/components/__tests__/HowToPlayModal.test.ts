@@ -68,18 +68,27 @@ describe('HowToPlayModal', () => {
 })
 
 describe('HowToPlayTrigger', () => {
-  it('carries an accessible name rather than relying on the card art', () => {
+  it('names itself with visible text rather than a hidden label', () => {
     const markup = renderToStaticMarkup(
       createElement(HowToPlayTrigger, { onClick: () => undefined }),
     )
 
-    expect(markup).toContain('aria-label="How to play"')
     /*
-     * The art is decorative and the button is already named, so the image takes
-     * an empty alt. A filled one would make screen readers announce the control
-     * twice.
+     * The accessible name comes from the visible label, so it cannot drift out
+     * of sync with what is on screen the way an `aria-label` silently can.
      */
+    expect(markup).toContain('How to play')
+    expect(markup).not.toContain('aria-label')
+    // The art is decorative; a filled alt would announce the control twice.
     expect(markup).toContain('alt=""')
+  })
+
+  it('keeps the label inside the button so the words are part of the target', () => {
+    const markup = renderToStaticMarkup(
+      createElement(HowToPlayTrigger, { onClick: () => undefined }),
+    )
+
+    expect(markup).toMatch(/<button[^>]*>.*How to play.*<\/button>/s)
   })
 
   it('ships the card art at an icon-sized asset rather than the full-resolution master', () => {

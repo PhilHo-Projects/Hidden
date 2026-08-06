@@ -158,19 +158,19 @@ export function HowToPlayModal({ open, onClose }: HowToPlayModalProps) {
 }
 
 /**
- * The fanned question cards that open the modal. The art is decorative — the
- * button's `aria-label` is its only accessible name, so the image takes an empty
- * `alt` rather than repeating it.
+ * The fanned question cards that open the modal. It sits in the same slot on
+ * every pre-game screen — under the player identity, above that screen's
+ * choices — so it is in one place rather than moving around the flow.
+ *
+ * The label is inside the button, so the whole thing is one target and the
+ * accessible name comes from visible text rather than from an `aria-label` a
+ * sighted user cannot see. That leaves the art decorative, hence the empty alt.
  */
 export function HowToPlayTrigger({ onClick }: HowToPlayTriggerProps) {
   return (
-    <button
-      type="button"
-      className="howto-trigger"
-      aria-label="How to play"
-      onClick={onClick}
-    >
+    <button type="button" className="howto-trigger" onClick={onClick}>
       <img className="howto-trigger-art" src={howToPlayIcon} alt="" />
+      <span className="howto-trigger-label">How to play</span>
     </button>
   )
 }

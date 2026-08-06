@@ -1058,20 +1058,15 @@ function App() {
       {screen !== 'intro' ? (
         <header className="top-chrome">
           <nav className="game-navbar" aria-label="Game navigation">
-            {/* Back and help share the navbar's left cell. A fourth grid column
-                would squeeze the status strip at 320px. */}
-            <div className="howto-nav-group">
-              <button
-                type="button"
-                className="nav-brush-button nav-back-button"
-                onClick={navigateBack}
-                aria-label="Go back"
-              >
-                <span aria-hidden="true">←</span>
-                BACK
-              </button>
-              <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
-            </div>
+            <button
+              type="button"
+              className="nav-brush-button nav-back-button"
+              onClick={navigateBack}
+              aria-label="Go back"
+            >
+              <span aria-hidden="true">←</span>
+              BACK
+            </button>
             <StatusStrip status={chromeStatus} chrome />
             {authUser ? (
               <ProfileMenu
@@ -1097,12 +1092,6 @@ function App() {
 
       {screen === 'intro' ? (
         <section className="welcome-screen">
-          {/* The landing screen has no top bar, so it carries its own trigger.
-              This is where the question actually gets asked. */}
-          <div className="welcome-howto">
-            <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
-            <span>How to play</span>
-          </div>
           <GameMasthead />
           <div className="action-grid welcome-actions">
             {!authHydrated ? (
@@ -1176,6 +1165,7 @@ function App() {
         <section className="setup-screen pregame-screen mode-select-screen">
           <GameMasthead compact />
           <GuestIdentity name={username} />
+          <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
           <div className="action-grid action-grid-two mode-action-grid">
             <ActionChoice
               label="ONLINE"
@@ -1210,6 +1200,7 @@ function App() {
         <section className="setup-screen pregame-screen">
           <GameMasthead compact />
           <GuestIdentity name={username} />
+          <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
           <div className="action-grid online-action-grid">
             <ActionChoice
               label="QUICK MATCH"
@@ -1357,6 +1348,7 @@ function App() {
         <section className="setup-screen pregame-screen offline-setup-screen">
           <GameMasthead compact />
           <GuestIdentity name={username} />
+          <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
           <div className="offline-card">
             <p className="practice-kicker">PRACTICE</p>
             <p className="panel-description">
