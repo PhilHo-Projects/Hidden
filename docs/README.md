@@ -7,11 +7,14 @@ this index does not.
 | If you want | Read | Size |
 | --- | --- | --- |
 | Current state and what to do next | [ROADMAP.md](ROADMAP.md) | ~130 lines |
-| What shipped and when | [JOURNAL.md](JOURNAL.md) | ~90 lines |
+| What shipped and when | [JOURNAL.md](JOURNAL.md) | ~95 lines |
+| How the codebase is laid out and how multiplayer works | [ARCHITECTURE.md](ARCHITECTURE.md) | ~675 lines |
 | Why the rules engine is shaped this way | [specs/2026-08-03-game-mode-testbed-design.md](superpowers/specs/2026-08-03-game-mode-testbed-design.md) | ~245 lines |
-| The remaining lobby task, in detail | [plans/2026-08-04-private-lobby.md](superpowers/plans/2026-08-04-private-lobby.md) | ~180 lines |
 
 `ROADMAP.md` alone is enough to pick up work. Everything else is background.
+`ARCHITECTURE.md` is the one to read once, on your first day, and rarely again.
+
+There are no open plans. Every plan in `superpowers/plans/archive/` is finished.
 
 ## Archived
 
