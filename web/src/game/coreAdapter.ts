@@ -304,6 +304,15 @@ export function startOfflineMatch(state: GameState): EngineResult {
   }
 }
 
+/**
+ * Arms the next placement with a colour. A shallow copy is enough: every other
+ * function here rebuilds the grids from canonical state rather than mutating
+ * them, so the sharing this leaves behind is never written through.
+ */
+export function selectColor(state: GameState, color: PaintColor): GameState {
+  return { ...state, selectedColor: color }
+}
+
 export function applyOfflineLocalMove(
   state: GameState,
   index: number,

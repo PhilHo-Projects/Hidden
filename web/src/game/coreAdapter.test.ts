@@ -10,10 +10,10 @@ import {
   createOfflineState,
   createOnlinePresentedState,
   playOfflineBotTurn,
+  selectColor,
   startOfflineMatch,
 } from './coreAdapter'
 import { applyCommand, createGame } from '@hidden/game-core'
-import { selectColor } from './engine'
 import type { MatchConfig } from './types'
 
 const config: MatchConfig = {
@@ -114,6 +114,78 @@ describe('offline core presentation adapter', () => {
       type: 'announcement',
       message: 'Timer expired!',
     })
+  })
+
+  /*
+   * The core reports a winning seat; the presentation layer has to turn that
+   * into a verdict for whichever seat is local, so seat 1 must read the same
+   * scoreline as a loss that seat 0 reads as a win. Covered here because the
+   * only previous test of this mapping belonged to the deleted legacy engine.
+   */
+  it.each([
+    { name: 'win', localSeat: 0 as const, outcome: 'win' },
+    { name: 'loss', localSeat: 1 as const, outcome: 'loss' },
+  ])('reports a decided game as a $name from that seat', ({ localSeat, outcome }) => {
+    // rounds: 1 -> maxTurns 2, one placement each. Both contest location 0,
+    // where rock beats scissors: seat 1's piece is destroyed and seat 0's
+    // survives, so the game ends 1-0 rather than in a draw.
+    let canonical = createGame({
+      engine: { id: 'classic', revision: 1 },
+      config: { ...config, rounds: 1 },
+      seed: 7,
+      firstSeat: 0,
+    })
+    const placed = applyCommand(canonical, 0, {
+      type: 'place', locationId: 0, symbol: 'rock',
+    })
+    if (!placed.accepted) throw new Error('Fixture placement must be accepted.')
+    canonical = placed.state
+    const closed = applyCommand(canonical, 1, {
+      type: 'place', locationId: 0, symbol: 'scissors',
+    })
+    if (!closed.accepted) throw new Error('Fixture placement must be accepted.')
+
+    expect(closed.state.result?.scores).toEqual([1, 0])
+
+    expect(closed.state.phase).toBe('finished')
+    expect(closed.state.result?.winner).toBe(0)
+
+    const presented = createOnlinePresentedState(
+      { ...config, rounds: 1, isOnline: true, hasAI: false },
+      closed.state,
+      localSeat,
+    )
+
+    expect(presented.result?.outcome).toBe(outcome)
+  })
+
+  it('reports an even scoreline as a tie from both seats', () => {
+    let canonical = createGame({
+      engine: { id: 'classic', revision: 1 },
+      config: { ...config, rounds: 1 },
+      seed: 7,
+      firstSeat: 0,
+    })
+    const first = applyCommand(canonical, 0, {
+      type: 'place', locationId: 0, symbol: 'rock',
+    })
+    if (!first.accepted) throw new Error('Fixture placement must be accepted.')
+    canonical = first.state
+    const second = applyCommand(canonical, 1, {
+      type: 'place', locationId: 4, symbol: 'paper',
+    })
+    if (!second.accepted) throw new Error('Fixture placement must be accepted.')
+
+    expect(second.state.result?.winner).toBeNull()
+
+    for (const localSeat of [0, 1] as const) {
+      const presented = createOnlinePresentedState(
+        { ...config, rounds: 1, isOnline: true, hasAI: false },
+        second.state,
+        localSeat,
+      )
+      expect(presented.result?.outcome).toBe('tie')
+    }
   })
 })
 

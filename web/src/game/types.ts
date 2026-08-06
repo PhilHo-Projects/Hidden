@@ -66,9 +66,6 @@ export interface GameState {
 export type EngineEvent =
   | { type: 'announcement'; message: string }
   | { type: 'cell-destroyed'; board: 'player' | 'opponent'; index: number; color: PaintColor }
-  | { type: 'send-move'; index: number; color: PaintColor }
-  | { type: 'send-moves'; moves: QueuedMove[] }
-  | { type: 'send-immune'; indices: number[] }
   | { type: 'game-over'; result: MatchResult }
 
 export interface EngineResult {

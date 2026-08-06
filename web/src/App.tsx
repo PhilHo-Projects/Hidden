@@ -36,11 +36,9 @@ import {
   createOnlinePresentedState,
   forceOfflineTimeout,
   playOfflineBotTurn,
+  selectColor,
   startOfflineMatch,
 } from './game/coreAdapter'
-import {
-  selectColor,
-} from './game/engine'
 import { NetworkClient, resolveWebSocketUrl, type ClientEvent } from './game/networkClient'
 import {
   clampGameConfig,

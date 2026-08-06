@@ -17,13 +17,6 @@ import {
 } from '@hidden/game-core'
 
 export const LOBBY_ROOM_ID = 'lobby'
-type WireColor = 'green' | 'blue' | 'red'
-
-const colorToWire: Record<PaintColor, WireColor> = {
-  [COLOR_GREEN]: 'green',
-  [COLOR_BLUE]: 'blue',
-  [COLOR_RED]: 'red',
-}
 
 function decodeWireColor(value: unknown): PaintColor {
   switch (value) {
@@ -630,23 +623,6 @@ export function encodeLobbySubscribePacket(
   subscribed: boolean,
 ) {
   return encode([senderId, PacketType.LOBBY_SUBSCRIBE, subscribed])
-}
-
-export function encodeGameMovePacket(senderId: number, index: number, color: PaintColor) {
-  return encode([senderId, PacketType.GAME_MOVE, index, colorToWire[color]])
-}
-
-export function encodeGameMovesPacket(senderId: number, moves: QueuedMove[]) {
-  return encode([
-    senderId,
-    PacketType.GAME_MOVES,
-    moves.map((move) => move.index),
-    moves.map((move) => colorToWire[move.color]),
-  ])
-}
-
-export function encodeImmunePacket(senderId: number, indices: number[]) {
-  return encode([senderId, PacketType.IMMUNE_UPDATE, indices])
 }
 
 export function encodeGameCommandPacket(

@@ -4,9 +4,6 @@ import { decode, encode } from '@msgpack/msgpack'
 import {
   decodePacket,
   encodeGameCommandPacket,
-  encodeGameMovePacket,
-  encodeGameMovesPacket,
-  encodeImmunePacket,
   encodeMatchmakingPacket,
   LOBBY_ROOM_ID,
   PacketType,
@@ -265,51 +262,48 @@ describe('protocol', () => {
     })
   })
 
-  it('encodes and decodes a game move packet', () => {
-    const encoded = encodeGameMovePacket(7, 4, COLOR_GREEN)
-    const raw = decode(encoded) as unknown[]
-    expect(raw[3]).toBe('green')
+  /*
+   * The client no longer encodes these three: all gameplay leaves through
+   * GAME_COMMAND, and the server answers a legacy packet with
+   * `legacy-gameplay-disabled`. Decoding them still has to work. A stray legacy
+   * frame must stay a silent no-op rather than a decode failure, because
+   * NetworkClient turns any decode failure into a terminal sync-lost.
+   * Wire shapes are written out literally here rather than round-tripped
+   * through an encoder, so the assertions pin the format itself.
+   */
+  it('decodes a legacy game move relay', () => {
+    const packet = decodePacket(encode([7, PacketType.GAME_MOVE, 4, 'green']))
 
-    const packet = decodePacket(encoded)
-
-    expect(packet.type).toBe(PacketType.GAME_MOVE)
-    if (packet.type !== PacketType.GAME_MOVE) {
-      throw new Error('Expected game move packet')
-    }
-
-    expect(packet.senderId).toBe(7)
-    expect(packet.index).toBe(4)
-    expect(packet.color).toBe(COLOR_GREEN)
+    expect(packet).toEqual({
+      type: PacketType.GAME_MOVE,
+      senderId: 7,
+      index: 4,
+      color: COLOR_GREEN,
+    })
   })
 
-  it('encodes and decodes extra turn packets', () => {
-    const encoded = encodeGameMovesPacket(3, [
-      { index: 0, color: COLOR_RED },
-      { index: 8, color: COLOR_GREEN },
-    ])
-    const raw = decode(encoded) as unknown[]
-    expect(raw[3]).toEqual(['red', 'green'])
+  it('decodes a legacy extra-turn relay carrying parallel index and colour arrays', () => {
+    const packet = decodePacket(
+      encode([3, PacketType.GAME_MOVES, [0, 8], ['red', 'green']]),
+    )
 
-    const packet = decodePacket(encoded)
-
-    expect(packet.type).toBe(PacketType.GAME_MOVES)
-    if (packet.type !== PacketType.GAME_MOVES) {
-      throw new Error('Expected extra turn packet')
-    }
-
-    expect(packet.moves).toHaveLength(2)
-    expect(packet.moves[1]?.index).toBe(8)
-    expect(packet.moves[1]?.color).toBe(COLOR_GREEN)
+    expect(packet).toEqual({
+      type: PacketType.GAME_MOVES,
+      senderId: 3,
+      moves: [
+        { index: 0, color: COLOR_RED },
+        { index: 8, color: COLOR_GREEN },
+      ],
+    })
   })
 
-  it('encodes and decodes immune packets', () => {
-    const packet = decodePacket(encodeImmunePacket(5, [2, 6]))
+  it('decodes a legacy immune relay', () => {
+    const packet = decodePacket(encode([5, PacketType.IMMUNE_UPDATE, [2, 6]]))
 
-    expect(packet.type).toBe(PacketType.IMMUNE_UPDATE)
-    if (packet.type !== PacketType.IMMUNE_UPDATE) {
-      throw new Error('Expected immune packet')
-    }
-
-    expect(packet.indices).toEqual([2, 6])
+    expect(packet).toEqual({
+      type: PacketType.IMMUNE_UPDATE,
+      senderId: 5,
+      indices: [2, 6],
+    })
   })
 })
