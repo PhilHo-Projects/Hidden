@@ -572,10 +572,11 @@ Move `selectColor` into `coreAdapter.ts` and the whole layer goes.
 matters. Colors become styling; the symbol becomes the value. Removes a
 duplicated translation map and a whole class of "wait, is green rock?" moments.
 
-**3. Split `App.tsx`** (1562 lines). It routes screens, wires the socket, runs
-the auth and lobby flows, and holds the entire render tree, on ~25 `useState`
-calls. Per-screen extraction is the obvious cut and the highest-value structural
-change left.
+**3. Split `App.tsx`** (~1550 lines). Planned in detail in
+[the open plan](superpowers/plans/2026-08-06-split-app-shell.md) — read that
+before touching it, because the obvious approach is the wrong one. The render
+tree is already fourteen screen blocks of at most 82 lines and is not the
+problem; the 920-line hook body is.
 
 **4. Split `index.css`** (2680 lines). Lower risk than `App.tsx` — CSS neither
 typechecks nor breaks silently. Per-area files.

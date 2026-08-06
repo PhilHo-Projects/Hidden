@@ -14,7 +14,8 @@ this index does not.
 `ROADMAP.md` alone is enough to pick up work. Everything else is background.
 `ARCHITECTURE.md` is the one to read once, on your first day, and rarely again.
 
-There are no open plans. Every plan in `superpowers/plans/archive/` is finished.
+One open plan: [splitting the App shell](superpowers/plans/2026-08-06-split-app-shell.md).
+Everything in `superpowers/plans/archive/` is finished.
 
 ## Archived
 
