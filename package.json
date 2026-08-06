@@ -8,8 +8,9 @@
     "packages/game-core"
   ],
   "scripts": {
-    "test": "npm run test:lockfile && npm run test:core && npm run test:web && npm run test:server",
+    "test": "npm run test:lockfile && npm run test:instructions && npm run test:core && npm run test:web && npm run test:server",
     "test:lockfile": "node scripts/verify-lockfile-platforms.cjs",
+    "test:instructions": "node scripts/verify-instruction-files.cjs",
     "test:core": "npm run test --workspace=@hidden/game-core",
     "test:web": "npm run test --workspace=hidden-web",
     "test:server": "npm run test --workspace=hidden-server",

@@ -1,5 +1,9 @@
 # Hidden project instructions
 
+`CLAUDE.md` and `AGENTS.md` are one document kept in two files: Claude Code
+reads the first, Codex reads the second, and each tool sees only its own. A rule
+added to one applies to nobody else. Edit both. `npm test` fails if they differ.
+
 ## Scope
 
 This repository is the web edition of Hidden. Keep it focused on the React
