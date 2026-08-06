@@ -1469,9 +1469,12 @@ function App() {
                     onClick={() => onSelectColor(piece.color)}
                     className={`rps-tile ${match.selectedColor === piece.color ? 'rps-tile-selected' : ''}`}
                     style={{ backgroundColor: piece.color }}
+                    // The icon reads on its own, so the caption is gone. The
+                    // label moves onto the button or it has no accessible name
+                    // at all — the image is decorative.
+                    aria-label={piece.label}
                   >
                     <img src={piece.icon} alt="" />
-                    <span>{piece.label}</span>
                   </button>
                 ))}
               </div>
@@ -1485,10 +1488,10 @@ function App() {
           <div className="results-copy">
             <p className="brush-subtitle">GAME OVER</p>
             <h1>{match.result.outcome === 'win' ? 'YOU WIN!' : match.result.outcome === 'loss' ? 'YOU LOSE!' : "IT'S A TIE!"}</h1>
-            <p>
-              Your Score: {match.result.playerScore}
+            <p className="results-score">
+              Your Score: <b>{match.result.playerScore}</b>
               <br />
-              Opponent Score: {match.result.opponentScore}
+              Opponent Score: <b>{match.result.opponentScore}</b>
             </p>
             <div className="results-actions">
               <BrushButton className="results-action" onClick={onAgain}>
