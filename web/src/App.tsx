@@ -26,7 +26,7 @@ import {
   StatusStrip,
   type UiStatus,
 } from './components/PregameUi'
-import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './game/constants'
+import { COLOR_BY_SYMBOL } from './game/constants'
 import {
   applyOnlinePresentation,
   applyOfflineLocalMove,
@@ -36,13 +36,14 @@ import {
   createOnlinePresentedState,
   forceOfflineTimeout,
   playOfflineBotTurn,
-  selectColor,
+  selectSymbol,
   startOfflineMatch,
 } from './game/coreAdapter'
 import { NetworkClient, resolveWebSocketUrl, type ClientEvent } from './game/networkClient'
 import {
   clampGameConfig,
   DEFAULT_GAME_CONFIG,
+  type ClassicSymbol,
   type GameConfig,
 } from '@hidden/game-core'
 import {
@@ -66,7 +67,7 @@ import {
   type PublicGameSummary,
   type UserEntry,
 } from './game/protocol'
-import type { EngineResult, GameState, MatchConfig, PaintColor, PowerupKey } from './game/types'
+import type { EngineResult, GameState, MatchConfig, PowerupKey } from './game/types'
 import {
   createGuestName,
   getBackTarget,
@@ -79,17 +80,15 @@ import {
   type Screen,
 } from './game/viewModel'
 
-const pieces = [
-  { color: COLOR_GREEN as PaintColor, label: 'Rock', icon: rockIcon },
-  { color: COLOR_BLUE as PaintColor, label: 'Paper', icon: paperIcon },
-  { color: COLOR_RED as PaintColor, label: 'Scissors', icon: scissorsIcon },
+const pieces: ReadonlyArray<{
+  symbol: ClassicSymbol
+  label: string
+  icon: string
+}> = [
+  { symbol: 'rock', label: 'Rock', icon: rockIcon },
+  { symbol: 'paper', label: 'Paper', icon: paperIcon },
+  { symbol: 'scissors', label: 'Scissors', icon: scissorsIcon },
 ]
-
-const symbolByColor = {
-  [COLOR_GREEN]: 'rock',
-  [COLOR_BLUE]: 'paper',
-  [COLOR_RED]: 'scissors',
-} as const
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 type DestructionEffectMap = Partial<Record<number, CellDestructionEffect>>
@@ -932,9 +931,9 @@ function App() {
     })
   }
 
-  const onSelectColor = (color: PaintColor) => {
+  const onSelectSymbol = (symbol: ClassicSymbol) => {
     if (!matchRef.current) return
-    const next = selectColor(matchRef.current, color)
+    const next = selectSymbol(matchRef.current, symbol)
     matchRef.current = next
     setMatch(next)
   }
@@ -976,7 +975,7 @@ function App() {
       }
       return
     }
-    if (!matchRef.current.selectedColor) {
+    if (!matchRef.current.selectedSymbol) {
       setAnnouncement('Pick rock, paper, or scissors first.')
       return
     }
@@ -984,7 +983,7 @@ function App() {
       sendOnlineCommand({
         type: 'place',
         locationId: index,
-        symbol: symbolByColor[matchRef.current.selectedColor],
+        symbol: matchRef.current.selectedSymbol,
       })
     } else {
       applyEngineResult(applyOfflineLocalMove(matchRef.current, index))
@@ -1422,7 +1421,7 @@ function App() {
                   match.isMyTurn &&
                   (!match.config.isOnline || !onlineInputPending)
                 }
-                selectedColor={match.selectedColor}
+                selectedSymbol={match.selectedSymbol}
                 destructionEffects={visiblePlayerDestructionEffects}
                 onSelect={onCellSelect}
               />
@@ -1463,9 +1462,9 @@ function App() {
                     disabled={
                       match.config.isOnline && onlineInputPending
                     }
-                    onClick={() => onSelectColor(piece.color)}
-                    className={`rps-tile ${match.selectedColor === piece.color ? 'rps-tile-selected' : ''}`}
-                    style={{ backgroundColor: piece.color }}
+                    onClick={() => onSelectSymbol(piece.symbol)}
+                    className={`rps-tile ${match.selectedSymbol === piece.symbol ? 'rps-tile-selected' : ''}`}
+                    style={{ backgroundColor: COLOR_BY_SYMBOL[piece.symbol] }}
                     // The icon reads on its own, so the caption is gone. The
                     // label moves onto the button or it has no accessible name
                     // at all — the image is decorative.

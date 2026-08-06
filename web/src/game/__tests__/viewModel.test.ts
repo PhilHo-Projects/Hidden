@@ -26,7 +26,7 @@ const makeMatch = (overrides: Partial<GameState> = {}): GameState => ({
   currentRound: 1,
   totalTurns: 0,
   maxTurns: 12,
-  selectedColor: null,
+  selectedSymbol: null,
   shieldSelectionMode: false,
   playerPowerups: {
     unlocked: { shield: false, reveal: false, extraTurn: false },
@@ -121,7 +121,7 @@ describe('view model helpers', () => {
     expect(shouldPromptMoveChoice(null, 'battle')).toBe(false)
     expect(shouldPromptMoveChoice(makeMatch(), 'results')).toBe(false)
     expect(shouldPromptMoveChoice(makeMatch({ isMyTurn: false }), 'battle')).toBe(false)
-    expect(shouldPromptMoveChoice(makeMatch({ selectedColor: '#4591DB' }), 'battle')).toBe(false)
+    expect(shouldPromptMoveChoice(makeMatch({ selectedSymbol: 'paper' }), 'battle')).toBe(false)
     expect(shouldPromptMoveChoice(makeMatch({ shieldSelectionMode: true }), 'battle')).toBe(false)
     expect(shouldPromptMoveChoice(makeMatch({ phase: 'results' }), 'battle')).toBe(false)
   })
@@ -145,7 +145,7 @@ describe('view model helpers', () => {
   it('assigns sequential score labels only to occupied cells', () => {
     const cells = Array.from({ length: 9 }, (_, index) => ({
       occupied: index === 1 || index === 4 || index === 8,
-      color: index === 1 || index === 4 || index === 8 ? '#4591DB' as const : null,
+      symbol: index === 1 || index === 4 || index === 8 ? ('paper' as const) : null,
       immune: false,
     }))
 

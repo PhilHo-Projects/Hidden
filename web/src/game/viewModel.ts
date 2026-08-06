@@ -111,6 +111,6 @@ export function shouldPromptMoveChoice(match: GameState | null, screen: Screen) 
     match.phase === 'battle' &&
     match.isMyTurn &&
     !match.shieldSelectionMode &&
-    !match.selectedColor
+    !match.selectedSymbol
   )
 }

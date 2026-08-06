@@ -1,7 +1,9 @@
 import '../animations/cell-destruction.css'
 import '../animations/score-count.css'
 import shieldIcon from '../assets/icons/battle/powerup-immune.png'
-import type { GridState, PaintColor } from '../game/types'
+import { COLOR_BY_SYMBOL } from '../game/constants'
+import type { GridState } from '../game/types'
+import type { ClassicSymbol } from '@hidden/game-core'
 import type { CSSProperties } from 'react'
 
 export interface CellDestructionEffect {
@@ -22,7 +24,7 @@ interface BoardGridProps {
   hidden?: boolean
   compact?: boolean
   interactive?: boolean
-  selectedColor?: PaintColor | null
+  selectedSymbol?: ClassicSymbol | null
   destructionEffects?: Partial<Record<number, CellDestructionEffect>>
   scoreCountLabels?: Partial<Record<number, number>>
   onSelect?: (index: number) => void
@@ -45,11 +47,11 @@ function cellVariant(index: number) {
   return (index * 3 + 1) % CELL_VARIANTS
 }
 
-function cellTone(color: PaintColor | null, hidden: boolean, occupied: boolean) {
+function cellTone(symbol: ClassicSymbol | null, hidden: boolean, occupied: boolean) {
   if (!occupied) return '#f5f5f5'
   if (hidden) return 'linear-gradient(145deg, #383838, #080808)'
 
-  return color ?? '#F2EEE7'
+  return symbol ? COLOR_BY_SYMBOL[symbol] : '#F2EEE7'
 }
 
 export function BoardGrid({
@@ -59,7 +61,7 @@ export function BoardGrid({
   hidden = false,
   compact = false,
   interactive = false,
-  selectedColor,
+  selectedSymbol,
   destructionEffects = {},
   scoreCountLabels = {},
   onSelect,
@@ -75,8 +77,12 @@ export function BoardGrid({
           {title ? <p>{title}</p> : null}
           <h3>{subtitle}</h3>
         </div>
-        {selectedColor ? (
-          <span className="loaded-color" style={{ backgroundColor: selectedColor }} aria-label="Loaded move">
+        {selectedSymbol ? (
+          <span
+            className="loaded-color"
+            style={{ backgroundColor: COLOR_BY_SYMBOL[selectedSymbol] }}
+            aria-label="Loaded move"
+          >
             Loaded
           </span>
         ) : null}
@@ -112,7 +118,7 @@ export function BoardGrid({
                 destructionEffect ? `unity-cell-destroying-${destructionEffect.tone}` : ''
               } ${scoreCount ? 'unity-cell-score-counted' : ''} unity-cell-v${cellVariant(index)}`}
               style={{
-                background: cellTone(cell.color, hidden, cell.occupied),
+                background: cellTone(cell.symbol, hidden, cell.occupied),
                 '--score-order': scoreCount ?? 0,
                 '--score-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_CELL_OFFSET_MS : 0}ms`,
                 '--score-badge-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_BADGE_OFFSET_MS : 0}ms`,

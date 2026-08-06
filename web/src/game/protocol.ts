@@ -1,6 +1,5 @@
 import { decode, encode } from '@msgpack/msgpack'
-import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './constants'
-import type { PaintColor, QueuedMove } from './types'
+import type { QueuedMove } from './types'
 import {
   clampGameConfig,
   DEFAULT_GAME_CONFIG,
@@ -18,14 +17,16 @@ import {
 
 export const LOBBY_ROOM_ID = 'lobby'
 
-function decodeWireColor(value: unknown): PaintColor {
+// The legacy relay packets still name moves by colour on the wire. That naming
+// is frozen into the protocol; only the decoded value became a symbol.
+function decodeWireSymbol(value: unknown): ClassicSymbol {
   switch (value) {
     case 'green':
-      return COLOR_GREEN
+      return 'rock'
     case 'blue':
-      return COLOR_BLUE
+      return 'paper'
     case 'red':
-      return COLOR_RED
+      return 'scissors'
     default:
       throw new Error(`Unsupported wire color: ${String(value)}`)
   }
@@ -145,7 +146,7 @@ export type DecodedPacket =
       firstPlayerId: number
       descriptor: GameStartDescriptor
     }
-  | { type: PacketType.GAME_MOVE; senderId: number; index: number; color: PaintColor }
+  | { type: PacketType.GAME_MOVE; senderId: number; index: number; symbol: ClassicSymbol }
   | { type: PacketType.IMMUNE_UPDATE; senderId: number; indices: number[] }
   | { type: PacketType.READY_STATE; senderId: number; ready: boolean }
   | { type: PacketType.GAME_MOVES; senderId: number; moves: QueuedMove[] }
@@ -525,7 +526,7 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
         type: packetType,
         senderId: Number(decoded[0]),
         index: Number(decoded[2]),
-        color: decodeWireColor(decoded[3]),
+        symbol: decodeWireSymbol(decoded[3]),
       }
     case PacketType.IMMUNE_UPDATE:
       return {
@@ -557,7 +558,7 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
           senderId: Number(decoded[0]),
           moves: indices.map((value, index) => ({
             index: Number(value),
-            color: decodeWireColor(colors[index]),
+            symbol: decodeWireSymbol(colors[index]),
           })),
         }
       }

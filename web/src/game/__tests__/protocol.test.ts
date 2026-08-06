@@ -1,5 +1,4 @@
 import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
-import { COLOR_GREEN, COLOR_RED } from '../constants'
 import { decode, encode } from '@msgpack/msgpack'
 import {
   decodePacket,
@@ -269,16 +268,18 @@ describe('protocol', () => {
    * frame must stay a silent no-op rather than a decode failure, because
    * NetworkClient turns any decode failure into a terminal sync-lost.
    * Wire shapes are written out literally here rather than round-tripped
-   * through an encoder, so the assertions pin the format itself.
+   * through an encoder, so the assertions pin the format itself. The wire still
+   * names moves by colour -- that spelling is frozen into the protocol -- while
+   * the decoded value is the symbol the rest of the client works in.
    */
-  it('decodes a legacy game move relay', () => {
+  it('decodes a legacy game move relay from a wire colour to a symbol', () => {
     const packet = decodePacket(encode([7, PacketType.GAME_MOVE, 4, 'green']))
 
     expect(packet).toEqual({
       type: PacketType.GAME_MOVE,
       senderId: 7,
       index: 4,
-      color: COLOR_GREEN,
+      symbol: 'rock',
     })
   })
 
@@ -291,8 +292,8 @@ describe('protocol', () => {
       type: PacketType.GAME_MOVES,
       senderId: 3,
       moves: [
-        { index: 0, color: COLOR_RED },
-        { index: 8, color: COLOR_GREEN },
+        { index: 0, symbol: 'scissors' },
+        { index: 8, symbol: 'rock' },
       ],
     })
   })

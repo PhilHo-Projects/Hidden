@@ -7,7 +7,7 @@ import type { GridState } from '../../game/types'
 const gridOf = (count: number): GridState => ({
   cells: Array.from({ length: count }, () => ({
     occupied: false,
-    color: null,
+    symbol: null,
     immune: false,
   })),
 })

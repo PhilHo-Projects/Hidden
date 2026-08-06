@@ -1,17 +1,17 @@
-import type { PLAYER_COLORS, POWERUP_LABELS } from './constants'
+import type { POWERUP_LABELS } from './constants'
 import type {
+  ClassicSymbol,
   GameConfig,
   GameState as CoreGameState,
   Seat,
 } from '@hidden/game-core'
 
-export type PaintColor = (typeof PLAYER_COLORS)[number]
 export type PowerupKey = keyof typeof POWERUP_LABELS
 export type MatchPhase = 'setup' | 'battle' | 'results'
 
 export interface CellState {
   occupied: boolean
-  color: PaintColor | null
+  symbol: ClassicSymbol | null
   immune: boolean
 }
 
@@ -35,7 +35,7 @@ export interface MatchConfig extends GameConfig {
 
 export interface QueuedMove {
   index: number
-  color: PaintColor
+  symbol: ClassicSymbol
 }
 
 export interface MatchResult {
@@ -53,7 +53,7 @@ export interface GameState {
   currentRound: number
   totalTurns: number
   maxTurns: number
-  selectedColor: PaintColor | null
+  selectedSymbol: ClassicSymbol | null
   shieldSelectionMode: boolean
   playerPowerups: PowerupState
   pendingExtraTurnMoves: QueuedMove[]
@@ -65,7 +65,12 @@ export interface GameState {
 
 export type EngineEvent =
   | { type: 'announcement'; message: string }
-  | { type: 'cell-destroyed'; board: 'player' | 'opponent'; index: number; color: PaintColor }
+  | {
+      type: 'cell-destroyed'
+      board: 'player' | 'opponent'
+      index: number
+      symbol: ClassicSymbol
+    }
   | { type: 'game-over'; result: MatchResult }
 
 export interface EngineResult {

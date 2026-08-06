@@ -11,29 +11,15 @@ import {
   type Seat,
 } from '@hidden/game-core'
 
-import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './constants'
 import type {
   EngineEvent,
   EngineResult,
   GameState,
   MatchConfig,
   MatchResult,
-  PaintColor,
   PowerupKey,
   PowerupState,
 } from './types'
-
-const colorBySymbol: Record<ClassicSymbol, PaintColor> = {
-  rock: COLOR_GREEN,
-  paper: COLOR_BLUE,
-  scissors: COLOR_RED,
-}
-
-const symbolByColor: Record<PaintColor, ClassicSymbol> = {
-  [COLOR_GREEN]: 'rock',
-  [COLOR_BLUE]: 'paper',
-  [COLOR_RED]: 'scissors',
-}
 
 const unlockMessages: Record<PowerupKey, string> = {
   shield: 'Shield unlocked!',
@@ -59,7 +45,7 @@ function presentGrid(state: CoreGameState, seat: Seat) {
   return {
     cells: state.boards[seat].locations.map((location) => ({
       occupied: location.symbol !== null,
-      color: location.symbol ? colorBySymbol[location.symbol] : null,
+      symbol: location.symbol,
       immune: location.immune,
     })),
   }
@@ -85,7 +71,7 @@ function presentResult(state: CoreGameState, localSeat: Seat): MatchResult | nul
 function presentState(
   canonicalState: CoreGameState,
   previous: GameState,
-  overrides: Partial<Pick<GameState, 'phase' | 'selectedColor'>> = {},
+  overrides: Partial<Pick<GameState, 'phase' | 'selectedSymbol'>> = {},
 ): GameState {
   const localSeat = previous.localSeat ?? 0
   const opponentSeat = opponentOf(localSeat)
@@ -102,7 +88,7 @@ function presentState(
     playerPowerups: presentPowerups(canonicalState, localSeat),
     pendingExtraTurnMoves: canonicalState.pendingExtraPlacements.map((placement) => ({
       index: placement.locationId,
-      color: colorBySymbol[placement.symbol],
+      symbol: placement.symbol,
     })),
     isInExtraTurn: canonicalState.powerups[localSeat].extraTurnInProgress,
     result: presentResult(canonicalState, localSeat),
@@ -131,7 +117,7 @@ function presentEvent(
         type: 'cell-destroyed',
         board: event.seat === localSeat ? 'player' : 'opponent',
         index: event.locationId,
-        color: colorBySymbol[event.symbol],
+        symbol: event.symbol,
       }]
     case 'shield-protected':
       return [{
@@ -194,7 +180,7 @@ function presentResultFromCore(
   const localSeat = previous.localSeat ?? 0
   const state = result.accepted
     ? presentState(result.state, previous, {
-        selectedColor: options.clearSelection ? null : previous.selectedColor,
+        selectedSymbol: options.clearSelection ? null : previous.selectedSymbol,
       })
     : previous
   const domainEvents = options.suppressTimeoutAnnouncement
@@ -238,7 +224,7 @@ export function createOfflineState(
     currentRound: 1,
     totalTurns: 0,
     maxTurns: canonicalState.maxTurns,
-    selectedColor: null,
+    selectedSymbol: null,
     shieldSelectionMode: false,
     playerPowerups: presentPowerups(canonicalState, localSeat),
     pendingExtraTurnMoves: [],
@@ -264,7 +250,7 @@ export function createOnlinePresentedState(
     currentRound: canonicalState.currentRound,
     totalTurns: canonicalState.turnCount,
     maxTurns: canonicalState.maxTurns,
-    selectedColor: null,
+    selectedSymbol: null,
     shieldSelectionMode: false,
     playerPowerups: presentPowerups(canonicalState, localSeat),
     pendingExtraTurnMoves: [],
@@ -285,7 +271,7 @@ export function applyOnlinePresentation(
   const localSeat = previous.localSeat ?? 0
   return {
     state: presentState(canonicalState, previous, {
-      selectedColor: clearSelection ? null : previous.selectedColor,
+      selectedSymbol: clearSelection ? null : previous.selectedSymbol,
     }),
     events: events.flatMap((event) =>
       presentEvent(event, canonicalState, localSeat),
@@ -305,28 +291,31 @@ export function startOfflineMatch(state: GameState): EngineResult {
 }
 
 /**
- * Arms the next placement with a colour. A shallow copy is enough: every other
+ * Arms the next placement with a symbol. A shallow copy is enough: every other
  * function here rebuilds the grids from canonical state rather than mutating
  * them, so the sharing this leaves behind is never written through.
  */
-export function selectColor(state: GameState, color: PaintColor): GameState {
-  return { ...state, selectedColor: color }
+export function selectSymbol(
+  state: GameState,
+  symbol: ClassicSymbol,
+): GameState {
+  return { ...state, selectedSymbol: symbol }
 }
 
 export function applyOfflineLocalMove(
   state: GameState,
   index: number,
-  overrideColor?: PaintColor,
+  overrideSymbol?: ClassicSymbol,
 ): EngineResult {
   const { canonicalState, localSeat } = requireCanonical(state)
-  const color = overrideColor ?? state.selectedColor
-  if (!color) return { state, events: [] }
+  const symbol = overrideSymbol ?? state.selectedSymbol
+  if (!symbol) return { state, events: [] }
   return presentResultFromCore(
     state,
     applyCommand(canonicalState, localSeat, {
       type: 'place',
       locationId: index,
-      symbol: symbolByColor[color],
+      symbol,
     }),
     { clearSelection: true },
   )
@@ -335,7 +324,7 @@ export function applyOfflineLocalMove(
 export function applyOfflineBotMove(
   state: GameState,
   index: number,
-  color: PaintColor,
+  symbol: ClassicSymbol,
 ): EngineResult {
   const { canonicalState, localSeat } = requireCanonical(state)
   return presentResultFromCore(
@@ -343,7 +332,7 @@ export function applyOfflineBotMove(
     applyCommand(canonicalState, opponentOf(localSeat), {
       type: 'place',
       locationId: index,
-      symbol: symbolByColor[color],
+      symbol,
     }),
   )
 }

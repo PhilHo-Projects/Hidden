@@ -1,7 +1,6 @@
 import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
 import { describe, expect, it } from 'vitest'
 
-import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './constants'
 import {
   applyOnlinePresentation,
   applyOfflineBotMove,
@@ -10,7 +9,7 @@ import {
   createOfflineState,
   createOnlinePresentedState,
   playOfflineBotTurn,
-  selectColor,
+  selectSymbol,
   startOfflineMatch,
 } from './coreAdapter'
 import { applyCommand, createGame } from '@hidden/game-core'
@@ -26,21 +25,21 @@ const config: MatchConfig = {
 }
 
 describe('offline core presentation adapter', () => {
-  it('maps canonical local seats and symbols into player colors without relay events', () => {
+  it('maps canonical local seats and symbols into presentation cells without relay events', () => {
     const setup = createOfflineState(config, true, 123)
     const started = startOfflineMatch(setup)
-    const selected = selectColor(started.state, COLOR_GREEN)
+    const selected = selectSymbol(started.state, 'rock')
 
     const result = applyOfflineLocalMove(selected, 0)
 
     expect(result.state.playerGrid.cells[0]).toEqual({
       occupied: true,
-      color: COLOR_GREEN,
+      symbol: 'rock',
       immune: false,
     })
     expect(result.state.opponentGrid.cells[0]).toEqual({
       occupied: false,
-      color: null,
+      symbol: null,
       immune: false,
     })
     expect(result.state.isMyTurn).toBe(false)
@@ -50,13 +49,13 @@ describe('offline core presentation adapter', () => {
 
   it('resolves bot commands through the canonical opponent seat immediately', () => {
     let state = startOfflineMatch(createOfflineState(config, true, 456)).state
-    state = applyOfflineLocalMove(selectColor(state, COLOR_BLUE), 0).state
+    state = applyOfflineLocalMove(selectSymbol(state, 'paper'), 0).state
 
-    const result = applyOfflineBotMove(state, 1, COLOR_RED)
+    const result = applyOfflineBotMove(state, 1, 'scissors')
 
     expect(result.state.opponentGrid.cells[1]).toEqual({
       occupied: true,
-      color: COLOR_RED,
+      symbol: 'scissors',
       immune: false,
     })
     expect(result.state.isMyTurn).toBe(true)
@@ -65,11 +64,11 @@ describe('offline core presentation adapter', () => {
 
   it('maps canonical conflict destruction and unlock events to current animation and announcement events', () => {
     let state = startOfflineMatch(createOfflineState(config, true, 789)).state
-    state = applyOfflineLocalMove(selectColor(state, COLOR_GREEN), 0).state
-    state = applyOfflineBotMove(state, 3, COLOR_BLUE).state
-    state = applyOfflineLocalMove(selectColor(state, COLOR_GREEN), 1).state
-    state = applyOfflineBotMove(state, 4, COLOR_BLUE).state
-    const unlock = applyOfflineLocalMove(selectColor(state, COLOR_GREEN), 2)
+    state = applyOfflineLocalMove(selectSymbol(state, 'rock'), 0).state
+    state = applyOfflineBotMove(state, 3, 'paper').state
+    state = applyOfflineLocalMove(selectSymbol(state, 'rock'), 1).state
+    state = applyOfflineBotMove(state, 4, 'paper').state
+    const unlock = applyOfflineLocalMove(selectSymbol(state, 'rock'), 2)
 
     expect(unlock.state.playerPowerups.unlocked.shield).toBe(true)
     expect(unlock.events).toContainEqual({
@@ -77,32 +76,32 @@ describe('offline core presentation adapter', () => {
       message: 'Shield unlocked!',
     })
 
-    state = applyOfflineBotMove(unlock.state, 5, COLOR_RED).state
-    const conflict = applyOfflineLocalMove(selectColor(state, COLOR_GREEN), 5)
+    state = applyOfflineBotMove(unlock.state, 5, 'scissors').state
+    const conflict = applyOfflineLocalMove(selectSymbol(state, 'rock'), 5)
     expect(conflict.events).toContainEqual({
       type: 'cell-destroyed',
       board: 'opponent',
       index: 5,
-      color: COLOR_RED,
+      symbol: 'scissors',
     })
   })
 
   it('keeps extra-turn presentation immediate and lets the seeded core choose bot placements', () => {
     let state = startOfflineMatch(createOfflineState({ ...config, rounds: 10 }, true, 42)).state
-    state = applyOfflineLocalMove(selectColor(state, COLOR_RED), 0).state
-    state = applyOfflineBotMove(state, 3, COLOR_GREEN).state
-    state = applyOfflineLocalMove(selectColor(state, COLOR_RED), 1).state
-    state = applyOfflineBotMove(state, 4, COLOR_GREEN).state
-    state = applyOfflineLocalMove(selectColor(state, COLOR_RED), 2).state
-    state = applyOfflineBotMove(state, 5, COLOR_GREEN).state
+    state = applyOfflineLocalMove(selectSymbol(state, 'scissors'), 0).state
+    state = applyOfflineBotMove(state, 3, 'rock').state
+    state = applyOfflineLocalMove(selectSymbol(state, 'scissors'), 1).state
+    state = applyOfflineBotMove(state, 4, 'rock').state
+    state = applyOfflineLocalMove(selectSymbol(state, 'scissors'), 2).state
+    state = applyOfflineBotMove(state, 5, 'rock').state
 
     const activation = applyOfflinePowerup(state, 'extraTurn')
-    const first = applyOfflineLocalMove(selectColor(activation.state, COLOR_GREEN), 6)
+    const first = applyOfflineLocalMove(selectSymbol(activation.state, 'rock'), 6)
     expect(first.state.isMyTurn).toBe(true)
     expect(first.state.isInExtraTurn).toBe(true)
     expect(first.state.totalTurns).toBe(6)
 
-    const second = applyOfflineLocalMove(selectColor(first.state, COLOR_BLUE), 7)
+    const second = applyOfflineLocalMove(selectSymbol(first.state, 'paper'), 7)
     expect(second.state.isMyTurn).toBe(false)
     expect(second.state.isInExtraTurn).toBe(false)
     expect(second.state.totalTurns).toBe(7)
@@ -223,7 +222,7 @@ describe('online core presentation adapter', () => {
         0,
       ),
       phase: 'battle' as const,
-      selectedColor: COLOR_GREEN,
+      selectedSymbol: 'rock' as const,
     }
     const accepted = applyCommand(canonical, 0, {
       type: 'place', locationId: 0, symbol: 'rock',
@@ -237,8 +236,8 @@ describe('online core presentation adapter', () => {
       true,
     )
 
-    expect(result.state.playerGrid.cells[0]?.color).toBe(COLOR_GREEN)
-    expect(result.state.selectedColor).toBeNull()
+    expect(result.state.playerGrid.cells[0]?.symbol).toBe('rock')
+    expect(result.state.selectedSymbol).toBeNull()
     expect(result.events.some((event) => event.type.startsWith('send-'))).toBe(false)
   })
 })
