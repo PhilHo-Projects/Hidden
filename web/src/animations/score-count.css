@@ -16,22 +16,37 @@
   animation-delay: var(--score-delay);
 }
 
+/*
+ * An ink splat rather than a plain disc, cut with `clip-path` so it shares the
+ * torn language of the cells it sits on. Sized in `cqw` against the cell (see
+ * `container-type` on `.unity-cell`), so the badge holds its proportion at every
+ * board size and zoom level instead of drifting against the cell the way a `vw`
+ * value does.
+ *
+ * The white rim is a `drop-shadow` stack, not a border: a border follows the
+ * box, and the box is not the shape here.
+ */
 .score-count-badge {
   position: absolute;
   left: 50%;
   top: 50%;
   z-index: 2;
   display: grid;
-  width: clamp(1.65rem, 28%, 2.4rem);
+  width: 46cqw;
   aspect-ratio: 1;
   place-items: center;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #050505;
+  clip-path: polygon(
+    50% 0%, 67% 9%, 88% 5%, 93% 27%, 100% 50%, 92% 71%, 95% 93%, 71% 95%,
+    50% 100%, 29% 94%, 7% 96%, 5% 72%, 0% 50%, 8% 28%, 6% 6%, 28% 8%
+  );
+  background: #070707;
   color: #ffd51d;
-  font-size: clamp(0.72rem, 2vw, 1.05rem);
+  font-family: var(--font-brush);
+  font-size: 30cqw;
   line-height: 1;
-  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.88);
+  filter: drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff)
+    drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff)
+    drop-shadow(3px 3px 0 rgba(0, 0, 0, 0.85));
   transform: translate(-50%, -50%);
   animation: score-badge-pop var(--score-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
   animation-delay: var(--score-badge-delay);

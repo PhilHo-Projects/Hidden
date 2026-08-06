@@ -35,6 +35,16 @@ function boardColumns(cellCount: number) {
   return Math.round(Math.sqrt(cellCount))
 }
 
+// Hand-cut edges come from a handful of clip-path variants rather than one
+// shape stamped nine times. Deriving the variant from the index keeps a cell
+// looking the same across every render, and the stride guarantees neighbours
+// never draw the same cut.
+const CELL_VARIANTS = 4
+
+function cellVariant(index: number) {
+  return (index * 3 + 1) % CELL_VARIANTS
+}
+
 function cellTone(color: PaintColor | null, hidden: boolean, occupied: boolean) {
   if (!occupied) return '#f5f5f5'
   if (hidden) return 'linear-gradient(145deg, #383838, #080808)'
@@ -100,7 +110,7 @@ export function BoardGrid({
                 hidden && cell.occupied ? 'unity-cell-hidden' : ''
               } ${isClickable ? 'unity-cell-clickable' : ''} ${
                 destructionEffect ? `unity-cell-destroying-${destructionEffect.tone}` : ''
-              } ${scoreCount ? 'unity-cell-score-counted' : ''}`}
+              } ${scoreCount ? 'unity-cell-score-counted' : ''} unity-cell-v${cellVariant(index)}`}
               style={{
                 background: cellTone(cell.color, hidden, cell.occupied),
                 '--score-order': scoreCount ?? 0,
@@ -108,8 +118,9 @@ export function BoardGrid({
                 '--score-badge-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_BADGE_OFFSET_MS : 0}ms`,
               } as CSSProperties}
             >
-              <span className="unity-cell-number">{index + 1}</span>
-
+              {/* The cell index is carried by `aria-label` above rather than
+                * printed. On the board it read as clutter; screen readers still
+                * need it to tell one cell from another. */}
               {cell.occupied && hidden ? (
                 <span className="hidden-marker">
                   <span />

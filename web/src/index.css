@@ -808,11 +808,36 @@ summary:focus-visible {
   display: grid;
   justify-items: center;
   gap: 0.85rem;
-  width: min(43rem, 92vw);
+  /* Wider than the old 43rem: the score line below is set in the brush face,
+   * which runs much wider per character than the block face it replaced. */
+  width: min(47rem, 94vw);
   padding: 1.2rem;
   border: 2px solid rgba(255, 255, 255, 0.14);
   background: rgba(0, 0, 0, 0.78);
   text-align: center;
+}
+
+/*
+ * The score readout speaks in the brush voice like the headline above it. It is
+ * the one number the screen exists to deliver, so it reads as display type
+ * rather than as body copy.
+ */
+.results-copy .results-score {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-brush);
+  font-size: clamp(1.35rem, 3.6vw, 1.95rem);
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  text-shadow: 3px 3px 0 #000;
+  /* Each line breaks only at its own <br>. Without this, a two-digit score
+   * pushes the number onto a line of its own and the label is left dangling. */
+  white-space: nowrap;
+}
+
+.results-copy .results-score b {
+  color: var(--unity-yellow);
+  font-weight: inherit;
 }
 
 .offline-card p,
@@ -1187,27 +1212,63 @@ summary:focus-visible {
 }
 
 .unity-board-compact .unity-cell {
-  border-width: 1px;
+  border: 1px solid #101010;
   border-radius: 2px;
   box-shadow: 0 2px 0 #000;
+  clip-path: none;
+  filter: none;
 }
 
-.unity-board-compact .unity-cell-number {
-  left: 0.2rem;
-  top: 0.15rem;
-  font-size: 0.48rem;
-}
-
+/*
+ * Cells are cut by `clip-path`, so the ink outline and the drop stack have to be
+ * `drop-shadow` filters rather than a border and a box-shadow — those follow the
+ * box, not the cut. The outline lives in a variable because every state that
+ * touches `filter` has to re-declare the whole chain.
+ */
 .unity-cell {
+  --cell-ink: drop-shadow(2px 0 0 #0b0b0b) drop-shadow(-2px 0 0 #0b0b0b)
+    drop-shadow(0 2px 0 #0b0b0b) drop-shadow(0 -2px 0 #0b0b0b);
   position: relative;
+  /* Makes `cqw` resolve against the cell, so the score badge drawn inside stays
+   * locked to the cell at any board size or zoom level. */
+  container-type: inline-size;
   aspect-ratio: 1;
   min-width: 0;
   overflow: hidden;
-  border: 2px solid #101010;
-  border-radius: 4px;
-  box-shadow: 0 3px 0 #000;
+  border: 0;
   cursor: default;
-  transition: filter 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+  filter: var(--cell-ink) drop-shadow(0 4px 0 #000);
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+/* Four cuts, assigned by cell index. Enough variation that no two neighbours
+ * match; not so much that the grid stops reading as a grid. */
+.unity-cell-v0 {
+  clip-path: polygon(
+    2% 4%, 26% 0%, 53% 3%, 79% 0%, 98% 4%, 96% 27%, 100% 52%, 97% 78%,
+    99% 97%, 75% 100%, 48% 97%, 22% 100%, 3% 96%, 4% 73%, 0% 47%, 3% 24%
+  );
+}
+
+.unity-cell-v1 {
+  clip-path: polygon(
+    3% 1%, 28% 4%, 51% 0%, 74% 4%, 97% 1%, 100% 23%, 96% 50%, 100% 75%,
+    96% 99%, 72% 96%, 50% 100%, 27% 96%, 1% 99%, 4% 77%, 0% 52%, 4% 28%
+  );
+}
+
+.unity-cell-v2 {
+  clip-path: polygon(
+    4% 2%, 25% 0%, 50% 4%, 78% 1%, 96% 3%, 100% 26%, 97% 49%, 100% 77%,
+    97% 98%, 73% 100%, 52% 96%, 23% 100%, 4% 97%, 0% 74%, 3% 50%, 0% 23%
+  );
+}
+
+.unity-cell-v3 {
+  clip-path: polygon(
+    1% 3%, 24% 3%, 54% 0%, 77% 3%, 99% 1%, 97% 25%, 100% 53%, 96% 74%,
+    99% 98%, 76% 99%, 47% 100%, 24% 97%, 1% 100%, 3% 72%, 0% 48%, 2% 27%
+  );
 }
 
 .unity-cell-clickable {
@@ -1215,22 +1276,10 @@ summary:focus-visible {
 }
 
 .unity-cell-clickable:hover:not(:disabled) {
-  filter: brightness(1.13);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 0 #000;
+  transform: translateY(-3px) rotate(-0.6deg);
+  filter: var(--cell-ink) drop-shadow(0 8px 0 #000) brightness(1.13);
 }
 
-.unity-cell-number {
-  position: absolute;
-  left: 0.45rem;
-  top: 0.35rem;
-  color: rgba(0, 0, 0, 0.38);
-  font-size: clamp(0.65rem, 1.6vw, 0.9rem);
-}
-
-.unity-cell-hidden .unity-cell-number {
-  color: rgba(255, 255, 255, 0.32);
-}
 
 .hidden-marker {
   position: absolute;
@@ -1369,24 +1418,12 @@ summary:focus-visible {
   transition: filter 160ms ease, transform 160ms ease;
 }
 
+/* Larger than it was: the caption underneath is gone, so the icon carries the
+ * whole tile and is the only thing naming the move. */
 .rps-tile img {
-  width: 82%;
-  height: 82%;
+  width: 90%;
+  height: 90%;
   object-fit: contain;
-}
-
-.rps-tile span {
-  position: absolute;
-  bottom: 0.22rem;
-  left: 0.25rem;
-  right: 0.25rem;
-  padding: 0.16rem 0.1rem 0.1rem;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.76);
-  font-size: clamp(0.56rem, 1.25vw, 0.72rem);
-  line-height: 1;
-  text-align: center;
-  text-transform: uppercase;
 }
 
 .rps-tile:hover {
@@ -1422,7 +1459,10 @@ summary:focus-visible {
   min-height: calc(100vh - var(--chrome-height) - 2rem);
   min-height: calc(100dvh - var(--chrome-height) - 2rem);
   width: min(78rem, 100%);
-  grid-template-columns: minmax(18rem, 23rem) minmax(0, 1fr);
+  /* The copy column caps the score line, not `.results-copy`'s own width. Sized
+   * to hold "Opponent Score: 00" — the longest string this panel can produce —
+   * on one line in the brush face. */
+  grid-template-columns: minmax(20rem, 27rem) minmax(0, 1fr);
   gap: clamp(1rem, 3vw, 2rem);
   align-items: center;
   margin: 0 auto;
@@ -1434,10 +1474,14 @@ summary:focus-visible {
   padding: clamp(0.8rem, 2vw, 1.2rem);
 }
 
-.results-copy p:last-of-type {
+/* Targets the score line by name rather than by position. As `p:last-of-type`
+ * this outranked `.results-copy .results-score` on specificity and silently won,
+ * which is exactly the trap a positional selector sets when a class arrives
+ * later. */
+.results-copy .results-score {
   margin: 0;
   color: #fff;
-  line-height: 1.7;
+  line-height: 1.3;
 }
 
 .results-actions {
@@ -1748,9 +1792,12 @@ summary:focus-visible {
     font-size: clamp(2.4rem, 12.5vw, 3.4rem);
   }
 
-  .results-copy p:last-of-type {
-    font-size: 0.72rem;
-    line-height: 1.45;
+  /* Still display type on a phone, just a smaller cut of it. The old 0.72rem
+   * was sized for the block face this line used to be set in. The vw term is
+   * what keeps "Opponent Score: 00" on one line down to the narrowest phone. */
+  .results-copy .results-score {
+    font-size: clamp(0.95rem, 4.4vw, 1.5rem);
+    line-height: 1.3;
   }
 
   .results-actions {
@@ -1797,16 +1844,14 @@ summary:focus-visible {
     gap: 0.22rem;
   }
 
+  /* Two boards side by side at this width leaves each one too small for the cut
+   * edges to read, so the review screen stays flat like the compact board. */
   .final-boards .unity-cell {
-    border-width: 1px;
+    border: 1px solid #101010;
     border-radius: 2px;
     box-shadow: 0 2px 0 #000;
-  }
-
-  .final-boards .unity-cell-number {
-    left: 0.25rem;
-    top: 0.18rem;
-    font-size: 0.5rem;
+    clip-path: none;
+    filter: none;
   }
 }
 
