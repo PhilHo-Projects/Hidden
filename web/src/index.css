@@ -13,7 +13,7 @@
 }
 
 @font-face {
-  font-family: "JetBrains Unity";
+  font-family: "JetBrains Mono";
   src: url("/src/assets/fonts/jetbrains-mono-bold.woff2") format("woff2");
   font-display: block;
 }
@@ -29,7 +29,7 @@
   --unity-white: #f5f5f5;
   --unity-muted: #777777;
   --font-brush: "Edo SZ", "Street Soul", Impact, sans-serif;
-  --font-block: "JetBrains Unity", "Arial Black", system-ui, sans-serif;
+  --font-block: "JetBrains Mono", "Arial Black", system-ui, sans-serif;
   color: var(--unity-white);
   background: var(--unity-black);
   font-family: var(--font-block);

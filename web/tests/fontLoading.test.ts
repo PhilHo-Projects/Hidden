@@ -52,7 +52,7 @@ describe('critical font loading', () => {
     const criticalFonts = [
       { family: 'Edo SZ', prefix: 'edosz', originalBytes: 48_820 },
       {
-        family: 'JetBrains Unity',
+        family: 'JetBrains Mono',
         prefix: 'jetbrains-mono-bold',
         originalBytes: 277_828,
       },
