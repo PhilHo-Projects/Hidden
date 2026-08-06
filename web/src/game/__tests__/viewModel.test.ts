@@ -6,6 +6,7 @@ import {
   getOpponentName,
   getScoreCountLabels,
   getScreenLabel,
+  getTurnStatusText,
   resolvePlayerName,
   shouldPromptMoveChoice,
   shouldShowOpponentBoard,
@@ -123,6 +124,22 @@ describe('view model helpers', () => {
     expect(shouldPromptMoveChoice(makeMatch({ selectedColor: '#4591DB' }), 'battle')).toBe(false)
     expect(shouldPromptMoveChoice(makeMatch({ shieldSelectionMode: true }), 'battle')).toBe(false)
     expect(shouldPromptMoveChoice(makeMatch({ phase: 'results' }), 'battle')).toBe(false)
+  })
+
+  it('names the turn state without naming the opponent', () => {
+    expect(getTurnStatusText(makeMatch())).toBe('Your Turn')
+    expect(getTurnStatusText(makeMatch({ shieldSelectionMode: true }))).toBe(
+      'Choose a tile to shield.',
+    )
+
+    /*
+     * The waiting line reads at a glance and a long name wrapped it, so the
+     * opponent is referred to by role. Their name is on their own board and in
+     * the top bar already.
+     */
+    const waiting = getTurnStatusText(makeMatch({ isMyTurn: false }))
+    expect(waiting).toBe('Waiting for opponent')
+    expect(waiting).not.toContain('Practice Bot')
   })
 
   it('assigns sequential score labels only to occupied cells', () => {

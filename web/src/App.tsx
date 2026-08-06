@@ -12,6 +12,7 @@ import {
 import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
+import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
 import { PowerupTray } from './components/PowerupTray'
 import { ProfileMenu } from './components/ProfileMenu'
 import { RuleChip } from './components/RuleControls'
@@ -73,6 +74,7 @@ import {
   getBackTarget,
   getOpponentName,
   getScoreCountLabels,
+  getTurnStatusText,
   resolvePlayerName,
   shouldPromptMoveChoice,
   shouldShowOpponentBoard,
@@ -132,6 +134,7 @@ function BrushButton({ children, className = '', tone = 'yellow', type = 'button
 
 function App() {
   const [screen, setScreen] = useState<Screen>('intro')
+  const [howToPlayOpen, setHowToPlayOpen] = useState(false)
   const [guestUsername] = useState(createGuestName)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authHydrated, setAuthHydrated] = useState(false)
@@ -1035,13 +1038,7 @@ function App() {
             }
           : inlineStatus
   const statusText =
-    screen === 'battle' && match
-      ? match.isMyTurn
-        ? match.shieldSelectionMode
-          ? 'Choose a tile to shield.'
-          : 'Your Turn'
-        : `Waiting for ${opponentName}`
-      : status.detail
+    screen === 'battle' && match ? getTurnStatusText(match) : status.detail
   const awaitingMoveChoice = shouldPromptMoveChoice(match, screen)
   const playerScoreCountLabels = match
     ? getScoreCountLabels(match.playerGrid.cells)
@@ -1202,6 +1199,7 @@ function App() {
         <section className="setup-screen pregame-screen">
           <GameMasthead compact />
           <GuestIdentity name={username} />
+          <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
           <div className="action-grid online-action-grid">
             <ActionChoice
               label="QUICK MATCH"
@@ -1349,6 +1347,7 @@ function App() {
         <section className="setup-screen pregame-screen offline-setup-screen">
           <GameMasthead compact />
           <GuestIdentity name={username} />
+          <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
           <div className="offline-card">
             <p className="practice-kicker">PRACTICE</p>
             <p className="panel-description">
@@ -1542,6 +1541,11 @@ function App() {
           </div>
         </section>
       ) : null}
+
+      <HowToPlayModal
+        open={howToPlayOpen}
+        onClose={() => setHowToPlayOpen(false)}
+      />
     </main>
   )
 }

@@ -7,12 +7,22 @@ const webRoot = fileURLToPath(new URL('..', import.meta.url))
 const distRoot = fileURLToPath(new URL('../dist', import.meta.url))
 const distAssets = fileURLToPath(new URL('../dist/assets', import.meta.url))
 
+/*
+ * This hook shells out to a full `tsc -b && vite build`, which takes several
+ * seconds on its own and competes with every other suite vitest runs in
+ * parallel. Vitest's 10s default left no headroom: adding one more test file
+ * anywhere in the project was enough to time the hook out and silently skip the
+ * assertions below. The ceiling is generous on purpose — it exists to catch a
+ * hung build, not to police how long a healthy one takes.
+ */
+const BUILD_TIMEOUT_MS = 180_000
+
 beforeAll(() => {
   execSync('npm run build', {
     cwd: webRoot,
     stdio: 'pipe',
   })
-})
+}, BUILD_TIMEOUT_MS)
 
 function findBuiltAsset(prefix: string, extension: string) {
   const matches = readdirSync(distAssets).filter(
