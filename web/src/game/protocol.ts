@@ -32,24 +32,45 @@ function decodeWireSymbol(value: unknown): ClassicSymbol {
   }
 }
 
+/*
+ * Numbers are frozen: renaming a symbol is fine, renumbering one is a protocol
+ * break. Append from 28. The three tiers below are not interchangeable.
+ *
+ * RESERVED   never implemented by this server, and nothing decodes them. They
+ *            exist so the numbers stay claimed. Do not reuse them.
+ * LEGACY     the pre-authoritative move relays. The server parses them only to
+ *            answer `legacy-gameplay-disabled`, and the client still decodes
+ *            them into an ignored no-op -- decoding must keep working, because
+ *            NetworkClient turns a decode failure into a terminal sync-lost.
+ * LIVE       everything the current protocol actually uses.
+ */
 export enum PacketType {
+  /** RESERVED */
   CHAT = 0,
+  /** RESERVED */
   POSITION = 1,
   ID_ASSIGN = 2,
+  /** RESERVED */
   TIME_SYNC = 3,
+  /** RESERVED */
   ROOM_CREATE = 4,
   ROOM_JOIN = 5,
   ROOM_LEAVE = 6,
+  /** RESERVED */
   ROOM_DESTROY = 7,
   SERVER_RESPONSE = 8,
   USER_INFO = 9,
+  /** LEGACY */
   GAME_MOVE = 10,
+  /** LEGACY */
   IMMUNE_UPDATE = 11,
   READY_STATE = 12,
   MATCHMAKING_REQUEST = 13,
   MATCH_FOUND = 14,
   GAME_START = 15,
+  // 16 was never assigned.
   OPPONENT_DISCONNECTED = 17,
+  /** LEGACY */
   GAME_MOVES = 18,
   GAME_COMMAND = 19,
   GAME_UPDATE = 20,
@@ -137,7 +158,6 @@ export type GameUpdate = AcceptedGameUpdate | RejectedGameUpdate
 
 export type DecodedPacket =
   | { type: PacketType.ID_ASSIGN; clientId: number }
-  | { type: PacketType.TIME_SYNC; sequence: number; serverTime: number }
   | { type: PacketType.SERVER_RESPONSE; success: boolean; originalPacketType?: PacketType }
   | { type: PacketType.USER_INFO; users: UserEntry[] }
   | { type: PacketType.MATCH_FOUND; roomId: string; config: GameConfig }
@@ -462,12 +482,6 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
       return {
         type: packetType,
         clientId: Number(decoded[2]),
-      }
-    case PacketType.TIME_SYNC:
-      return {
-        type: packetType,
-        sequence: Number(decoded[2]),
-        serverTime: Number(decoded[3]),
       }
     case PacketType.SERVER_RESPONSE:
       return {

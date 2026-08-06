@@ -306,8 +306,6 @@ export class NetworkClient {
       case PacketType.OPPONENT_DISCONNECTED:
         this.emit({ type: 'opponent-disconnected' })
         break
-      case PacketType.TIME_SYNC:
-        break
     }
   }
 
