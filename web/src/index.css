@@ -1267,10 +1267,19 @@ summary:focus-visible {
   text-shadow: 4px 4px 0 #000;
 }
 
+/*
+ * The turn line speaks in the brush voice. It and the round callout above it are
+ * the two things read most often during a match, and the block face made the
+ * pair read as chrome reporting on the game rather than as the game talking.
+ */
 .battle-header p {
   margin: 0;
   color: #fff;
-  font-size: clamp(1.05rem, 2.6vw, 1.9rem);
+  font-family: var(--font-brush);
+  font-size: clamp(1.35rem, 3.2vw, 2.3rem);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.01em;
   text-shadow: 4px 4px 0 #000;
 }
 
@@ -1361,10 +1370,16 @@ summary:focus-visible {
   text-transform: uppercase;
 }
 
+/*
+ * Player names run in the brush voice too, so the name above a board reads as
+ * part of the game rather than as a field label.
+ */
 .unity-board-header h3 {
   margin: 0;
   color: #fff;
-  font-size: clamp(1rem, 2vw, 1.6rem);
+  font-family: var(--font-brush);
+  font-size: clamp(1.25rem, 2.6vw, 2rem);
+  font-weight: 400;
   line-height: 1;
   text-shadow: 3px 3px 0 #000;
 }
@@ -2358,4 +2373,308 @@ summary:focus-visible {
 .lobby-room-section {
   width: 100%;
   text-align: left;
+}
+
+/*
+ * How to play
+ * ---------------------------------------------------------------------------
+ * The trigger is a fan of three question cards drawn from the shipped palette.
+ * It shares the navbar's left cell with Back rather than claiming a fourth grid
+ * column, which would squeeze the status strip at 320px.
+ */
+.howto-nav-group {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.3rem, 1.4vw, 0.7rem);
+  justify-self: start;
+}
+
+/* The landing screen has no top bar, so the trigger appears there in its own
+ * right and takes a label: it is an invitation, not a reminder. */
+.welcome-howto {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  justify-self: center;
+}
+
+.welcome-howto > span {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.howto-trigger {
+  display: inline-flex;
+  /* Below the 48px floor at its drawn size, so the tap target is padded out to
+   * meet it without inflating the art. */
+  min-width: 3rem;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.howto-trigger-cards {
+  position: relative;
+  display: block;
+  width: 2.1rem;
+  height: 1.75rem;
+  transition: transform 160ms ease;
+}
+
+.howto-card {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: grid;
+  width: 1.05rem;
+  height: 1.5rem;
+  place-items: center;
+  border: 2px solid currentColor;
+  background: #0a0a0a;
+  font-family: var(--font-brush);
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+/* Green sits last in the DOM so it stacks in front, matching the fan where the
+ * middle card is the nearest one. */
+.howto-card-red {
+  color: var(--unity-red);
+  transform: translateX(-88%) rotate(-16deg);
+}
+
+.howto-card-blue {
+  color: var(--unity-blue);
+  transform: translateX(-12%) rotate(16deg);
+}
+
+.howto-card-green {
+  color: var(--unity-green);
+  transform: translateX(-50%);
+}
+
+.howto-trigger:hover .howto-trigger-cards,
+.howto-trigger:focus-visible .howto-trigger-cards {
+  transform: translateY(-2px);
+}
+
+.howto-trigger:hover .howto-card-red {
+  transform: translateX(-104%) rotate(-22deg);
+}
+
+.howto-trigger:hover .howto-card-blue {
+  transform: translateX(4%) rotate(22deg);
+}
+
+.howto-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  padding: clamp(0.8rem, 3vw, 2rem);
+  overflow-y: auto;
+  justify-items: center;
+  /* `safe` so a panel taller than the viewport pins to the top and stays
+   * scrollable instead of having its heading centred off the top edge. */
+  align-content: safe center;
+  background: rgba(2, 2, 2, 0.86);
+  animation: howto-overlay-in 140ms ease-out both;
+}
+
+/*
+ * The frame. The board's cells are cut with `clip-path`, so the modal is cut the
+ * same way rather than inventing a second border vocabulary. Because the cut is
+ * in percentages it stretches with the panel, so the panel is held near a card's
+ * proportions by `max-width` and the percentages are kept small — a large cut
+ * would shear badly once the copy grows.
+ *
+ * The cut means the ink outline and drop stack must be `drop-shadow` filters:
+ * a border and a box-shadow follow the box, not the cut.
+ */
+.howto-panel {
+  width: min(34rem, 100%);
+  filter:
+    drop-shadow(3px 0 0 #000) drop-shadow(-3px 0 0 #000)
+    drop-shadow(0 3px 0 #000) drop-shadow(0 -3px 0 #000)
+    drop-shadow(9px 11px 0 rgba(0, 0, 0, 0.9));
+  animation: howto-panel-in 180ms ease-out both;
+}
+
+.howto-panel-inner {
+  position: relative;
+  display: grid;
+  gap: clamp(0.85rem, 2.4vw, 1.15rem);
+  padding: clamp(1.15rem, 3.6vw, 1.8rem);
+  clip-path: polygon(
+    1% 1%, 27% 3%, 52% 0%, 78% 3%, 99% 1%, 97% 26%, 100% 51%, 97% 76%,
+    99% 99%, 74% 97%, 49% 100%, 23% 97%, 1% 99%, 3% 74%, 0% 49%, 3% 24%
+  );
+  background:
+    linear-gradient(150deg, rgba(22, 22, 26, 0.97), rgba(6, 6, 6, 0.99)),
+    #050505;
+  /* The coloured keyline the frame is named for. Drawn as an inset shadow so it
+   * follows the panel edge inside the cut rather than tracing the box. */
+  box-shadow: inset 0 0 0 2px rgba(215, 175, 19, 0.5);
+}
+
+.howto-close {
+  position: absolute;
+  top: clamp(0.5rem, 2vw, 0.9rem);
+  right: clamp(0.5rem, 2vw, 0.9rem);
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--font-brush);
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.howto-close:hover {
+  color: #fff;
+  transform: scale(1.12);
+}
+
+.howto-header {
+  display: grid;
+  gap: 0.2rem;
+  /* Clears the close button so a heading never runs under it. */
+  padding-right: 2.5rem;
+  text-align: left;
+}
+
+.howto-kicker {
+  margin: 0;
+  color: var(--unity-yellow);
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.howto-header h2 {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-brush);
+  font-size: clamp(2.1rem, 7vw, 3.1rem);
+  font-weight: 400;
+  line-height: 0.9;
+  text-shadow: 4px 4px 0 #000;
+}
+
+.howto-rules {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: clamp(0.75rem, 2.2vw, 1rem);
+  list-style: none;
+}
+
+.howto-rule {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.howto-rule-number {
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border: 2px solid rgba(215, 175, 19, 0.55);
+  color: var(--unity-yellow);
+  font-family: var(--font-brush);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.howto-rule-copy h3 {
+  margin: 0 0 0.25rem;
+  color: #fff;
+  font-size: clamp(0.92rem, 2.2vw, 1.02rem);
+  line-height: 1.2;
+}
+
+.howto-rule-copy p {
+  margin: 0;
+  max-width: 52ch;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: clamp(0.82rem, 1.9vw, 0.92rem);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.howto-powerups {
+  display: flex;
+  gap: clamp(0.6rem, 2.4vw, 1.1rem);
+  justify-content: center;
+  padding-top: 0.15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.howto-powerup {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  padding-top: 0.7rem;
+}
+
+.howto-powerup img {
+  width: clamp(1.6rem, 5vw, 2.1rem);
+  height: auto;
+}
+
+.howto-powerup small {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.62rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.howto-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+@keyframes howto-overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes howto-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .howto-overlay,
+  .howto-panel {
+    animation: none;
+  }
+
+  .howto-trigger-cards,
+  .howto-card,
+  .howto-close {
+    transition: none;
+  }
 }

@@ -37,9 +37,15 @@ there binds a stranger; a host sets the rules of a game they own.
 - Navigation actions use the yellow brush voice while status copy stays compact
   and utilitarian.
 - The brush face carries every display heading: the masthead, panel titles, the
-  round callout, and the game-over verdict. The block face is reserved for
-  status copy, labels, descriptions, player names, scores, and clocks. A single
-  panel never runs both faces at headline size.
+  round callout, and the game-over verdict. In a match it also carries the turn
+  line and the player name above a board — the two things looked at most while
+  playing, which in the block face read as chrome reporting on the game rather
+  than as the game speaking. The block face keeps status copy, labels,
+  descriptions, scores, and clocks. A single panel never runs both faces at
+  headline size.
+- The turn line names the opponent by role, not by name: it is read at a glance,
+  and a long name wrapped it. The name is already in the top bar and above the
+  opponent's own board.
 - The persistent bar owns no surface of its own. Its status panel is
   transparent, so the bar reads as one black strip rather than a box on a strip.
 - Status copy reflects the actual phase: connecting, syncing, joining,

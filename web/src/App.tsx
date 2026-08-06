@@ -12,6 +12,7 @@ import {
 import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
+import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
 import { PowerupTray } from './components/PowerupTray'
 import { ProfileMenu } from './components/ProfileMenu'
 import { RuleChip } from './components/RuleControls'
@@ -73,6 +74,7 @@ import {
   getBackTarget,
   getOpponentName,
   getScoreCountLabels,
+  getTurnStatusText,
   resolvePlayerName,
   shouldPromptMoveChoice,
   shouldShowOpponentBoard,
@@ -132,6 +134,7 @@ function BrushButton({ children, className = '', tone = 'yellow', type = 'button
 
 function App() {
   const [screen, setScreen] = useState<Screen>('intro')
+  const [howToPlayOpen, setHowToPlayOpen] = useState(false)
   const [guestUsername] = useState(createGuestName)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authHydrated, setAuthHydrated] = useState(false)
@@ -1035,13 +1038,7 @@ function App() {
             }
           : inlineStatus
   const statusText =
-    screen === 'battle' && match
-      ? match.isMyTurn
-        ? match.shieldSelectionMode
-          ? 'Choose a tile to shield.'
-          : 'Your Turn'
-        : `Waiting for ${opponentName}`
-      : status.detail
+    screen === 'battle' && match ? getTurnStatusText(match) : status.detail
   const awaitingMoveChoice = shouldPromptMoveChoice(match, screen)
   const playerScoreCountLabels = match
     ? getScoreCountLabels(match.playerGrid.cells)
@@ -1061,15 +1058,20 @@ function App() {
       {screen !== 'intro' ? (
         <header className="top-chrome">
           <nav className="game-navbar" aria-label="Game navigation">
-            <button
-              type="button"
-              className="nav-brush-button nav-back-button"
-              onClick={navigateBack}
-              aria-label="Go back"
-            >
-              <span aria-hidden="true">←</span>
-              BACK
-            </button>
+            {/* Back and help share the navbar's left cell. A fourth grid column
+                would squeeze the status strip at 320px. */}
+            <div className="howto-nav-group">
+              <button
+                type="button"
+                className="nav-brush-button nav-back-button"
+                onClick={navigateBack}
+                aria-label="Go back"
+              >
+                <span aria-hidden="true">←</span>
+                BACK
+              </button>
+              <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
+            </div>
             <StatusStrip status={chromeStatus} chrome />
             {authUser ? (
               <ProfileMenu
@@ -1095,6 +1097,12 @@ function App() {
 
       {screen === 'intro' ? (
         <section className="welcome-screen">
+          {/* The landing screen has no top bar, so it carries its own trigger.
+              This is where the question actually gets asked. */}
+          <div className="welcome-howto">
+            <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
+            <span>How to play</span>
+          </div>
           <GameMasthead />
           <div className="action-grid welcome-actions">
             {!authHydrated ? (
@@ -1542,6 +1550,11 @@ function App() {
           </div>
         </section>
       ) : null}
+
+      <HowToPlayModal
+        open={howToPlayOpen}
+        onClose={() => setHowToPlayOpen(false)}
+      />
     </main>
   )
 }

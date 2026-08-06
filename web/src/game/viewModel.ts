@@ -91,6 +91,16 @@ export function shouldShowOpponentBoard(match: GameState | null, screen: Screen)
 }
 
 /**
+ * The turn line under the round callout. The opponent is named by role rather
+ * than by name: the line is read at a glance mid-match, a long name wrapped it,
+ * and the name is already on the top bar and on their own board.
+ */
+export function getTurnStatusText(match: GameState) {
+  if (!match.isMyTurn) return 'Waiting for opponent'
+  return match.shieldSelectionMode ? 'Choose a tile to shield.' : 'Your Turn'
+}
+
+/**
  * Whether the move tiles should call for attention. True only while the player
  * owes a move and has not loaded one; shield selection wants the board looked
  * at instead, so it suppresses the prompt.
