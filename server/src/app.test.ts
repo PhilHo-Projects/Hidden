@@ -420,7 +420,7 @@ describe.sequential('Hidden server', () => {
     }
     expect(descriptor.matchId).toBe('match-1')
     const probesBySeat = [first, second] as const
-    const commandIds = [0, 0]
+    const commandIds: [number, number] = [0, 0]
     let revision = 0
     let canonical: CoreGameState = createGame({
       engine: descriptor.engine,

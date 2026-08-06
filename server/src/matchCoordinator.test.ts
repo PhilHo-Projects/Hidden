@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createMatchRoom,
   MatchCoordinator,
+  type GameUpdateDelivery,
   type MatchCoordinatorDependencies,
   type RoomFactoryInput,
 } from './matchCoordinator'
@@ -38,7 +39,7 @@ function deterministicDependencies(overrides: {
   const firstSeats = [...(overrides.firstSeats ?? [0])]
   const scheduled: Array<{ callback: () => void; delayMs: number; handle: object }> = []
   const clearTimeout = vi.fn<(handle: unknown) => void>()
-  const dependencies: MatchCoordinatorDependencies = {
+  const dependencies: Partial<MatchCoordinatorDependencies> = {
     createUuid: () => uuids.shift() ?? 'unexpected-uuid',
     createSeed: () => seeds.shift() ?? 0,
     chooseFirstSeat: () => firstSeats.shift() ?? 0,
@@ -258,7 +259,7 @@ function authoritativeFixture(
     handle: { index: number }
   }> = []
   const cleared: unknown[] = []
-  const pushedDeliveries: unknown[][] = []
+  const pushedDeliveries: (readonly GameUpdateDelivery[])[] = []
   const coordinator = new MatchCoordinator({
     createUuid: () => uuids.shift() ?? 'unexpected-uuid',
     createSeed: () => options.seed ?? 7,
@@ -273,8 +274,8 @@ function authoritativeFixture(
       cleared.push(handle)
     },
     commandCacheSize: options.cacheSize ?? 64,
-    deliverySink: (deliveries: unknown[]) => pushedDeliveries.push(deliveries),
-  } as unknown as MatchCoordinatorDependencies)
+    deliverySink: (deliveries) => pushedDeliveries.push(deliveries),
+  })
   coordinator.enqueueQuickMatch(firstParticipant, {
     rounds: options.rounds ?? 20,
     turnSeconds: options.turnSeconds ?? 10,
@@ -367,7 +368,7 @@ describe('MatchCoordinator authoritative command resolution', () => {
     expect(deliveries[1]).toEqual({
       connectionId: 22,
       update: {
-        ...(deliveries[0] as { update: Record<string, unknown> }).update,
+        ...deliveries[0]!.update,
         commandId: null,
       },
     })
@@ -830,10 +831,7 @@ describe('MatchCoordinator extra-turn delivery batching', () => {
     fixture.scheduled.at(-1)?.callback()
 
     expect(fixture.pushedDeliveries).toHaveLength(1)
-    const delivered = fixture.pushedDeliveries[0] as Array<{
-      connectionId: number
-      update: Record<string, unknown>
-    }>
+    const delivered = fixture.pushedDeliveries[0]!
     expect(delivered).toHaveLength(2)
     expect(delivered[0]).toMatchObject({
       connectionId: 11,
@@ -883,10 +881,7 @@ describe('MatchCoordinator extra-turn delivery batching', () => {
     fixture.clock.now = fixture.run.deadline
     fixture.scheduled.at(-1)?.callback()
 
-    const second = fixture.pushedDeliveries[1] as Array<{
-      connectionId: number
-      update: Record<string, unknown>
-    }>
+    const second = fixture.pushedDeliveries[1]!
     expect(second).toHaveLength(2)
     expect(second[0]).toMatchObject({
       connectionId: 11,
@@ -992,7 +987,7 @@ describe('MatchCoordinator finish, rematch, and legacy lifecycle', () => {
     expect(rematch.run.id).toBe('second-run')
     expect(rematch.run.id).not.toBe(fixture.run.id)
     expect(rematch.room.id).toBe('stable-room')
-    expect(rematch.run.spec.rules).toBe(fixture.run.spec.rules)
+    expect(rematch.run.spec.config).toBe(fixture.run.spec.config)
     expect(rematch.run.revision).toBe(0)
   })
 

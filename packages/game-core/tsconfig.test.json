@@ -1,0 +1,17 @@
+{
+  // Typecheck only. tsconfig.json deliberately excludes tests so `npm run
+  // build` emits nothing but the package itself; this config adds them back
+  // with noEmit so the test files are still checked. Without it, assertions
+  // here have compared undefined to undefined and passed.
+  //
+  // `node --test` runs the TypeScript directly, so the suite imports
+  // "./index.ts" with its extension -- legal only alongside noEmit.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": []
+}
