@@ -2,6 +2,7 @@ import { useEffect, useId, useRef } from 'react'
 import extraTurnIcon from '../assets/icons/battle/powerup-extra-turn.png'
 import immuneIcon from '../assets/icons/battle/powerup-immune.png'
 import revealIcon from '../assets/icons/battle/powerup-reveal.png'
+import howToPlayIcon from '../assets/icons/how-to-play.webp'
 
 interface HowToPlayModalProps {
   open: boolean
@@ -157,9 +158,9 @@ export function HowToPlayModal({ open, onClose }: HowToPlayModalProps) {
 }
 
 /**
- * The fanned question cards that open the modal. Drawn in CSS from the shipped
- * palette rather than loaded as art, so it costs no request and no build weight.
- * Swapping in an image later means replacing the three spans.
+ * The fanned question cards that open the modal. The art is decorative — the
+ * button's `aria-label` is its only accessible name, so the image takes an empty
+ * `alt` rather than repeating it.
  */
 export function HowToPlayTrigger({ onClick }: HowToPlayTriggerProps) {
   return (
@@ -169,11 +170,7 @@ export function HowToPlayTrigger({ onClick }: HowToPlayTriggerProps) {
       aria-label="How to play"
       onClick={onClick}
     >
-      <span className="howto-trigger-cards" aria-hidden="true">
-        <span className="howto-card howto-card-red">?</span>
-        <span className="howto-card howto-card-blue">?</span>
-        <span className="howto-card howto-card-green">?</span>
-      </span>
+      <img className="howto-trigger-art" src={howToPlayIcon} alt="" />
     </button>
   )
 }

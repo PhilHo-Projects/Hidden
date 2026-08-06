@@ -2420,58 +2420,28 @@ summary:focus-visible {
   cursor: pointer;
 }
 
-.howto-trigger-cards {
-  position: relative;
+/*
+ * The card art is drawn on transparency with its own black brush edge, so it
+ * needs no border or plate under it. The drop-shadow is the same ink stack the
+ * board cells use, which keeps it legible where the top bar is nearly the same
+ * black as the cards.
+ */
+.howto-trigger-art {
   display: block;
-  width: 2.1rem;
-  height: 1.75rem;
-  transition: transform 160ms ease;
+  width: 2.3rem;
+  height: auto;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.9));
+  transition: transform 160ms ease, filter 160ms ease;
 }
 
-.howto-card {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  display: grid;
-  width: 1.05rem;
-  height: 1.5rem;
-  place-items: center;
-  border: 2px solid currentColor;
-  background: #0a0a0a;
-  font-family: var(--font-brush);
-  font-size: 0.95rem;
-  line-height: 1;
-  transition: transform 160ms ease;
+.howto-trigger:hover .howto-trigger-art,
+.howto-trigger:focus-visible .howto-trigger-art {
+  transform: translateY(-2px) rotate(-3deg) scale(1.06);
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.9)) brightness(1.12);
 }
 
-/* Green sits last in the DOM so it stacks in front, matching the fan where the
- * middle card is the nearest one. */
-.howto-card-red {
-  color: var(--unity-red);
-  transform: translateX(-88%) rotate(-16deg);
-}
-
-.howto-card-blue {
-  color: var(--unity-blue);
-  transform: translateX(-12%) rotate(16deg);
-}
-
-.howto-card-green {
-  color: var(--unity-green);
-  transform: translateX(-50%);
-}
-
-.howto-trigger:hover .howto-trigger-cards,
-.howto-trigger:focus-visible .howto-trigger-cards {
-  transform: translateY(-2px);
-}
-
-.howto-trigger:hover .howto-card-red {
-  transform: translateX(-104%) rotate(-22deg);
-}
-
-.howto-trigger:hover .howto-card-blue {
-  transform: translateX(4%) rotate(22deg);
+.howto-trigger:active .howto-trigger-art {
+  transform: translateY(1px) scale(0.98);
 }
 
 .howto-overlay {
@@ -2672,9 +2642,14 @@ summary:focus-visible {
     animation: none;
   }
 
-  .howto-trigger-cards,
-  .howto-card,
+  .howto-trigger-art,
   .howto-close {
     transition: none;
+  }
+
+  /* The lift is decoration; the brightness is the hover signal, so it stays. */
+  .howto-trigger:hover .howto-trigger-art,
+  .howto-trigger:focus-visible .howto-trigger-art {
+    transform: none;
   }
 }

@@ -55,8 +55,13 @@ frame is rebuilt in CSS rather than as an image, so it carries no build weight.
 
 ### 3. The trigger
 
-A three-card fan button, built in CSS from the existing palette, opening the
-modal.
+A button carrying the authored three-card fan art, opening the modal.
+
+The master lives in `art/concept/InstructionIcon.png` at 1536x1024 and 2.5 MB.
+What ships is `web/src/assets/icons/how-to-play.webp` — cropped to the artwork,
+scaled to 240x160, 18.8 KB. `art/concept/SOURCES.md` carries the derivation
+command and why it premultiplies alpha. A test asserts the trigger imports the
+derived asset, so the master cannot drift back into the bundle.
 
 It sits beside Back on the left of the top bar. `.game-navbar` is a three-column
 `auto minmax(0, 1fr) auto` grid; a fourth column would crush the status strip at
@@ -89,8 +94,6 @@ cover rendered markup and not pointer or key handling. That matches the existing
 
 ## Not in scope
 
-- Saving the authored `?` card icon into the repo. The CSS trigger stands in for
-  it, and swapping in an image later is a one-line change.
 - A focus trap. Focus is moved and restored; cycling within the dialog is not
   implemented.
 - Any change to gameplay, packets, or the engine.

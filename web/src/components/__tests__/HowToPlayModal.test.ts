@@ -74,7 +74,25 @@ describe('HowToPlayTrigger', () => {
     )
 
     expect(markup).toContain('aria-label="How to play"')
-    // The fanned cards are decoration; the name above is the only label.
-    expect(markup).toContain('aria-hidden="true"')
+    /*
+     * The art is decorative and the button is already named, so the image takes
+     * an empty alt. A filled one would make screen readers announce the control
+     * twice.
+     */
+    expect(markup).toContain('alt=""')
+  })
+
+  it('ships the card art at an icon-sized asset rather than the full-resolution master', () => {
+    const markup = renderToStaticMarkup(
+      createElement(HowToPlayTrigger, { onClick: () => undefined }),
+    )
+
+    /*
+     * The authored master is 1536x1024 at 2.5 MB and lives in `art/concept/`,
+     * which never reaches the container. Importing it here instead of the
+     * derived asset would put it in the bundle, so the extension is asserted.
+     */
+    expect(markup).toMatch(/src="[^"]*how-to-play[^"]*\.webp"/)
+    expect(markup).not.toContain('InstructionIcon')
   })
 })
