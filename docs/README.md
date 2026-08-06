@@ -8,11 +8,9 @@ this index does not.
 | --- | --- | --- |
 | Current state and what to do next | [ROADMAP.md](ROADMAP.md) | ~130 lines |
 | What shipped and when | [JOURNAL.md](JOURNAL.md) | ~95 lines |
-| How the codebase is laid out and how multiplayer works | [ARCHITECTURE.md](ARCHITECTURE.md) | ~675 lines |
 | Why the rules engine is shaped this way | [specs/2026-08-03-game-mode-testbed-design.md](superpowers/specs/2026-08-03-game-mode-testbed-design.md) | ~245 lines |
 
 `ROADMAP.md` alone is enough to pick up work. Everything else is background.
-`ARCHITECTURE.md` is the one to read once, on your first day, and rarely again.
 
 One open plan: [splitting the App shell](superpowers/plans/2026-08-06-split-app-shell.md).
 Everything in `superpowers/plans/archive/` is finished.
