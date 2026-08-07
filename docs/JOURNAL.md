@@ -4,6 +4,37 @@ Newest first. One entry per stretch of work. Keep entries short — the git log
 holds the detail, and this file exists so nobody has to read a 1,600-line plan
 to learn what happened.
 
+## 2026-08-06 — Repository cleanup
+
+No runtime behaviour changed. The server's shipping code is byte-identical;
+only its tests moved. Net −456 lines across 48 files.
+
+- Deleted `web/src/game/engine.ts`, the pre-`game-core` client engine. `App.tsx`
+  imported one five-line function from it; its other ten exports were reachable
+  only from its own test file. It hardcoded a 9-cell grid and a 3×3 win table,
+  so it had been wrong for every board size since rules became config.
+- Presentation state now carries `ClassicSymbol` instead of a hex `PaintColor`,
+  deleting both symbol↔colour translation maps. Colour is resolved at the render
+  boundary and pinned by a test; the wire still spells moves `green`/`blue`/`red`.
+- Renamed the `unity-` class and variable namespace to `hidden-`. Anchored to
+  `\bunity-`, because `handleImmunity` and `@eslint-community` both contain the
+  substring.
+- Packet ids are grouped LIVE / LEGACY / RESERVED. Legacy decode branches stay:
+  `NetworkClient` turns any decode failure into a terminal sync-lost.
+
+**Two findings worth keeping.** `packages/game-core` and `server` excluded
+`*.test.ts` from tsconfig — load-bearing for emit, since without it `npm run
+build` compiles tests into `dist/` and ships them, but it also meant neither
+suite was ever typechecked. Adding a `noEmit` typecheck config surfaced ten
+errors, one of which was `expect(rematch.run.spec.rules).toBe(...)` — a property
+deleted with the mode registry, comparing `undefined` to `undefined`, passing
+for months.
+
+And tests could not have caught the `unity-` rename: the only two suites that
+mention the prefix assert `not.toContain`, so they pass harder once it is gone.
+A class renamed in CSS but not markup gives unstyled UI with a green suite. That
+one was verified in a browser, not by the suite.
+
 ## 2026-08-05 — Mode registry and MatchRules deleted
 
 The last unfinished item from the parameterization work. `GameSpec` is now a
