@@ -1,0 +1,13 @@
+{
+  // Typecheck only. tsconfig.json deliberately excludes tests so `npm run
+  // build` emits nothing but the service into dist/; this config adds them
+  // back with noEmit so the test files are still checked under the same strict
+  // options. Without it, assertions here have read fields that do not exist on
+  // the types involved and passed anyway.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": []
+}

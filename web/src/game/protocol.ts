@@ -1,6 +1,5 @@
 import { decode, encode } from '@msgpack/msgpack'
-import { COLOR_BLUE, COLOR_GREEN, COLOR_RED } from './constants'
-import type { PaintColor, QueuedMove } from './types'
+import type { QueuedMove } from './types'
 import {
   clampGameConfig,
   DEFAULT_GAME_CONFIG,
@@ -17,45 +16,61 @@ import {
 } from '@hidden/game-core'
 
 export const LOBBY_ROOM_ID = 'lobby'
-type WireColor = 'green' | 'blue' | 'red'
 
-const colorToWire: Record<PaintColor, WireColor> = {
-  [COLOR_GREEN]: 'green',
-  [COLOR_BLUE]: 'blue',
-  [COLOR_RED]: 'red',
-}
-
-function decodeWireColor(value: unknown): PaintColor {
+// The legacy relay packets still name moves by colour on the wire. That naming
+// is frozen into the protocol; only the decoded value became a symbol.
+function decodeWireSymbol(value: unknown): ClassicSymbol {
   switch (value) {
     case 'green':
-      return COLOR_GREEN
+      return 'rock'
     case 'blue':
-      return COLOR_BLUE
+      return 'paper'
     case 'red':
-      return COLOR_RED
+      return 'scissors'
     default:
       throw new Error(`Unsupported wire color: ${String(value)}`)
   }
 }
 
+/*
+ * Numbers are frozen: renaming a symbol is fine, renumbering one is a protocol
+ * break. Append from 28. The three tiers below are not interchangeable.
+ *
+ * RESERVED   never implemented by this server, and nothing decodes them. They
+ *            exist so the numbers stay claimed. Do not reuse them.
+ * LEGACY     the pre-authoritative move relays. The server parses them only to
+ *            answer `legacy-gameplay-disabled`, and the client still decodes
+ *            them into an ignored no-op -- decoding must keep working, because
+ *            NetworkClient turns a decode failure into a terminal sync-lost.
+ * LIVE       everything the current protocol actually uses.
+ */
 export enum PacketType {
+  /** RESERVED */
   CHAT = 0,
+  /** RESERVED */
   POSITION = 1,
   ID_ASSIGN = 2,
+  /** RESERVED */
   TIME_SYNC = 3,
+  /** RESERVED */
   ROOM_CREATE = 4,
   ROOM_JOIN = 5,
   ROOM_LEAVE = 6,
+  /** RESERVED */
   ROOM_DESTROY = 7,
   SERVER_RESPONSE = 8,
   USER_INFO = 9,
+  /** LEGACY */
   GAME_MOVE = 10,
+  /** LEGACY */
   IMMUNE_UPDATE = 11,
   READY_STATE = 12,
   MATCHMAKING_REQUEST = 13,
   MATCH_FOUND = 14,
   GAME_START = 15,
+  // 16 was never assigned.
   OPPONENT_DISCONNECTED = 17,
+  /** LEGACY */
   GAME_MOVES = 18,
   GAME_COMMAND = 19,
   GAME_UPDATE = 20,
@@ -143,7 +158,6 @@ export type GameUpdate = AcceptedGameUpdate | RejectedGameUpdate
 
 export type DecodedPacket =
   | { type: PacketType.ID_ASSIGN; clientId: number }
-  | { type: PacketType.TIME_SYNC; sequence: number; serverTime: number }
   | { type: PacketType.SERVER_RESPONSE; success: boolean; originalPacketType?: PacketType }
   | { type: PacketType.USER_INFO; users: UserEntry[] }
   | { type: PacketType.MATCH_FOUND; roomId: string; config: GameConfig }
@@ -152,7 +166,7 @@ export type DecodedPacket =
       firstPlayerId: number
       descriptor: GameStartDescriptor
     }
-  | { type: PacketType.GAME_MOVE; senderId: number; index: number; color: PaintColor }
+  | { type: PacketType.GAME_MOVE; senderId: number; index: number; symbol: ClassicSymbol }
   | { type: PacketType.IMMUNE_UPDATE; senderId: number; indices: number[] }
   | { type: PacketType.READY_STATE; senderId: number; ready: boolean }
   | { type: PacketType.GAME_MOVES; senderId: number; moves: QueuedMove[] }
@@ -469,12 +483,6 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
         type: packetType,
         clientId: Number(decoded[2]),
       }
-    case PacketType.TIME_SYNC:
-      return {
-        type: packetType,
-        sequence: Number(decoded[2]),
-        serverTime: Number(decoded[3]),
-      }
     case PacketType.SERVER_RESPONSE:
       return {
         type: packetType,
@@ -532,7 +540,7 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
         type: packetType,
         senderId: Number(decoded[0]),
         index: Number(decoded[2]),
-        color: decodeWireColor(decoded[3]),
+        symbol: decodeWireSymbol(decoded[3]),
       }
     case PacketType.IMMUNE_UPDATE:
       return {
@@ -564,7 +572,7 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
           senderId: Number(decoded[0]),
           moves: indices.map((value, index) => ({
             index: Number(value),
-            color: decodeWireColor(colors[index]),
+            symbol: decodeWireSymbol(colors[index]),
           })),
         }
       }
@@ -630,23 +638,6 @@ export function encodeLobbySubscribePacket(
   subscribed: boolean,
 ) {
   return encode([senderId, PacketType.LOBBY_SUBSCRIBE, subscribed])
-}
-
-export function encodeGameMovePacket(senderId: number, index: number, color: PaintColor) {
-  return encode([senderId, PacketType.GAME_MOVE, index, colorToWire[color]])
-}
-
-export function encodeGameMovesPacket(senderId: number, moves: QueuedMove[]) {
-  return encode([
-    senderId,
-    PacketType.GAME_MOVES,
-    moves.map((move) => move.index),
-    moves.map((move) => colorToWire[move.color]),
-  ])
-}
-
-export function encodeImmunePacket(senderId: number, indices: number[]) {
-  return encode([senderId, PacketType.IMMUNE_UPDATE, indices])
 }
 
 export function encodeGameCommandPacket(

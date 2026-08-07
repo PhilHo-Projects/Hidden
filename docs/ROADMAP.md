@@ -1,6 +1,6 @@
 # Hidden roadmap
 
-Last reviewed: 2026-08-05.
+Last reviewed: 2026-08-06.
 
 Read this file to know where the project stands and what to do next. History
 lives in [JOURNAL.md](JOURNAL.md); finished plans are in
@@ -96,6 +96,63 @@ cheap intermediate step. Throughput is not the near-term risk.
 Non-square and irregular topologies (hex, Tetris-shaped, Catan-like). The
 config shape leaves room for them: `createTopology` is the only thing that
 assumes a square board. Not worth building until a square variant is fun.
+
+## Codebase debt
+
+None of this changes what the software can do, which is why it is not in "Next
+up". It changes what the next change costs. Ordered by payoff.
+
+### 1. Split the App shell
+
+`web/src/App.tsx` is ~1550 lines. Planned in
+[plans/2026-08-06-split-app-shell.md](superpowers/plans/2026-08-06-split-app-shell.md)
+— **read the plan before starting, because the obvious approach is wrong.** The
+render tree is already fourteen screen blocks of at most 82 lines and is not the
+problem; the 920-line hook body is, and `onClientEvent` alone is 177 lines.
+
+The cost is blast radius rather than file length. 29 `useState` share one scope,
+so editing one screen puts the other 28 within reach. Note that **game rules are
+not affected** — a new rule is an edit to `game-core` plus a `FlagField` in
+`ruleSchema.ts`, and touches this file not at all. The tax falls on screen,
+navigation, and match-presentation work.
+
+### 2. Split index.css
+
+2648 lines, 285 selectors, already clustering by component prefix. Selectors
+also live in `animations/*.css` per effect, so the convention exists — this only
+extends it. Vite concatenates every imported stylesheet into one file, and
+`tests/fontLoading.test.ts` asserts exactly one CSS file ships, so splitting
+costs nothing at runtime.
+
+The risk is the cascade, not the build: equal-specificity rules are resolved by
+source order, so files must be imported in the order their rules appeared.
+Measured hazards are small — 7 duplicated selectors, 6 of them adjacent and so
+moving together for free. **`.results-copy` at lines 807 and 1687 is the one
+that spans distant areas**, plus 8 `@media` blocks that must stay after the
+rules they override. Nothing here is caught by a test; verify in a browser.
+
+### 3. `button-splash.png` is 412 KB
+
+Larger than the entire JS bundle, and 37× the whole gzipped stylesheet. The
+backgrounds are already WebP; the textures never got the same pass. This is the
+only asset-weight item worth anyone's time.
+
+### Explicitly not worth doing
+
+- **Removing Tailwind.** It is imported for its preflight reset and no utility
+  class is used, but the whole stylesheet is 11 KB gzipped against a ~950 KB
+  page. Removing it saves ~0.3% and risks the box model on every element, since
+  the CSS was written on top of that reset. Keep it, and expect to use it if the
+  UI grows.
+- **`immune` → `shielded`.** The shield power-up sets `LocationState.immune` and
+  the packet is `IMMUNE_UPDATE`. Renaming reaches into the engine and the frozen
+  protocol vocabulary for a cosmetic gain.
+
+### Known and deliberately unfixed
+
+`hidden-board-interactive`, `hidden-cell-occupied`, and `hidden-cell-hidden` are
+applied in markup with no CSS rule targeting them. This predates the `unity-` to
+`hidden-` rename. Harmless; listed so nobody rediscovers it as a bug.
 
 ## Operational constraints
 

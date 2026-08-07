@@ -8,7 +8,7 @@ import type { GridState, PowerupState } from '../../game/types'
 const emptyGrid: GridState = {
   cells: Array.from({ length: 9 }, () => ({
     occupied: false,
-    color: null,
+    symbol: null,
     immune: false,
   })),
 }
@@ -56,7 +56,7 @@ describe('battle UI', () => {
     const scoredGrid: GridState = {
       cells: emptyGrid.cells.map((cell, index) =>
         index === 1 || index === 7
-          ? { occupied: true, color: '#4591DB', immune: false }
+          ? { occupied: true, symbol: 'paper' as const, immune: false }
           : cell,
       ),
     }
@@ -81,7 +81,7 @@ describe('battle UI', () => {
     const scoredGrid: GridState = {
       cells: emptyGrid.cells.map((cell, index) =>
         index === 0 || index === 4
-          ? { occupied: true, color: '#4591DB', immune: false }
+          ? { occupied: true, symbol: 'paper' as const, immune: false }
           : cell,
       ),
     }
@@ -109,7 +109,7 @@ describe('battle UI', () => {
       }),
     )
 
-    expect(markup).not.toContain('unity-cell-score-counted')
+    expect(markup).not.toContain('hidden-cell-score-counted')
     expect(markup).toContain('--score-delay:0ms')
   })
 })

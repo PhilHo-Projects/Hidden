@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "dev": "tsc --watch --preserveWatchOutput",
     "pretest": "npm run build --workspace=@hidden/game-core",
-    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "npm run typecheck && vitest run",
     "test:integration": "vitest run src/auth/repository.integration.test.ts",
     "test:watch": "vitest"
   },

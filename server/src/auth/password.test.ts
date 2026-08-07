@@ -35,7 +35,7 @@ describe('account credentials', () => {
     [{ username: 'ab', password: 'valid password' }, 'username'],
     [{ username: 'Player-One', password: 'valid password' }, 'username'],
     [{ username: 'Player', password: 'short' }, 'password'],
-  ])('rejects invalid credentials for %s', (input, field) => {
+  ] as const)('rejects invalid credentials for %s', (input, field) => {
     expect(() => parseCredentials(input)).toThrowError(
       expect.objectContaining<Partial<CredentialValidationError>>({ field }),
     )

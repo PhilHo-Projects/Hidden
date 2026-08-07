@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --no-warnings --test src/index.test.ts"
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "npm run typecheck && node --no-warnings --test src/index.test.ts"
   }
 }
