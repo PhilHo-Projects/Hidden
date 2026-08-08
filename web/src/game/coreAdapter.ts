@@ -47,6 +47,7 @@ function presentGrid(state: CoreGameState, seat: Seat) {
       occupied: location.symbol !== null,
       symbol: location.symbol,
       immune: location.immune,
+      desecrated: location.desecratedTurns > 0,
     })),
   }
 }

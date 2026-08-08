@@ -13,6 +13,8 @@ export interface CellState {
   occupied: boolean
   symbol: ClassicSymbol | null
   immune: boolean
+  /** Destroyed last turn, so it cannot be played until the owner's next turn. */
+  desecrated: boolean
 }
 
 export interface GridState {

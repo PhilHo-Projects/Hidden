@@ -10,6 +10,7 @@ const emptyGrid: GridState = {
     occupied: false,
     symbol: null,
     immune: false,
+    desecrated: false,
   })),
 }
 
@@ -42,13 +43,11 @@ describe('battle UI', () => {
         grid: emptyGrid,
         destructionEffects: {
           4: { id: 12, tone: 'loss' },
-          6: { id: 13, tone: 'victory' },
         },
       }),
     )
 
     expect(markup).toContain('cell-destruction-loss')
-    expect(markup).toContain('cell-destruction-victory')
     expect(markup).toContain('cell-destruction__shard')
   })
 
@@ -56,7 +55,7 @@ describe('battle UI', () => {
     const scoredGrid: GridState = {
       cells: emptyGrid.cells.map((cell, index) =>
         index === 1 || index === 7
-          ? { occupied: true, symbol: 'paper' as const, immune: false }
+          ? { occupied: true, symbol: 'paper' as const, immune: false, desecrated: false }
           : cell,
       ),
     }
@@ -81,7 +80,7 @@ describe('battle UI', () => {
     const scoredGrid: GridState = {
       cells: emptyGrid.cells.map((cell, index) =>
         index === 0 || index === 4
-          ? { occupied: true, symbol: 'paper' as const, immune: false }
+          ? { occupied: true, symbol: 'paper' as const, immune: false, desecrated: false }
           : cell,
       ),
     }

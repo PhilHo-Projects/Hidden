@@ -1,4 +1,4 @@
-import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
+import { DEFAULT_GAME_CONFIG, ENGINE_REVISION } from '@hidden/game-core'
 import { decode, encode } from '@msgpack/msgpack'
 import {
   decodePacket,
@@ -53,7 +53,7 @@ describe('protocol', () => {
           7,
           {
             matchId: '78bd46ff-cc07-46df-949a-eea9c543fdac',
-            engine: { id: 'classic', revision: 1 },
+            engine: { id: 'classic', revision: ENGINE_REVISION },
             config: DEFAULT_GAME_CONFIG,
             seed: 42,
             firstSeat: 0,
@@ -67,7 +67,7 @@ describe('protocol', () => {
       firstPlayerId: 7,
       descriptor: {
         matchId: '78bd46ff-cc07-46df-949a-eea9c543fdac',
-        engine: { id: 'classic', revision: 1 },
+        engine: { id: 'classic', revision: ENGINE_REVISION },
         config: DEFAULT_GAME_CONFIG,
         seed: 42,
         firstSeat: 0,
@@ -85,7 +85,7 @@ describe('protocol', () => {
         7,
         {
           matchId: 'match-5x5',
-          engine: { id: 'classic', revision: 1 },
+          engine: { id: 'classic', revision: ENGINE_REVISION },
           config: { ...DEFAULT_GAME_CONFIG, boardSize: 5, streak: 4 },
           seed: 42,
           firstSeat: 0,
@@ -102,7 +102,7 @@ describe('protocol', () => {
   it('rejects malformed or unsupported authoritative start descriptors', () => {
     const descriptor = {
       matchId: 'match-1',
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config: DEFAULT_GAME_CONFIG,
       seed: 42,
       firstSeat: 0,
@@ -112,7 +112,7 @@ describe('protocol', () => {
 
     for (const replacement of [
       { ...descriptor, matchId: '' },
-      { ...descriptor, engine: { id: 'classic', revision: 2 } },
+      { ...descriptor, engine: { id: 'classic', revision: ENGINE_REVISION + 1 } },
       // Out-of-range values must be rejected, not silently clamped: the server
       // is required to send an already-clamped config.
       { ...descriptor, config: { ...DEFAULT_GAME_CONFIG, rounds: 999 } },

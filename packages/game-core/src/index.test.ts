@@ -6,8 +6,12 @@ import {
   ENGINE_REVISION,
   createTopology,
   clampGameConfig,
+  clampOnlineGameConfig,
   decodeGameConfig,
   DEFAULT_GAME_CONFIG,
+  MAX_TURN_SECONDS,
+  MIN_TURN_SECONDS,
+  ONLINE_MIN_TURN_SECONDS,
   type GameConfig,
   applyCommand,
   applyTimeout,
@@ -53,7 +57,6 @@ function mirrorState(state: GameState) {
     activeSeat: (1 - state.activeSeat) as Seat,
     boards: [state.boards[1], state.boards[0]],
     powerups: [state.powerups[1], state.powerups[0]],
-    lastPlacedLocation: [state.lastPlacedLocation[1], state.lastPlacedLocation[0]],
     result: state.result
       ? {
           scores: [state.result.scores[1], state.result.scores[0]],
@@ -287,9 +290,11 @@ describe('classic power-ups and results', () => {
     state = play(state, 0, 2, 'rock').state
     state = play(state, 1, 5, 'rock').state
     state = play(state, 0, 3, 'paper').state
-    state = play(state, 1, 3, 'rock').state
+    // Seat 1 spends these turns on fresh cells: location 3 is desecrated until
+    // its next turn, and paper here loses to the scissors seat 0 plays later.
+    state = play(state, 1, 6, 'paper').state
     state = play(state, 0, 4, 'paper').state
-    state = play(state, 1, 3, 'rock').state
+    state = play(state, 1, 7, 'paper').state
     state = play(state, 0, 5, 'paper').state
     state = play(state, 1, 0, 'paper').state
     state = play(state, 0, 6, 'scissors').state
@@ -459,7 +464,7 @@ describe('topology generation', () => {
 
   it('exposes the engine identity', () => {
     assert.equal(ENGINE_ID, 'classic')
-    assert.equal(ENGINE_REVISION, 1)
+    assert.equal(ENGINE_REVISION, 2)
   })
 })
 
@@ -474,7 +479,6 @@ describe('game config', () => {
       powerupsEnabled: true,
       powerups: { shield: true, reveal: true, extraTurn: true },
       powerupBySymbol: { rock: 'shield', paper: 'reveal', scissors: 'extraTurn' },
-      forbidImmediateRepeat: false,
     })
   })
 
@@ -488,21 +492,21 @@ describe('game config', () => {
       powerupsEnabled: false,
       powerups: { shield: false, reveal: true, extraTurn: false },
       powerupBySymbol: { rock: 'reveal', paper: 'shield', scissors: 'extraTurn' },
-      forbidImmediateRepeat: true,
     })
     assert.equal(decoded?.boardSize, 5)
     assert.equal(decoded?.streak, 4)
     assert.equal(decoded?.powerupsEnabled, false)
     assert.equal(decoded?.powerups.reveal, true)
     assert.equal(decoded?.powerupBySymbol.rock, 'reveal')
-    assert.equal(decoded?.forbidImmediateRepeat, true)
   })
 
   it('fills missing fields from defaults instead of failing', () => {
-    // A stale client must degrade to the default game, not fail to join.
+    // A stale client must degrade to the default game, not fail to join. The
+    // line length rides the board rather than the default, so a 4x4 needs four.
     assert.deepEqual(decodeGameConfig({ boardSize: 4 }), {
       ...DEFAULT_GAME_CONFIG,
       boardSize: 4,
+      streak: 4,
     })
   })
 
@@ -521,8 +525,24 @@ describe('game config', () => {
     })
     assert.equal(clamped.boardSize, 5)
     assert.equal(clamped.rounds, 20)
-    assert.equal(clamped.turnSeconds, 2)
+    assert.equal(clamped.turnSeconds, MIN_TURN_SECONDS)
     assert.equal(clamped.streak, 5)
+  })
+
+  it('keeps sub-second turns for offline iteration, at one decimal place', () => {
+    assert.equal(clampGameConfig({ turnSeconds: 0.2 }).turnSeconds, 0.2)
+    assert.equal(clampGameConfig({ turnSeconds: 0.44 }).turnSeconds, 0.4)
+    assert.equal(clampGameConfig({ turnSeconds: 0.01 }).turnSeconds, MIN_TURN_SECONDS)
+    assert.equal(clampGameConfig({ turnSeconds: 999 }).turnSeconds, MAX_TURN_SECONDS)
+  })
+
+  it('floors an online turn timer at two seconds whatever the client proposed', () => {
+    assert.equal(clampOnlineGameConfig({ turnSeconds: 0.2 }).turnSeconds, ONLINE_MIN_TURN_SECONDS)
+    // Above the floor the online clamp must not differ from the offline one.
+    assert.deepEqual(
+      clampOnlineGameConfig({ turnSeconds: 15 }),
+      clampGameConfig({ turnSeconds: 15 }),
+    )
   })
 
   it('clamps streak against the clamped board size, not the requested one', () => {
@@ -545,7 +565,7 @@ describe('game config', () => {
 
 const configGame = (overrides: Partial<GameConfig> = {}, seed = 1): GameState =>
   createGame({
-    engine: { id: 'classic', revision: 1 },
+    engine: { id: 'classic', revision: ENGINE_REVISION },
     config: clampGameConfig({ ...DEFAULT_GAME_CONFIG, ...overrides }),
     seed,
     firstSeat: 0,
@@ -570,7 +590,7 @@ describe('config-driven engine', () => {
     assert.throws(
       () =>
         createGame({
-          engine: { id: 'classic', revision: 2 },
+          engine: { id: 'classic', revision: ENGINE_REVISION + 1 },
           config: DEFAULT_GAME_CONFIG,
           seed: 1,
           firstSeat: 0,
@@ -629,30 +649,105 @@ describe('config-driven engine', () => {
     )
   })
 
-  it('bars a seat from replaying its own previous location when configured', () => {
-    let state = configGame({ forbidImmediateRepeat: true, powerupsEnabled: false })
+  it('desecrates a cell destroyed on the opponent turn for the owner next turn', () => {
+    let state = configGame({ powerupsEnabled: false })
     state = put(state, 0, 4, 'rock').state
     state = put(state, 1, 4, 'paper').state
     // Seat 0's rock lost to paper, so location 4 is empty on its board again.
-    const repeat = put(state, 0, 4, 'scissors')
-    assert.equal(repeat.accepted, false)
-    assert.equal(repeat.rejection?.reason, 'repeat-location')
+    const blocked = put(state, 0, 4, 'scissors')
+    assert.equal(blocked.accepted, false)
+    assert.equal(blocked.rejection?.reason, 'desecrated-location')
   })
 
-  it('permits the same location once a turn has passed', () => {
-    let state = configGame({ forbidImmediateRepeat: true, powerupsEnabled: false })
+  it('desecrates a cell destroyed on the owner own turn for exactly as long', () => {
+    // Placing into a losing conflict destroys the piece immediately, so the
+    // lock has to survive the rest of the turn it was created on.
+    let state = configGame({ powerupsEnabled: false })
+    state = put(state, 0, 0, 'rock').state
+    state = put(state, 1, 4, 'paper').state
+    state = put(state, 0, 4, 'rock').state
+    state = put(state, 1, 1, 'rock').state
+
+    const blocked = put(state, 0, 4, 'scissors')
+    assert.equal(blocked.accepted, false)
+    assert.equal(blocked.rejection?.reason, 'desecrated-location')
+
+    state = put(state, 0, 2, 'rock').state
+    state = put(state, 1, 3, 'rock').state
+    assert.equal(put(state, 0, 4, 'scissors').accepted, true)
+  })
+
+  it('reopens a desecrated cell on the turn after the one it cost', () => {
+    let state = configGame({ powerupsEnabled: false })
     state = put(state, 0, 4, 'rock').state
     state = put(state, 1, 4, 'paper').state
     state = put(state, 0, 0, 'rock').state
     state = put(state, 1, 1, 'rock').state
-    assert.equal(put(state, 0, 4, 'rock').accepted, true)
+    assert.equal(put(state, 0, 4, 'scissors').accepted, true)
   })
 
-  it('allows repeats when the rule is off', () => {
-    let state = configGame({ forbidImmediateRepeat: false, powerupsEnabled: false })
-    state = put(state, 0, 4, 'rock').state
+  it('keeps a cell desecrated by an extra turn locked for its second placement', () => {
+    // streak 2 so two adjacent scissors unlock the extra turn.
+    let state = configGame({ streak: 2 })
+    state = put(state, 0, 0, 'scissors').state
+    state = put(state, 1, 6, 'rock').state
+    state = put(state, 0, 1, 'scissors').state
     state = put(state, 1, 4, 'paper').state
-    assert.equal(put(state, 0, 4, 'scissors').accepted, true)
+    assert.equal(state.powerups[0].unlocked.extraTurn, true)
+
+    state = applyCommand(state, 0, {
+      type: 'activate-powerup',
+      powerup: 'extraTurn',
+    }).state
+    // An extra turn is still one turn start, so the first placement's loss
+    // locks the cell for the second placement rather than reopening it.
+    const lost = put(state, 0, 4, 'rock')
+    assert.equal(lost.state.powerups[0].extraTurnInProgress, true)
+
+    const blocked = put(lost.state, 0, 4, 'scissors')
+    assert.equal(blocked.accepted, false)
+    assert.equal(blocked.rejection?.reason, 'desecrated-location')
+  })
+
+  it('never times out onto a desecrated cell', () => {
+    // The random pick draws from empty cells, and a desecrated cell is empty.
+    // Without the filter the rejection leaves the turn unconsumed.
+    for (let seed = 0; seed < 40; seed += 1) {
+      let state = configGame({ powerupsEnabled: false }, seed)
+      state = put(state, 0, 4, 'rock').state
+      state = put(state, 1, 4, 'paper').state
+
+      const timedOut = applyTimeout(state)
+      assert.equal(timedOut.state.boards[0].locations[4]?.symbol, null)
+      assert.ok(timedOut.state.turnCount > state.turnCount)
+    }
+  })
+
+  it('auto-passes a seat whose only empty cell is desecrated', () => {
+    // Seat 0 papers each cell first and seat 1 answers with a rock that loses
+    // to it, so seat 0 fills its board while only seat 1 takes damage.
+    let state = configGame({ rounds: 12, powerupsEnabled: false })
+    for (let cell = 0; cell < 7; cell += 1) {
+      state = put(state, 0, cell, 'paper').state
+      state = put(state, 1, cell, 'rock').state
+    }
+    state = put(state, 0, 7, 'paper').state
+    // Scissors takes the one cell seat 0 has left, so seat 0's last placement
+    // loses and cell 8 is desecrated with the other eight already occupied.
+    state = put(state, 1, 8, 'scissors').state
+    state = put(state, 0, 8, 'paper').state
+    assert.equal(state.boards[0].locations[8]?.symbol, null)
+
+    const passed = put(state, 1, 7, 'rock')
+    assert.ok(
+      passed.events.some(
+        (event) => event.type === 'turn-passed' && event.seat === 0,
+      ),
+    )
+
+    // The pass still spends the turn, so the cell reopens on the next one.
+    state = put(passed.state, 1, 0, 'rock').state
+    assert.equal(put(state, 0, 8, 'paper').accepted, true)
   })
 
   it('is deterministic for a given seed, config, and command list', () => {

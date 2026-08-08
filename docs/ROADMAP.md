@@ -19,8 +19,18 @@ version more fun?" is not a priority.
 
 - Live at `https://hidden.philippeho.dev`. One replica, process-local state.
 - Rules are data. `GameConfig` carries board size, streak length, rounds, turn
-  seconds, blind mode, power-up toggles, and the no-repeat-cell rule. It is
-  stored on the match and sent over the wire.
+  seconds, blind mode, and power-up toggles. It is stored on the match and sent
+  over the wire. Two are no longer player-facing: desecrated tiles are
+  unconditional, so there is no flag, and `streak` now defaults to a full line
+  for the board.
+- `streak` only ever set how long a line must be to **unlock a power-up** —
+  `winningPatterns` is read in exactly one place, `maybeUnlockPowerup`. It was
+  labelled "Line to win", which no rule does. The control is gone and the value
+  rides board size. Revisit when power-up unlocking is redesigned; loot or
+  currency toward a purchase is the idea on the table.
+- The turn timer goes down to 0.2s offline so a bot match resolves in seconds.
+  Online is floored at 2s in three places: the server clamp, the client's packet
+  decode, and the host panel's minimum.
 - Versioning is on the **engine** (`ENGINE_ID` / `ENGINE_REVISION`), not on
   variants. Bump it only when placement resolution, scoring, or the RNG
   changes — never when a board or a toggle changes.
@@ -64,14 +74,21 @@ the rules are settled.
 ### 2. Simultaneous conflict resolution
 
 Conflicts resolve at placement time today, so placing on a contested cell
-instantly reveals that it was contested. That information leak is what the
-known degenerate loop feeds on.
+instantly reveals that it was contested.
 
-Buffering both placements and resolving at round end is the principled fix, but
-it restructures turn flow and collides with `extraTurn` and shield timing.
-`forbidImmediateRepeat` is the cheap partial mitigation and already ships.
+Desecrated tiles ship as the mitigation and replaced `forbidImmediateRepeat`
+outright. A destroyed cell is locked for exactly one of its owner's turns, so
+the player who lost it must spend a turn elsewhere before returning. That kills
+the endless trade loop, which was the part that made the leak degenerate.
 
-Play real games with it on before deciding this is worth the rebuild.
+The leak itself is untouched: you still learn instantly that a cell was
+contested, and the inference is still bankable a turn later. Buffering both
+placements and resolving at round end is the principled fix, but it restructures
+turn flow and collides with `extraTurn` and shield timing.
+
+Play real games with desecration before deciding this is worth the rebuild.
+Power-ups are also meant to give the trailing player a way back in, so a
+catch-up mechanic may serve the same goal more cheaply.
 
 ### 3. Match durability and reconnect
 
@@ -177,6 +194,24 @@ that package emits CommonJS and Vite leaves linked workspace packages
 unbundled. Without it the page loads, React never mounts, and **no console
 error is printed**. If you ever see a blank app with a clean console, check
 that first.
+
+Forcing it through the optimizer has a second consequence, and two plugins in
+`vite.config.ts` exist only to contain it. Rebuilding `game-core` changes bytes
+that nothing the optimizer keys on can see — the package is symlinked and pinned
+at `0.0.0`, so the lockfile, version, and config hash all stay put. Vite keeps
+serving the previously optimized bundle, and the browser keeps its own copy
+because those responses carry `max-age=31536000, immutable`.
+
+Both layers have to be handled: `hidden:reoptimise-linked-core` drops the dep
+cache and restarts when `packages/game-core/dist/index.js` is rewritten, and
+`hidden:revalidate-optimized-deps` downgrades the header so the browser cannot
+serve a stale copy of the bundle Vite just replaced.
+
+Fixing only one of the two looks like it works and does not. **The symptom is a
+fresh app running a stale engine**: source files and `index.html` are never
+cached, so the UI is current while the rules are whatever `game-core` last
+built. It reads as a rule silently doing nothing, or as
+`X is not a function` for an export added since the cached copy was written.
 
 Two-player testing: build and start the server (`npm run build && npm start` in
 `server/`), run `npm run dev` in `web/`, open two tabs. Vite proxies `/api` and

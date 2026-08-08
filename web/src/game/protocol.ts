@@ -1,7 +1,7 @@
 import { decode, encode } from '@msgpack/msgpack'
 import type { QueuedMove } from './types'
 import {
-  clampGameConfig,
+  clampOnlineGameConfig,
   DEFAULT_GAME_CONFIG,
   decodeGameConfig,
   ENGINE_ID,
@@ -339,7 +339,6 @@ function matchesRawConfig(clamped: GameConfig, raw: Record<string, unknown>) {
     'turnSeconds',
     'blindMode',
     'powerupsEnabled',
-    'forbidImmediateRepeat',
   ] as const
   return scalars.every(
     (key) => !(key in raw) || raw[key] === clamped[key],
@@ -356,7 +355,7 @@ function decodeStartDescriptor(value: unknown): GameStartDescriptor {
     throw new Error('Unsupported engine revision.')
   }
   if (!isRecord(value.config)) throw new Error('Game start config is invalid.')
-  const config = clampGameConfig(value.config)
+  const config = clampOnlineGameConfig(value.config)
   if (!matchesRawConfig(config, value.config)) {
     throw new Error('Game start config is outside supported limits.')
   }
@@ -499,7 +498,7 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
       return {
         type: packetType,
         roomId: String(decoded[2]),
-        config: clampGameConfig(decodeGameConfig(decoded[3]) ?? DEFAULT_GAME_CONFIG),
+        config: clampOnlineGameConfig(decodeGameConfig(decoded[3]) ?? DEFAULT_GAME_CONFIG),
       }
     case PacketType.LOBBY_CREATED: {
       const payload = decoded[2]
@@ -507,7 +506,7 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
       return {
         type: packetType,
         code: String(payload.code),
-        config: clampGameConfig(payload.config),
+        config: clampOnlineGameConfig(payload.config),
         isPrivate: payload.isPrivate === true,
       }
     }
@@ -518,7 +517,7 @@ export function decodePacket(data: ArrayBuffer | Uint8Array): DecodedPacket {
         games: rows.filter(isRecord).map((row) => ({
           code: String(row.code),
           hostName: String(row.hostName),
-          config: clampGameConfig(row.config),
+          config: clampOnlineGameConfig(row.config),
         })),
       }
     }

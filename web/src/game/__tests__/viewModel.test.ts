@@ -147,6 +147,7 @@ describe('view model helpers', () => {
       occupied: index === 1 || index === 4 || index === 8,
       symbol: index === 1 || index === 4 || index === 8 ? ('paper' as const) : null,
       immune: false,
+      desecrated: false,
     }))
 
     expect(getScoreCountLabels(cells)).toEqual({ 1: 1, 4: 2, 8: 3 })

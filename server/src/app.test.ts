@@ -14,6 +14,7 @@ import {
   applyCommand,
   applyTimeout,
   createGame,
+  ENGINE_REVISION,
   type GameCommand,
   type GameState as CoreGameState,
   type Seat,
@@ -275,7 +276,7 @@ describe.sequential('Hidden server', () => {
     expect(firstStart[3]).toEqual(secondStart[3])
     expect(firstStart[3]).toMatchObject({
       matchId: expect.any(String),
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config: DEFAULT_GAME_CONFIG,
       seed: expect.any(Number),
       firstSeat: firstStart[2] === firstId ? 0 : 1,
@@ -412,7 +413,7 @@ describe.sequential('Hidden server', () => {
     expect(firstStart[3]).toEqual(secondStart[3])
     const descriptor = firstStart[3] as {
       matchId: string
-      engine: { id: 'classic'; revision: 1 }
+      engine: { id: 'classic'; revision: typeof ENGINE_REVISION }
       config: typeof DEFAULT_GAME_CONFIG
       seed: number
       firstSeat: Seat
@@ -514,8 +515,10 @@ describe.sequential('Hidden server', () => {
 
     while (canonical.phase === 'active') {
       const seat = canonical.activeSeat
+      // A desecrated cell is empty but unplayable, so the emptiness test alone
+      // would pick one and the server would reject the command.
       const location = canonical.boards[seat].locations.find(
-        (candidate) => candidate.symbol === null,
+        (candidate) => candidate.symbol === null && candidate.desecratedTurns === 0,
       )
       if (!location) throw new Error('Expected a legal finishing placement.')
       await sendAccepted(seat, {

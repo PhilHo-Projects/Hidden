@@ -16,6 +16,7 @@ import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
 import { PowerupTray } from './components/PowerupTray'
 import { ProfileMenu } from './components/ProfileMenu'
 import { RuleChip } from './components/RuleControls'
+import { ONLINE_RULE_SECTIONS } from './components/ruleSchema'
 import {
   ActionChoice,
   AdvancedSettings,
@@ -42,6 +43,7 @@ import {
 import { NetworkClient, resolveWebSocketUrl, type ClientEvent } from './game/networkClient'
 import {
   clampGameConfig,
+  clampOnlineGameConfig,
   DEFAULT_GAME_CONFIG,
   type ClassicSymbol,
   type GameConfig,
@@ -167,7 +169,6 @@ function App() {
   const [clientId, setClientId] = useState<number | null>(null)
   const [onlineInputPending, setOnlineInputPending] = useState(false)
   const [playerDestructionEffects, setPlayerDestructionEffects] = useState<DestructionEffectMap>({})
-  const [opponentDestructionEffects, setOpponentDestructionEffects] = useState<DestructionEffectMap>({})
 
   const clientRef = useRef<NetworkClient | null>(null)
   const matchRef = useRef<GameState | null>(null)
@@ -236,14 +237,19 @@ function App() {
     [],
   )
 
-  const queueDestructionEffect = useCallback((board: 'player' | 'opponent', index: number) => {
+  /*
+   * Only the local player's own losses animate. Taking a square must not reveal
+   * that it destroyed anything, or placing becomes a free probe: you would learn
+   * the opponent held that cell without risking the information back. What you
+   * are entitled to notice is your own piece dying, and the desecrated tile it
+   * leaves behind tells you that much.
+   */
+  const queueDestructionEffect = useCallback((index: number) => {
     const id = ++destructionSequenceRef.current
-    const setter = board === 'player' ? setPlayerDestructionEffects : setOpponentDestructionEffects
-    const tone: CellDestructionEffect['tone'] = board === 'player' ? 'loss' : 'victory'
 
-    setter((current) => ({ ...current, [index]: { id, tone } }))
+    setPlayerDestructionEffects((current) => ({ ...current, [index]: { id, tone: 'loss' } }))
     const timeoutId = window.setTimeout(() => {
-      setter((current) => {
+      setPlayerDestructionEffects((current) => {
         if (current[index]?.id !== id) return current
         const next = { ...current }
         delete next[index]
@@ -260,7 +266,9 @@ function App() {
     if (messages.length > 0) setAnnouncement(messages.join(' / '))
 
     for (const event of result.events) {
-      if (event.type === 'cell-destroyed') queueDestructionEffect(event.board, event.index)
+      if (event.type === 'cell-destroyed' && event.board === 'player') {
+        queueDestructionEffect(event.index)
+      }
       if (event.type === 'game-over') {
         countdownRunRef.current += 1
         setScreen('results')
@@ -283,7 +291,6 @@ function App() {
       matchRef.current = base
       setMatch(base)
       setPlayerDestructionEffects({})
-      setOpponentDestructionEffects({})
       setTurnTimeLeft(
         config.isOnline && onlineAuthorityRef.current
           ? getDisplayedTurnTimeMs(onlineAuthorityRef.current, performance.now()) / 1_000
@@ -670,7 +677,6 @@ function App() {
     setSearchSeconds(0)
     setClientId(null)
     setPlayerDestructionEffects({})
-    setOpponentDestructionEffects({})
     setStatus({
       tone: 'neutral',
       label: authUser ? 'ACCOUNT' : 'GUEST',
@@ -712,7 +718,6 @@ function App() {
       setCountdown('3')
       setTurnTimeLeft(0)
       setPlayerDestructionEffects({})
-      setOpponentDestructionEffects({})
     }
 
     if (current === 'matchmaking' || current === 'ready' || isOnlineMatch) {
@@ -999,12 +1004,15 @@ function App() {
     }
   }
 
+  /*
+   * One config is shared by every setup screen, so a sub-second turn timer set
+   * for offline practice follows the player into hosting. The server floors it
+   * at two seconds regardless; showing the floor here keeps the panel from
+   * promising a number the match will not honour.
+   */
+  const onlineConfig = clampOnlineGameConfig(config)
   const opponentName = getOpponentName(users, clientId, match)
   const showOpponent = shouldShowOpponentBoard(match, screen)
-  const visiblePlayerDestructionEffects = {
-    ...opponentDestructionEffects,
-    ...playerDestructionEffects,
-  }
   const searchClock = `${Math.floor(searchSeconds / 60).toString().padStart(2, '0')}:${(searchSeconds % 60)
     .toString()
     .padStart(2, '0')}`
@@ -1223,8 +1231,9 @@ function App() {
           </div>
           <OnlineAdminSettings
             user={authUser}
-            config={config}
+            config={onlineConfig}
             onConfigChange={applyConfigPatch}
+            sections={ONLINE_RULE_SECTIONS}
           />
         </section>
       ) : null}
@@ -1237,7 +1246,11 @@ function App() {
             <div className="lobby-host-setup">
               <p>Set the rules for your game, then host it.</p>
               {/* Ungated, unlike Quick Match: a host owns their own rules. */}
-              <AdvancedSettings config={config} onConfigChange={applyConfigPatch} />
+              <AdvancedSettings
+                config={onlineConfig}
+                onConfigChange={applyConfigPatch}
+                sections={ONLINE_RULE_SECTIONS}
+              />
               {/* Not a GameConfig rule, but it shares the panel's on/off vocabulary. */}
               <section className="rule-section lobby-room-section">
                 <h3 className="rule-section-label">Room</h3>
@@ -1422,7 +1435,7 @@ function App() {
                   (!match.config.isOnline || !onlineInputPending)
                 }
                 selectedSymbol={match.selectedSymbol}
-                destructionEffects={visiblePlayerDestructionEffects}
+                destructionEffects={playerDestructionEffects}
                 onSelect={onCellSelect}
               />
               {showOpponent ? (
@@ -1433,7 +1446,6 @@ function App() {
                     subtitle={opponentName}
                     grid={match.opponentGrid}
                     compact
-                    destructionEffects={opponentDestructionEffects}
                   />
                 </aside>
               ) : null}
@@ -1495,11 +1507,14 @@ function App() {
               </BrushButton>
             </div>
           </div>
+          {/* The final boards are a score audit. Desecration constrains the next
+            * move, and there is no next move, so it would only be noise here. */}
           <div className="final-boards">
             <BoardGrid
               title=""
               subtitle={username.trim() || 'Player'}
               grid={match.playerGrid}
+              showDesecration={false}
               destructionEffects={playerDestructionEffects}
               scoreCountLabels={playerScoreCountLabels}
             />
@@ -1507,7 +1522,7 @@ function App() {
               title=""
               subtitle={opponentName}
               grid={match.opponentGrid}
-              destructionEffects={opponentDestructionEffects}
+              showDesecration={false}
               scoreCountLabels={opponentScoreCountLabels}
             />
           </div>

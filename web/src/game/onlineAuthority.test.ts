@@ -1,4 +1,4 @@
-import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
+import { DEFAULT_GAME_CONFIG, ENGINE_REVISION } from '@hidden/game-core'
 import { describe, expect, it } from 'vitest'
 import {
   applyCommand,
@@ -19,7 +19,7 @@ import type { AcceptedGameUpdate, GameStartDescriptor } from './protocol'
 
 const descriptor: GameStartDescriptor = {
   matchId: 'match-1',
-  engine: { id: 'classic', revision: 1 },
+  engine: { id: 'classic', revision: ENGINE_REVISION },
   config: DEFAULT_GAME_CONFIG,
   seed: 42,
   firstSeat: 0,

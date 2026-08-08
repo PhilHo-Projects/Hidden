@@ -50,6 +50,10 @@ export function RuleStepper({ field, config, onConfigChange }: ControlProps<Numb
   // from bouncing back at the user without explanation.
   const commit = (next: number) =>
     onConfigChange(field.patch(Math.min(field.max, Math.max(field.min, next)), config))
+  // A field without its own step moves in whole units, which is what every
+  // rule but the turn timer wants.
+  const stepTo = (direction: 1 | -1) =>
+    field.step ? field.step(value, direction) : value + direction
 
   return (
     <div className="rule-field" data-rule={field.id}>
@@ -62,7 +66,7 @@ export function RuleStepper({ field, config, onConfigChange }: ControlProps<Numb
           className="rule-step"
           aria-label={`Decrease ${field.label}`}
           disabled={value <= field.min}
-          onClick={() => commit(value - 1)}
+          onClick={() => commit(stepTo(-1))}
         >
           −
         </button>
@@ -70,7 +74,8 @@ export function RuleStepper({ field, config, onConfigChange }: ControlProps<Numb
           id={inputId}
           className="rule-number"
           type="number"
-          inputMode="numeric"
+          inputMode={field.precision ? 'decimal' : 'numeric'}
+          step={field.precision ?? 1}
           min={field.min}
           max={field.max}
           value={value}
@@ -81,7 +86,7 @@ export function RuleStepper({ field, config, onConfigChange }: ControlProps<Numb
           className="rule-step"
           aria-label={`Increase ${field.label}`}
           disabled={value >= field.max}
-          onClick={() => commit(value + 1)}
+          onClick={() => commit(stepTo(1))}
         >
           +
         </button>

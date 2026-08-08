@@ -1,4 +1,4 @@
-import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
+import { DEFAULT_GAME_CONFIG, ENGINE_REVISION } from '@hidden/game-core'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -36,11 +36,13 @@ describe('offline core presentation adapter', () => {
       occupied: true,
       symbol: 'rock',
       immune: false,
+      desecrated: false,
     })
     expect(result.state.opponentGrid.cells[0]).toEqual({
       occupied: false,
       symbol: null,
       immune: false,
+      desecrated: false,
     })
     expect(result.state.isMyTurn).toBe(false)
     expect(result.state.totalTurns).toBe(1)
@@ -57,6 +59,7 @@ describe('offline core presentation adapter', () => {
       occupied: true,
       symbol: 'scissors',
       immune: false,
+      desecrated: false,
     })
     expect(result.state.isMyTurn).toBe(true)
     expect(result.state.totalTurns).toBe(2)
@@ -129,7 +132,7 @@ describe('offline core presentation adapter', () => {
     // where rock beats scissors: seat 1's piece is destroyed and seat 0's
     // survives, so the game ends 1-0 rather than in a draw.
     let canonical = createGame({
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config: { ...config, rounds: 1 },
       seed: 7,
       firstSeat: 0,
@@ -160,7 +163,7 @@ describe('offline core presentation adapter', () => {
 
   it('reports an even scoreline as a tie from both seats', () => {
     let canonical = createGame({
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config: { ...config, rounds: 1 },
       seed: 7,
       firstSeat: 0,
@@ -191,7 +194,7 @@ describe('offline core presentation adapter', () => {
 describe('online core presentation adapter', () => {
   it('presents the server-created canonical state without local relay events', () => {
     const canonical = createGame({
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config,
       seed: 42,
       firstSeat: 1,
@@ -210,7 +213,7 @@ describe('online core presentation adapter', () => {
 
   it('maps accepted server effects and never creates legacy send events', () => {
     const canonical = createGame({
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config,
       seed: 42,
       firstSeat: 0,
