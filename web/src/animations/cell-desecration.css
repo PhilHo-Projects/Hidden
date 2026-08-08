@@ -1,0 +1,70 @@
+/*
+ * A cell whose piece was destroyed is desecrated until its owner's next turn.
+ *
+ * The whole look is `--cell-desecrated-fill` plus this file. It is painted as an
+ * overlay rather than as the cell background for two reasons: the release has to
+ * fade, and CSS cannot transition between two gradients — only opacity gets a
+ * real tween. Swapping in a texture is still one token: a gradient, an
+ * `image-set()`, or a `url()` all drop into the same custom property.
+ */
+
+:root {
+  --cell-desecrated-fill: linear-gradient(150deg, #6b4a2f, #3d2917);
+}
+
+.cell-desecration {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--cell-desecrated-fill);
+  animation: cell-desecration-settle 420ms ease-out both;
+}
+
+/* Hatching, so the tile reads as spoiled ground rather than as a third symbol. */
+.cell-desecration::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgb(0 0 0 / 28%) 0,
+    rgb(0 0 0 / 28%) max(1px, 0.06em),
+    transparent max(1px, 0.06em),
+    transparent max(5px, 0.3em)
+  );
+}
+
+/*
+ * The overlay outlives the desecration by design: BoardGrid keeps it mounted for
+ * the length of this fade so the tile thaws instead of blinking out. `animation:
+ * none` is required, because the settle keyframes hold their end state under
+ * `both` and would otherwise pin the opacity the transition is trying to move.
+ */
+.cell-desecration-releasing {
+  animation: none;
+  opacity: 0;
+  transition: opacity 800ms ease-out;
+}
+
+@keyframes cell-desecration-settle {
+  from {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell-desecration {
+    animation: none;
+  }
+
+  .cell-desecration-releasing {
+    transition: none;
+  }
+}

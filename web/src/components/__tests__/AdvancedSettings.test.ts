@@ -1,9 +1,10 @@
-import { clampGameConfig, DEFAULT_GAME_CONFIG, type GameConfig } from '@hidden/game-core'
+import { clampGameConfig, DEFAULT_GAME_CONFIG, MIN_TURN_SECONDS, ONLINE_MIN_TURN_SECONDS, type GameConfig } from '@hidden/game-core'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { AdvancedSettings } from '../PregameUi'
 import {
+  ONLINE_RULE_SECTIONS,
   RULE_SECTIONS,
   type FlagField,
   type RuleField,
@@ -72,14 +73,22 @@ describe('advanced rules schema', () => {
     }
   })
 
-  it('offers every line length the board can hold and disables the rest', () => {
-    const field = flatten(RULE_SECTIONS).find((entry) => entry.id === 'streak')
-    if (field?.kind !== 'choice') throw new Error('streak must be a choice field')
+  it('no longer offers a line length as a rule the player sets', () => {
+    // It only ever set how long a line must be to unlock a power-up, never how
+    // a match is won, so it rides the board size until unlocking is redesigned.
+    expect(flatten(RULE_SECTIONS).map((field) => field.id)).not.toContain('streak')
+  })
 
-    const options = field.options({ ...DEFAULT_GAME_CONFIG, boardSize: 4 })
+  it('takes the line length from the board on every size', () => {
+    const field = flatten(RULE_SECTIONS).find((entry) => entry.id === 'boardSize')
+    if (field?.kind !== 'choice') throw new Error('boardSize must be a choice field')
 
-    expect(options.map((option) => option.value)).toEqual([2, 3, 4, 5])
-    expect(options.filter((option) => option.disabled).map((option) => option.value)).toEqual([5])
+    for (const size of [3, 4, 5]) {
+      expect(field.patch(size, DEFAULT_GAME_CONFIG)).toEqual({
+        boardSize: size,
+        streak: size,
+      })
+    }
   })
 
   it('shrinks an oversized line when the board shrinks under it', () => {
@@ -91,13 +100,13 @@ describe('advanced rules schema', () => {
     expect(patch).toEqual({ boardSize: 3, streak: 3 })
   })
 
-  it('leaves a line that already fits alone when the board grows', () => {
+  it('grows the line with the board rather than leaving a short one behind', () => {
     const field = flatten(RULE_SECTIONS).find((entry) => entry.id === 'boardSize')
     if (field?.kind !== 'choice') throw new Error('boardSize must be a choice field')
 
     const patch = field.patch(5, { ...DEFAULT_GAME_CONFIG, boardSize: 3, streak: 2 })
 
-    expect(patch).toEqual({ boardSize: 5 })
+    expect(patch).toEqual({ boardSize: 5, streak: 5 })
   })
 })
 
@@ -121,12 +130,11 @@ describe('advanced rules panel', () => {
     expect(radio(markup, 'boardSize', 3)).not.toContain('checked=""')
   })
 
-  it('disables the line lengths the current board cannot hold', () => {
+  it('keeps the line length off the panel entirely', () => {
     const markup = render({ ...DEFAULT_GAME_CONFIG, boardSize: 3, streak: 3 })
 
-    expect(radio(markup, 'streak', 5)).toContain('disabled=""')
-    expect(radio(markup, 'streak', 4)).toContain('disabled=""')
-    expect(radio(markup, 'streak', 2)).not.toContain('disabled=""')
+    expect(markup).not.toContain('data-rule="streak"')
+    expect(markup).not.toContain('Line to win')
   })
 
   it('hides nested power-up rules while their parent rule is off', () => {
@@ -138,12 +146,39 @@ describe('advanced rules panel', () => {
   })
 
   it('reports each flag state to assistive tech, not by colour alone', () => {
-    const markup = render({ ...DEFAULT_GAME_CONFIG, blindMode: true, forbidImmediateRepeat: false })
+    const markup = render({ ...DEFAULT_GAME_CONFIG, blindMode: true, powerupsEnabled: false })
 
     expect(tagWith(markup, 'button', 'data-rule="blindMode"')).toContain('aria-pressed="true"')
-    expect(tagWith(markup, 'button', 'data-rule="forbidImmediateRepeat"')).toContain(
+    expect(tagWith(markup, 'button', 'data-rule="powerupsEnabled"')).toContain(
       'aria-pressed="false"',
     )
+  })
+
+  it('offers sub-second turns offline but floors the online host panel', () => {
+    const offline = RULE_SECTIONS.flatMap((section) => section.fields).find(
+      (field) => field.id === 'turnSeconds',
+    )
+    const online = ONLINE_RULE_SECTIONS.flatMap((section) => section.fields).find(
+      (field) => field.id === 'turnSeconds',
+    )
+
+    expect(offline).toMatchObject({ kind: 'number', min: MIN_TURN_SECONDS })
+    expect(online).toMatchObject({ kind: 'number', min: ONLINE_MIN_TURN_SECONDS })
+  })
+
+  it('steps whole seconds down to one, then fifths into the sub-second range', () => {
+    const field = RULE_SECTIONS.flatMap((section) => section.fields).find(
+      (candidate) => candidate.id === 'turnSeconds',
+    )
+    if (field?.kind !== 'number' || !field.step) throw new Error('Expected a stepped number field.')
+
+    // Whole seconds through the useful range, then fine enough to reach the floor.
+    expect(field.step(10, -1)).toBe(9)
+    expect(field.step(2, -1)).toBe(1)
+    expect(field.step(1, -1)).toBe(0.8)
+    expect(field.step(0.4, -1)).toBe(0.2)
+    expect(field.step(0.8, 1)).toBe(1)
+    expect(field.step(1, 1)).toBe(2)
   })
 
   it('uses one control vocabulary, with no sliding switches left behind', () => {

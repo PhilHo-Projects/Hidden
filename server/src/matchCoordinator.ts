@@ -1,7 +1,7 @@
 import {
   applyCommand,
   applyTimeout,
-  clampGameConfig,
+  clampOnlineGameConfig,
   createGame,
   DEFAULT_GAME_CONFIG,
   ENGINE_ID,
@@ -267,7 +267,7 @@ export class MatchCoordinator {
     this.matchmakingQueue.set(participant.connectionId, {
       participant: snapshot,
       proposedConfig: proposedConfig
-        ? freezeConfig(clampGameConfig(proposedConfig))
+        ? freezeConfig(clampOnlineGameConfig(proposedConfig))
         : undefined,
     })
 
@@ -318,7 +318,7 @@ export class MatchCoordinator {
         connectionId: host.connectionId,
         username: host.username,
       }),
-      config: freezeConfig(clampGameConfig(config)),
+      config: freezeConfig(clampOnlineGameConfig(config)),
       isPrivate,
       createdAt: this.dependencies.now(),
     })
@@ -387,7 +387,7 @@ export class MatchCoordinator {
     const input: RoomFactoryInput = {
       id: this.dependencies.createUuid(),
       participants: trustedParticipants,
-      config: freezeConfig(clampGameConfig(proposedConfig)),
+      config: freezeConfig(clampOnlineGameConfig(proposedConfig)),
     }
     const room = (this.dependencies.roomFactory ?? createMatchRoom)(input)
     this.roomsById.set(room.id, room)

@@ -10,17 +10,53 @@ const gridOf = (count: number): GridState => ({
     occupied: false,
     symbol: null,
     immune: false,
+    desecrated: false,
   })),
 })
 
 const gridWith = (symbol: ClassicSymbol): GridState => ({
-  cells: [{ occupied: true, symbol, immune: false }],
+  cells: [{ occupied: true, symbol, immune: false, desecrated: false }],
 })
 
 const markupFor = (count: number) =>
   renderToStaticMarkup(
     createElement(BoardGrid, { title: '', subtitle: 'Board', grid: gridOf(count) }),
   )
+
+describe('desecrated cells', () => {
+  const desecratedGrid: GridState = {
+    cells: [
+      { occupied: false, symbol: null, immune: false, desecrated: true },
+      { occupied: false, symbol: null, immune: false, desecrated: false },
+    ],
+  }
+
+  const render = (showDesecration?: boolean) =>
+    renderToStaticMarkup(
+      createElement(BoardGrid, {
+        title: '',
+        subtitle: 'Board',
+        grid: desecratedGrid,
+        ...(showDesecration === undefined ? {} : { showDesecration }),
+      }),
+    )
+
+  it('paints a desecrated cell with its own overlay', () => {
+    const markup = render()
+
+    expect(markup).toContain('hidden-cell-desecrated')
+    expect(markup.match(/cell-desecration/g)).toHaveLength(1)
+  })
+
+  it('leaves desecration off the result boards', () => {
+    // Scoring a finished match has no next move to constrain, so the brown
+    // would read as a third cell state next to occupied and empty.
+    const markup = render(false)
+
+    expect(markup).not.toContain('hidden-cell-desecrated')
+    expect(markup).not.toContain('cell-desecration')
+  })
+})
 
 describe('board grid sizing', () => {
   it.each([

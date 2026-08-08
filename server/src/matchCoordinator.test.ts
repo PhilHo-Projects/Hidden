@@ -1,4 +1,4 @@
-import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
+import { DEFAULT_GAME_CONFIG, ENGINE_REVISION } from '@hidden/game-core'
 import {
   applyCommand,
   applyTimeout,
@@ -154,7 +154,7 @@ describe('MatchCoordinator run lifecycle', () => {
     expect(start.run.revision).toBe(0)
     expect(start.run.deadline).toBe(19_000)
     expect(start.run.spec).toEqual({
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config: { ...DEFAULT_GAME_CONFIG, rounds: 8, turnSeconds: 15, blindMode: false },
       seed: 5,
       firstSeat: 1,
@@ -163,7 +163,7 @@ describe('MatchCoordinator run lifecycle', () => {
     expect(start.run.state).toEqual(createGame(start.run.spec))
     expect(start.descriptor).toEqual({
       matchId: 'run-uuid-one',
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config: { ...DEFAULT_GAME_CONFIG, rounds: 8, turnSeconds: 15, blindMode: false },
       seed: 5,
       firstSeat: 1,

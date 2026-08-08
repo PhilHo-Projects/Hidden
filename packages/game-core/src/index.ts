@@ -10,7 +10,16 @@ function finiteNumberOrDefault(value: unknown, fallback: number) {
 }
 
 export const ENGINE_ID = 'classic' as const
-export const ENGINE_REVISION = 1 as const
+// Revision 2 added desecrated tiles, which changes placement resolution. A
+// published revision is never edited in place: a stored match reconstructs from
+// revision + config + seed + commands, so resolution changes must bump this.
+export const ENGINE_REVISION = 2 as const
+
+// Set on a cell when its piece is destroyed, and decremented at the start of
+// each of the owner's turns. Two rather than one because the destruction lands
+// after that turn's decrement has already run — with one, a cell that died on
+// its owner's own turn would reopen a full turn early.
+const DESECRATION_TURNS = 2
 
 export type BoardSize = 3 | 4 | 5
 
@@ -76,7 +85,6 @@ export interface GameConfig {
   readonly powerupsEnabled: boolean
   readonly powerups: Readonly<Record<PowerupKey, boolean>>
   readonly powerupBySymbol: Readonly<Record<ClassicSymbol, PowerupKey>>
-  readonly forbidImmediateRepeat: boolean
 }
 
 export const DEFAULT_GAME_CONFIG: Readonly<GameConfig> = deepFreeze({
@@ -88,16 +96,32 @@ export const DEFAULT_GAME_CONFIG: Readonly<GameConfig> = deepFreeze({
   powerupsEnabled: true,
   powerups: { shield: true, reveal: true, extraTurn: true },
   powerupBySymbol: { rock: 'shield', paper: 'reveal', scissors: 'extraTurn' },
-  forbidImmediateRepeat: false,
 }) as Readonly<GameConfig>
 
 const BOARD_SIZES: readonly BoardSize[] = [3, 4, 5]
 const SYMBOLS: readonly ClassicSymbol[] = ['rock', 'paper', 'scissors']
 const POWERUP_KEYS: readonly PowerupKey[] = ['shield', 'reveal', 'extraTurn']
 
+/**
+ * Sub-second turns exist so an offline match against the bot can be replayed to
+ * its outcome in seconds. Online keeps a floor of two seconds, because a human
+ * has to read the board and press something.
+ */
+export const MIN_TURN_SECONDS = 0.2
+export const ONLINE_MIN_TURN_SECONDS = 2
+export const MAX_TURN_SECONDS = 60
+
 function clampInteger(value: unknown, min: number, max: number, fallback: number) {
   const numeric = finiteNumberOrDefault(value, fallback)
   return Math.min(max, Math.max(min, Math.trunc(numeric)))
+}
+
+// One decimal place. Anything finer is noise against render and network timing,
+// and keeping it coarse stops float drift from reaching the wire.
+function clampTurnSeconds(value: unknown, min: number) {
+  const numeric = finiteNumberOrDefault(value, DEFAULT_GAME_CONFIG.turnSeconds)
+  const bounded = Math.min(MAX_TURN_SECONDS, Math.max(min, numeric))
+  return Math.round(bounded * 10) / 10
 }
 
 function booleanOrDefault(value: unknown, fallback: boolean) {
@@ -150,14 +174,17 @@ export function clampGameConfig(value: unknown): GameConfig {
 
   return {
     boardSize,
-    streak: clampInteger(candidate.streak, 2, boardSize, Math.min(3, boardSize)),
+    /*
+     * Defaults to a full line for the board. `streak` is no longer a rule the
+     * player sets: it only ever controlled how long a line must be to unlock a
+     * power-up, never how a match is won, and a control labelled "line to win"
+     * that did neither was worse than no control. The field stays configurable
+     * because the topology is built from it and a stored match replays with the
+     * config it was played under. Revisit when power-up unlocking is redesigned.
+     */
+    streak: clampInteger(candidate.streak, 2, boardSize, boardSize),
     rounds: clampInteger(candidate.rounds, 1, 20, DEFAULT_GAME_CONFIG.rounds),
-    turnSeconds: clampInteger(
-      candidate.turnSeconds,
-      2,
-      60,
-      DEFAULT_GAME_CONFIG.turnSeconds,
-    ),
+    turnSeconds: clampTurnSeconds(candidate.turnSeconds, MIN_TURN_SECONDS),
     blindMode: booleanOrDefault(candidate.blindMode, DEFAULT_GAME_CONFIG.blindMode),
     powerupsEnabled: booleanOrDefault(
       candidate.powerupsEnabled,
@@ -165,11 +192,18 @@ export function clampGameConfig(value: unknown): GameConfig {
     ),
     powerups,
     powerupBySymbol,
-    forbidImmediateRepeat: booleanOrDefault(
-      candidate.forbidImmediateRepeat,
-      DEFAULT_GAME_CONFIG.forbidImmediateRepeat,
-    ),
   }
+}
+
+/**
+ * The clamp an online match must use. Sub-second turns are an offline
+ * iteration tool, so the server applies this to every proposed config rather
+ * than trusting a client to have limited itself.
+ */
+export function clampOnlineGameConfig(value: unknown): GameConfig {
+  const config = clampGameConfig(value)
+  if (config.turnSeconds >= ONLINE_MIN_TURN_SECONDS) return config
+  return { ...config, turnSeconds: ONLINE_MIN_TURN_SECONDS }
 }
 
 export function decodeGameConfig(value: unknown): GameConfig | undefined {
@@ -198,7 +232,7 @@ export interface ClassicTopology {
 
 export interface ClassicMode {
   readonly id: 'classic'
-  readonly revision: 1
+  readonly revision: typeof ENGINE_REVISION
   readonly randomAlgorithm: 'mulberry32-v1'
   readonly topology: ClassicTopology
   readonly defeats: Readonly<Record<ClassicSymbol, ClassicSymbol>>
@@ -230,6 +264,8 @@ export interface LocationState {
   readonly locationId: LocationId
   readonly symbol: ClassicSymbol | null
   readonly immune: boolean
+  /** Owner turns left before a destroyed cell is playable again; 0 is playable. */
+  readonly desecratedTurns: number
 }
 
 export interface BoardState {
@@ -254,7 +290,6 @@ export interface GameState {
   readonly spec: ResolvedGameSpec
   readonly mode: ClassicMode
   readonly config: GameConfig
-  readonly lastPlacedLocation: readonly [LocationId | null, LocationId | null]
   readonly phase: 'active' | 'finished'
   readonly boards: readonly [BoardState, BoardState]
   readonly powerups: readonly [PlayerPowerups, PlayerPowerups]
@@ -290,7 +325,7 @@ export type RejectionReason =
   | 'shield-selection-pending'
   | 'shield-selection-not-pending'
   | 'invalid-shield-target'
-  | 'repeat-location'
+  | 'desecrated-location'
 
 export interface ApplyResult {
   readonly accepted: boolean
@@ -316,6 +351,7 @@ function createBoard(mode: ClassicMode): BoardState {
       locationId,
       symbol: null,
       immune: false,
+      desecratedTurns: 0,
     })),
   }
 }
@@ -349,7 +385,6 @@ export function createGame(spec: GameSpec): GameState {
     spec: resolved,
     mode,
     config: resolved.config,
-    lastPlacedLocation: [null, null],
     phase: 'active',
     boards: [createBoard(mode), createBoard(mode)],
     powerups: [createPowerups(), createPowerups()],
@@ -374,10 +409,6 @@ function cloneState(state: GameState): GameState {
       seed: state.spec.seed,
       firstSeat: state.spec.firstSeat,
     },
-    lastPlacedLocation: [...state.lastPlacedLocation] as [
-      LocationId | null,
-      LocationId | null,
-    ],
     boards: state.boards.map((board) => ({
       locations: board.locations.map((location) => ({ ...location })),
     })) as unknown as [BoardState, BoardState],
@@ -438,8 +469,28 @@ function locationIndex(state: GameState, seat: Seat, locationId: LocationId) {
   return state.boards[seat].locations.findIndex((location) => location.locationId === locationId)
 }
 
+function isPlayable(location: LocationState) {
+  return location.symbol === null && location.desecratedTurns === 0
+}
+
 function hasLegalPlacement(state: GameState, seat: Seat) {
-  return state.boards[seat].locations.some((location) => location.symbol === null)
+  return state.boards[seat].locations.some(isPlayable)
+}
+
+// Desecration decays on its owner's turns, so a destroyed cell costs that owner
+// exactly one turn spent elsewhere before the cell can be contested again.
+// Called wherever `activeSeat` is assigned, so an auto-passed turn still counts.
+function beginTurn(state: GameState, seat: Seat) {
+  const locations = state.boards[seat].locations as LocationState[]
+  for (let index = 0; index < locations.length; index += 1) {
+    const location = locations[index]
+    if (location && location.desecratedTurns > 0) {
+      locations[index] = {
+        ...location,
+        desecratedTurns: location.desecratedTurns - 1,
+      }
+    }
+  }
 }
 
 function setLocation(
@@ -478,6 +529,7 @@ function consumeTurn(state: GameState, events: DomainEvent[]) {
     return
   }
   mutable.activeSeat = otherSeat(state.activeSeat)
+  beginTurn(state, state.activeSeat)
   resolveAutomaticPasses(state, events)
 }
 
@@ -496,6 +548,7 @@ function resolveAutomaticPasses(state: GameState, events: DomainEvent[]) {
       return
     }
     mutable.activeSeat = otherSeat(passedSeat)
+    beginTurn(state, state.activeSeat)
   }
 }
 
@@ -543,10 +596,14 @@ function resolveConflict(state: GameState, locationId: LocationId, events: Domai
   if (clearFirst) clearLocation(state, 0, locationId)
   if (clearSecond) clearLocation(state, 1, locationId)
 
+  // Desecration is set exactly where `cell-destroyed` is emitted so the rule and
+  // the event a client animates can never describe different cells.
   if (state.boards[0].locations[locationIndex(state, 0, locationId)]?.symbol === null) {
+    setLocation(state, 0, locationId, { desecratedTurns: DESECRATION_TURNS })
     events.push({ type: 'cell-destroyed', seat: 0, locationId, symbol: firstSymbol })
   }
   if (state.boards[1].locations[locationIndex(state, 1, locationId)]?.symbol === null) {
+    setLocation(state, 1, locationId, { desecratedTurns: DESECRATION_TURNS })
     events.push({ type: 'cell-destroyed', seat: 1, locationId, symbol: secondSymbol })
   }
 }
@@ -575,29 +632,19 @@ function place(state: GameState, seat: Seat, command: Extract<GameCommand, { typ
   if (state.powerups[seat].shieldSelectionPending) {
     return reject(state, 'shield-selection-pending')
   }
-  if (
-    state.config.forbidImmediateRepeat &&
-    state.lastPlacedLocation[seat] === command.locationId
-  ) {
-    return reject(state, 'repeat-location')
-  }
   const index = locationIndex(state, seat, command.locationId)
   if (index < 0) return reject(state, 'unknown-location')
-  if (state.boards[seat].locations[index]?.symbol !== null) {
+  const target = state.boards[seat].locations[index]
+  if (target?.symbol !== null) {
     return reject(state, 'location-occupied')
+  }
+  if (target.desecratedTurns > 0) {
+    return reject(state, 'desecrated-location')
   }
 
   const next = cloneState(state)
   const events: DomainEvent[] = []
   setLocation(next, seat, command.locationId, { symbol: command.symbol })
-  // Recorded here rather than at the call site so timeouts, which delegate to
-  // `place`, are covered by the no-repeat rule too.
-  const placedLocations = [...next.lastPlacedLocation] as [
-    LocationId | null,
-    LocationId | null,
-  ]
-  placedLocations[seat] = command.locationId
-  ;(next as Mutable<GameState>).lastPlacedLocation = placedLocations
   const playerPowerups = next.powerups[seat] as Mutable<PlayerPowerups>
   playerPowerups.revealActive = false
   resolveConflict(next, command.locationId, events)
@@ -731,7 +778,9 @@ export function applyTimeout(state: GameState): ApplyResult {
     }
   }
 
-  const available = working.boards[actor].locations.filter((location) => location.symbol === null)
+  // Desecrated cells are empty, so an unfiltered pick would hand `place` a
+  // location it rejects and the turn would never be consumed.
+  const available = working.boards[actor].locations.filter(isPlayable)
   if (available.length === 0) {
     events.push({ type: 'turn-passed', seat: actor })
     consumeTurn(working, events)

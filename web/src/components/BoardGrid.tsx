@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import '../animations/cell-desecration.css'
 import '../animations/cell-destruction.css'
 import '../animations/score-count.css'
 import shieldIcon from '../assets/icons/battle/powerup-immune.png'
@@ -8,7 +10,12 @@ import type { CSSProperties } from 'react'
 
 export interface CellDestructionEffect {
   id: number
-  tone: 'loss' | 'victory'
+  /**
+   * Only losses animate. A victory tone existed for destroying an opponent
+   * square, but showing it told the placing player their square had killed
+   * something, which is exactly the information a blind board withholds.
+   */
+  tone: 'loss'
 }
 
 // The result count-up walks the scored cells one at a time. Keep the step long
@@ -24,6 +31,9 @@ interface BoardGridProps {
   hidden?: boolean
   compact?: boolean
   interactive?: boolean
+  /** Off for the result boards: desecration is a constraint on the next move,
+   * and there is no next move once the match is scored. */
+  showDesecration?: boolean
   selectedSymbol?: ClassicSymbol | null
   destructionEffects?: Partial<Record<number, CellDestructionEffect>>
   scoreCountLabels?: Partial<Record<number, number>>
@@ -54,6 +64,51 @@ function cellTone(symbol: ClassicSymbol | null, hidden: boolean, occupied: boole
   return symbol ? COLOR_BY_SYMBOL[symbol] : '#F2EEE7'
 }
 
+// Long enough to read as a thaw rather than a flicker.
+const DESECRATION_RELEASE_MS = 800
+
+/**
+ * Indices whose desecration just ended, held for the length of the fade.
+ *
+ * Removing a class cannot start an animation, so the overlay has to outlive the
+ * state that created it. Keyed on a string of the flags rather than the cell
+ * array, which is a new object every render.
+ */
+function useDesecrationRelease(desecrationKey: string, enabled: boolean) {
+  const [previousKey, setPreviousKey] = useState(desecrationKey)
+  const [releasing, setReleasing] = useState<ReadonlySet<number>>(new Set())
+
+  // Adjusted during render rather than in an effect. This is derived from a prop
+  // change, so React can re-render immediately without committing the in-between
+  // result; an effect would commit one render with the overlay already gone and
+  // then cascade a second to bring it back, which shows as a flicker.
+  if (previousKey !== desecrationKey) {
+    setPreviousKey(desecrationKey)
+    const freed: number[] = []
+    if (enabled) {
+      for (let index = 0; index < desecrationKey.length; index += 1) {
+        if (previousKey[index] === '1' && desecrationKey[index] === '0') freed.push(index)
+      }
+    }
+    if (freed.length > 0) {
+      setReleasing((current) => new Set([...current, ...freed]))
+    }
+  }
+
+  // One timer for the whole board. A release arriving mid-fade restarts it,
+  // which costs nothing: the extra time is spent already fully transparent.
+  useEffect(() => {
+    if (releasing.size === 0) return
+    const timeoutId = window.setTimeout(
+      () => setReleasing(new Set()),
+      DESECRATION_RELEASE_MS,
+    )
+    return () => window.clearTimeout(timeoutId)
+  }, [releasing])
+
+  return releasing
+}
+
 export function BoardGrid({
   title,
   subtitle,
@@ -61,11 +116,17 @@ export function BoardGrid({
   hidden = false,
   compact = false,
   interactive = false,
+  showDesecration = true,
   selectedSymbol,
   destructionEffects = {},
   scoreCountLabels = {},
   onSelect,
 }: BoardGridProps) {
+  const desecrationKey = grid.cells
+    .map((cell) => (cell.desecrated && !cell.occupied ? '1' : '0'))
+    .join('')
+  const releasing = useDesecrationRelease(desecrationKey, showDesecration)
+
   return (
     <section
       className={`hidden-board ${interactive ? 'hidden-board-interactive' : ''} ${
@@ -100,6 +161,8 @@ export function BoardGrid({
           const isClickable = interactive && typeof onSelect === 'function'
           const destructionEffect = destructionEffects[index]
           const scoreCount = scoreCountLabels[index]
+          const desecrated = showDesecration && cell.desecrated && !cell.occupied
+          const isReleasing = !desecrated && releasing.has(index)
 
           return (
             <button
@@ -114,7 +177,9 @@ export function BoardGrid({
               }
               className={`hidden-cell ${cell.occupied ? 'hidden-cell-occupied' : ''} ${
                 hidden && cell.occupied ? 'hidden-cell-hidden' : ''
-              } ${isClickable ? 'hidden-cell-clickable' : ''} ${
+              } ${desecrated ? 'hidden-cell-desecrated' : ''} ${
+                isClickable ? 'hidden-cell-clickable' : ''
+              } ${
                 destructionEffect ? `hidden-cell-destroying-${destructionEffect.tone}` : ''
               } ${scoreCount ? 'hidden-cell-score-counted' : ''} hidden-cell-v${cellVariant(index)}`}
               style={{
@@ -131,6 +196,15 @@ export function BoardGrid({
                 <span className="hidden-marker">
                   <span />
                 </span>
+              ) : null}
+
+              {desecrated || isReleasing ? (
+                <span
+                  className={`cell-desecration ${
+                    isReleasing ? 'cell-desecration-releasing' : ''
+                  }`}
+                  aria-hidden="true"
+                />
               ) : null}
 
               {cell.immune ? (

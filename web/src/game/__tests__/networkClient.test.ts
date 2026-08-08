@@ -1,4 +1,4 @@
-import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
+import { DEFAULT_GAME_CONFIG, ENGINE_REVISION } from '@hidden/game-core'
 import { decode, encode } from '@msgpack/msgpack'
 import { afterEach, describe, expect, it } from 'vitest'
 import { NetworkClient, resolveWebSocketUrl } from '../networkClient'
@@ -157,7 +157,7 @@ describe('resolveWebSocketUrl', () => {
     socket.receive([0, PacketType.ID_ASSIGN, 7])
     const descriptor = {
       matchId: 'match-1',
-      engine: { id: 'classic', revision: 1 },
+      engine: { id: 'classic', revision: ENGINE_REVISION },
       config: DEFAULT_GAME_CONFIG,
       seed: 42,
       firstSeat: 0,

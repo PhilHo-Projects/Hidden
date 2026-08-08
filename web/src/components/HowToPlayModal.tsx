@@ -30,6 +30,10 @@ const RULES = [
     body: 'Load a move, then place it. If you both claimed the same square, rock, paper, scissors decides who keeps it. Play the same move and you both lose the square.',
   },
   {
+    heading: 'A destroyed square is desecrated',
+    body: 'Lose a square and it turns brown: you cannot play there on your next turn. Spend that turn somewhere else and it opens again on the one after.',
+  },
+  {
     heading: 'Most squares held wins',
     body: 'When the rounds run out, count what is still standing on each board. The bigger pile takes the match.',
   },

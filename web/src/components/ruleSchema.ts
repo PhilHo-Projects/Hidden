@@ -1,4 +1,11 @@
-import type { BoardSize, GameConfig, PowerupKey } from '@hidden/game-core'
+import {
+  MAX_TURN_SECONDS,
+  MIN_TURN_SECONDS,
+  ONLINE_MIN_TURN_SECONDS,
+  type BoardSize,
+  type GameConfig,
+  type PowerupKey,
+} from '@hidden/game-core'
 import { POWERUP_LABELS } from '../game/constants'
 
 /*
@@ -36,6 +43,10 @@ export interface NumberField extends FieldBase {
   readonly max: number
   readonly value: (config: GameConfig) => number
   readonly patch: (value: number, config: GameConfig) => Partial<GameConfig>
+  /** Next value one press away. Defaults to whole units. */
+  readonly step?: (value: number, direction: 1 | -1) => number
+  /** Smallest typeable increment. Decides the on-screen keypad too. */
+  readonly precision?: number
 }
 
 export interface FlagField extends FieldBase {
@@ -57,7 +68,6 @@ export interface RuleSection {
 }
 
 const BOARD_SIZES: readonly BoardSize[] = [3, 4, 5]
-const LARGEST_BOARD = BOARD_SIZES[BOARD_SIZES.length - 1]
 const POWERUP_KEYS: readonly PowerupKey[] = ['shield', 'reveal', 'extraTurn']
 
 const boardSize: ChoiceField = {
@@ -67,27 +77,9 @@ const boardSize: ChoiceField = {
   options: () =>
     BOARD_SIZES.map((size) => ({ value: size, label: `${size} × ${size}` })),
   value: (config) => config.boardSize,
-  // A 5-line is illegal on a 3x3, so a shrinking board drags the line down with it.
-  patch: (value, config) =>
-    config.streak > value
-      ? { boardSize: value as BoardSize, streak: value }
-      : { boardSize: value as BoardSize },
-}
-
-const streak: ChoiceField = {
-  kind: 'choice',
-  id: 'streak',
-  label: 'Line to win',
-  options: (config) =>
-    Array.from({ length: LARGEST_BOARD - 1 }, (_unused, index) => index + 2).map(
-      (length) => ({
-        value: length,
-        label: String(length),
-        disabled: length > config.boardSize,
-      }),
-    ),
-  value: (config) => config.streak,
-  patch: (value) => ({ streak: value }),
+  // The line length is no longer a rule the player sets, so it rides the board:
+  // a full row, column, or diagonal, whatever the board size.
+  patch: (value) => ({ boardSize: value as BoardSize, streak: value }),
 }
 
 const rounds: NumberField = {
@@ -100,15 +92,27 @@ const rounds: NumberField = {
   patch: (value) => ({ rounds: value }),
 }
 
-const turnSeconds: NumberField = {
+/*
+ * Whole seconds down to 1, then fifths of a second. Stepping the sub-second
+ * range in whole seconds would skip it entirely, and stepping the whole range
+ * in fifths would take forty presses to get from 10s to 0.2s.
+ */
+function stepTurnSeconds(value: number, direction: 1 | -1) {
+  const size = direction < 0 ? (value <= 1 ? 0.2 : 1) : value < 1 ? 0.2 : 1
+  return Math.round((value + direction * size) * 10) / 10
+}
+
+const turnSecondsField = (min: number): NumberField => ({
   kind: 'number',
   id: 'turnSeconds',
   label: 'Turn timer',
-  min: 2,
-  max: 60,
+  min,
+  max: MAX_TURN_SECONDS,
   value: (config) => config.turnSeconds,
   patch: (value) => ({ turnSeconds: value }),
-}
+  step: stepTurnSeconds,
+  precision: 0.1,
+})
 
 const blindMode: FlagField = {
   kind: 'flag',
@@ -116,14 +120,6 @@ const blindMode: FlagField = {
   label: 'Blind',
   value: (config) => config.blindMode,
   patch: (value) => ({ blindMode: value }),
-}
-
-const forbidImmediateRepeat: FlagField = {
-  kind: 'flag',
-  id: 'forbidImmediateRepeat',
-  label: 'No repeat',
-  value: (config) => config.forbidImmediateRepeat,
-  patch: (value) => ({ forbidImmediateRepeat: value }),
 }
 
 const powerupsEnabled: FlagField = {
@@ -143,8 +139,19 @@ const powerupsEnabled: FlagField = {
   })),
 }
 
-export const RULE_SECTIONS: readonly RuleSection[] = [
-  { id: 'shape', layout: 'pair', fields: [boardSize, streak] },
-  { id: 'pace', layout: 'pair', fields: [rounds, turnSeconds] },
-  { id: 'rules', label: 'Rules', layout: 'flags', fields: [blindMode, forbidImmediateRepeat, powerupsEnabled] },
+const buildSections = (minTurnSeconds: number): readonly RuleSection[] => [
+  { id: 'shape', layout: 'pair', fields: [boardSize] },
+  { id: 'pace', layout: 'pair', fields: [rounds, turnSecondsField(minTurnSeconds)] },
+  // Desecrated tiles are unconditional rather than a flag here: the rule exists
+  // to stop a degenerate loop, so a match that can switch it off is not wanted.
+  { id: 'rules', label: 'Rules', layout: 'flags', fields: [blindMode, powerupsEnabled] },
 ]
+
+/** Offline practice. Sub-second turns make a bot match resolve in seconds. */
+export const RULE_SECTIONS = buildSections(MIN_TURN_SECONDS)
+
+/**
+ * Hosting an online match. The server floors the turn timer at two seconds
+ * regardless, so offering less here would only be a promise it breaks.
+ */
+export const ONLINE_RULE_SECTIONS = buildSections(ONLINE_MIN_TURN_SECONDS)
