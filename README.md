@@ -80,8 +80,9 @@ the single-page app, and accepts WebSocket upgrades only at `/ws`.
 Username/password accounts and browser sessions are stored in PostgreSQL.
 Accounts are optional: guests retain unrestricted online and offline play.
 Matchmaking and active matches are still intentionally held in memory, so run
-exactly one application replica. Match history, replay persistence, and
-reconnection sessions are not part of this release.
+exactly one application replica. Completed online matches persist as private,
+participant-authorized final snapshots with W/L/T totals and per-account
+bookmarks. Action replay and reconnection sessions are not part of this release.
 
 Production configuration:
 

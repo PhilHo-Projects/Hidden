@@ -29,8 +29,8 @@ there binds a stranger; a host sets the rules of a game they own.
   short explanatory sentence.
 - Every non-landing screen uses one slim persistent bar: contextual Back on the
   left, live status in the center, and the account slot on the right.
-- Guest sessions show Sign In in the account slot. A future authenticated
-  session replaces it with profile/settings access.
+- Guest sessions show Sign In in the account slot. Authenticated sessions use a
+  profile disclosure with match history and account actions.
 - Back returns one decision at a time. Battles and results return to their
   relevant online menu or offline setup; repeated Back eventually reaches the
   landing screen.
@@ -51,6 +51,25 @@ there binds a stranger; a host sets the rules of a game they own.
 - Status copy reflects the actual phase: connecting, syncing, joining,
   searching, match found, ready, or failed.
 - Gameplay turn state and temporary announcements belong in the battle header.
+
+## Match history
+
+- History is a private ledger for a signed-in participant, not a replay and not
+  a stats dashboard. One ruled surface carries totals, filters, rows, and final
+  board detail instead of splitting each datum into a separate card.
+- Rows lead with outcome, opponent, score, and completion time. The star is an
+  independent 48 px target for the account's personal **Interesting** bookmark;
+  it must never imply a shared or public collection.
+- The All / Interesting switch keeps the same W/L/T totals. Pagination appends
+  newer-to-older pages; an empty filtered list explains how to add a bookmark.
+- Detail is read-only and mechanics-independent: participant names, final score,
+  completion date, and both final boards. Known classic symbols use their board
+  colours; an unknown future symbol renders as legible text.
+- Loading uses a quiet skeleton. Expired sessions, retryable list/detail errors,
+  empty history, pagination errors, and bookmark rollback each have distinct
+  recovery copy.
+- Opening history remembers the exact screen under it. Global Back returns to
+  that screen; the detail's local All matches control returns to the ledger.
 
 ## Portrait-phone rules
 
@@ -116,7 +135,7 @@ screens own only the effect's placement and when it appears.
 
 ## Deferred systems
 
-Account registration, login, persistence, private-room creation, game lookup,
+Chess-style action replay, public sharing, admin-global research collections,
 reconnection, and shared matchmaking state require separate product and backend
 work. Their unavailable entry points must not imply that those systems already
 exist.
