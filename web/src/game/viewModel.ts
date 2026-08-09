@@ -14,6 +14,7 @@ export type Screen =
   | 'countdown'
   | 'battle'
   | 'results'
+  | 'history'
   | 'disconnected'
   | 'sync-lost'
 
@@ -31,6 +32,7 @@ export function getScreenLabel(screen: Screen) {
     countdown: 'Launch',
     battle: 'Battle',
     results: 'Results',
+    history: 'History',
     disconnected: 'Disconnected',
     'sync-lost': 'Sync Lost',
   }[screen]
@@ -71,6 +73,7 @@ export function getBackTarget(screen: Screen, isOnlineMatch = false): Screen {
     countdown: matchSetup,
     battle: matchSetup,
     results: matchSetup,
+    history: 'intro',
     disconnected: 'online-menu',
     'sync-lost': 'online-menu',
   }

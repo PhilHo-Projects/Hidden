@@ -48,6 +48,7 @@ describe('view model helpers', () => {
     expect(getScreenLabel('online-menu')).toBe('Online')
     expect(getScreenLabel('matchmaking')).toBe('Searching')
     expect(getScreenLabel('battle')).toBe('Battle')
+    expect(getScreenLabel('history')).toBe('History')
     expect(getScreenLabel('sync-lost')).toBe('Sync Lost')
   })
 
@@ -77,6 +78,7 @@ describe('view model helpers', () => {
     expect(getBackTarget('results', true)).toBe('online-menu')
     expect(getBackTarget('disconnected', true)).toBe('online-menu')
     expect(getBackTarget('sync-lost', true)).toBe('online-menu')
+    expect(getBackTarget('history')).toBe('intro')
   })
 
   it('chooses the visible opponent name from online users before fallbacks', () => {

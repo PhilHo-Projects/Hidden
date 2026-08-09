@@ -13,6 +13,7 @@ import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
 import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
+import { MatchHistoryScreen } from './components/MatchHistory'
 import { PowerupTray } from './components/PowerupTray'
 import { ProfileMenu } from './components/ProfileMenu'
 import { RuleChip } from './components/RuleControls'
@@ -28,6 +29,7 @@ import {
   type UiStatus,
 } from './components/PregameUi'
 import { COLOR_BY_SYMBOL } from './game/constants'
+import { createMatchHistoryClient } from './history/historyClient'
 import {
   applyOnlinePresentation,
   applyOfflineLocalMove,
@@ -95,6 +97,7 @@ const pieces: ReadonlyArray<{
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 type DestructionEffectMap = Partial<Record<number, CellDestructionEffect>>
 const accountClient = createAuthClient()
+const matchHistoryClient = createMatchHistoryClient()
 
 const wsUrl = () =>
   resolveWebSocketUrl({
@@ -173,6 +176,7 @@ function App() {
   const clientRef = useRef<NetworkClient | null>(null)
   const matchRef = useRef<GameState | null>(null)
   const screenRef = useRef<Screen>('intro')
+  const historyReturnScreenRef = useRef<Screen>('intro')
   const manualCloseRef = useRef(false)
   const onlineAuthorityRef = useRef<OnlineAuthorityState | null>(null)
   const destructionSequenceRef = useRef(0)
@@ -690,6 +694,13 @@ function App() {
 
   const navigateBack = useCallback(() => {
     const current = screenRef.current
+
+    if (current === 'history') {
+      setAnnouncement('')
+      setScreen(historyReturnScreenRef.current)
+      return
+    }
+
     const currentMatch = matchRef.current
     const isOnlineMatch =
       current === 'disconnected' ||
@@ -739,6 +750,14 @@ function App() {
     setStatus(nextStatus)
     setScreen(target)
   }, [backHome, closeClient, username])
+
+  const openHistory = useCallback(() => {
+    const current = screenRef.current
+    if (current === 'history') return
+    historyReturnScreenRef.current = current
+    setAnnouncement('')
+    setScreen('history')
+  }, [])
 
   const startOffline = async () => {
     setStatus({
@@ -1021,7 +1040,13 @@ function App() {
       ? { ...status, detail: `Looking for an opponent · ${searchClock}` }
       : status
   const chromeStatus: UiStatus =
-    screen === 'results' && match?.result
+    screen === 'history'
+      ? {
+          tone: 'neutral',
+          label: 'HISTORY',
+          detail: `${username}'s completed online matches.`,
+        }
+      : screen === 'results' && match?.result
       ? {
           tone: match.result.outcome === 'loss' ? 'error' : 'success',
           label: 'MATCH COMPLETE',
@@ -1078,6 +1103,7 @@ function App() {
                 username={authUser.username}
                 busy={authBusy}
                 disabled={accountChangeLocked || screen === 'account'}
+                onOpenHistory={openHistory}
                 onSignOut={() => void logout()}
               />
             ) : (
@@ -1164,6 +1190,16 @@ function App() {
             onSubmit={submitAccount}
           />
         </section>
+      ) : null}
+
+      {screen === 'history' ? (
+        <MatchHistoryScreen
+          client={matchHistoryClient}
+          onSignIn={() => {
+            setAuthUser(null)
+            openAccount('login')
+          }}
+        />
       ) : null}
 
       {screen === 'mode-select' ? (

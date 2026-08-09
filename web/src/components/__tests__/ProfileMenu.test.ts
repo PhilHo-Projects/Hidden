@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { ProfileMenu } from '../ProfileMenu'
+import { ProfileMenu, ProfileMenuPanel } from '../ProfileMenu'
 
 const render = (overrides: Partial<Parameters<typeof ProfileMenu>[0]> = {}) =>
   renderToStaticMarkup(
@@ -10,6 +10,7 @@ const render = (overrides: Partial<Parameters<typeof ProfileMenu>[0]> = {}) =>
       busy: false,
       disabled: false,
       onSignOut: () => undefined,
+      onOpenHistory: () => undefined,
       ...overrides,
     }),
   )
@@ -44,5 +45,22 @@ describe('ProfileMenu', () => {
     expect(markup).toContain('aria-controls=')
     expect(markup).not.toContain('role="menu"')
     expect(markup).not.toContain('aria-haspopup')
+  })
+
+  it('enables history while keeping later account sections marked Soon', () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProfileMenuPanel, {
+        username: 'Ecco',
+        onOpenHistory: () => undefined,
+        onSignOut: () => undefined,
+      }),
+    )
+
+    expect(markup).toContain('Match history')
+    expect(markup).toContain('Open match history')
+    expect(markup).toContain('Stats')
+    expect(markup).toContain('Preferences')
+    expect(markup.match(/disabled=""/g)).toHaveLength(2)
+    expect(markup.match(/Soon/g)).toHaveLength(2)
   })
 })
