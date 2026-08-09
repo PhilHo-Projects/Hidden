@@ -7,6 +7,8 @@
 **/.env.*
 **/*.log
 **/.playwright-cli
+art
+docs
 README.md
 AGENTS.md
 CLAUDE.md

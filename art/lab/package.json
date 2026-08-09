@@ -1,0 +1,10 @@
+{
+  "name": "@hidden/lab",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Design prototypes for Hidden. Not part of the build and never shipped.",
+  "type": "module",
+  "scripts": {
+    "start": "node serve.mjs"
+  }
+}

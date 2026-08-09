@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "web"],
       "port": 5173
+    },
+    {
+      "name": "hidden-lab",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start", "--prefix", "art/lab"],
+      "port": 4180
     }
   ]
 }

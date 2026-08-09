@@ -5,12 +5,15 @@ it as the folder outside `Assets/` in a Unity project — it lives in git so ide
 are not lost, but nothing here is production.
 
 **Nothing in this folder ships.** The root `Dockerfile` only copies `web/`,
-`server/`, and `packages/game-core/` into the build stage, so files here cannot
-reach the container even by accident. Vite never sees them either.
+`server/`, and `packages/game-core/` into the build stage, and `.dockerignore`
+excludes `art/` outright, so files here cannot reach the container even by
+accident. Vite never sees them either.
 
 ## Layout
 
 - `concept/` — reference images, mood boards, generated concepts, sketches.
+- `lab/` — runnable HTML prototypes for colour, motion, and icon treatments.
+  `cd art/lab && npm start`. Nothing to install; see `lab/README.md`.
 
 ## Rules
 

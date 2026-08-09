@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hidden — cell fill / drain prototype</title>
+<style>
+  :root {
+    --green: #6EDC3C;
+    --blue: #4C6EF5;
+    --red: #DC2626;
+    --empty: #f5f5f5;
+    --yellow: #f6e600;
+
+    /* The two knobs. Everything below reads them. Defaults match what shipped. */
+    --fill-ms: 250ms;
+    --drain-ms: 500ms;
+
+    --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 2rem 1.25rem 4rem;
+    background: #0b0b0d;
+    color: #e9e9ea;
+    font: 14px/1.5 ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+
+  h1 { margin: 0 0 0.25rem; font-size: 1.1rem; letter-spacing: 0.02em; }
+  h2 { margin: 2.25rem 0 0.35rem; font-size: 0.82rem; letter-spacing: 0.14em; text-transform: uppercase; color: #8d8d92; }
+  p  { margin: 0 0 1.5rem; color: #8d8d92; max-width: 68ch; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem 2rem;
+    align-items: center;
+    padding: 0.9rem 1.1rem;
+    border: 1px solid #26262b;
+    background: #131316;
+  }
+  .controls label { display: grid; gap: 0.3rem; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: #8d8d92; }
+  .controls input[type="range"] { width: 190px; accent-color: var(--yellow); }
+  .controls output { color: #e9e9ea; font-variant-numeric: tabular-nums; }
+  .controls button {
+    padding: 0.5rem 0.9rem;
+    border: 1px solid #3a3a42;
+    background: #1c1c21;
+    color: #e9e9ea;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--yellow); }
+
+  .lanes { display: grid; gap: 1.1rem; }
+
+  .lane {
+    display: grid;
+    grid-template-columns: 15rem 1fr;
+    gap: 1.25rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    border: 1px solid #26262b;
+    background: #131316;
+  }
+  .lane-name { font-weight: 700; letter-spacing: 0.02em; }
+  .lane-note { display: block; margin-top: 0.2rem; font-weight: 400; font-size: 0.76rem; color: #8d8d92; }
+  .lane-grid { display: grid; grid-template-columns: repeat(3, 4.6rem); gap: 0.45rem; }
+
+  /*
+   * The cell. Same construction as the app: a clip-path cut, so the ink outline
+   * and the drop stack are drop-shadow filters rather than a border and a
+   * box-shadow, which would follow the box instead of the cut.
+   */
+  .cell {
+    --cell-ink: drop-shadow(2px 0 0 #0b0b0b) drop-shadow(-2px 0 0 #0b0b0b)
+      drop-shadow(0 2px 0 #0b0b0b) drop-shadow(0 -2px 0 #0b0b0b);
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    background: var(--empty);
+    cursor: pointer;
+    filter: var(--cell-ink) drop-shadow(0 4px 0 #000);
+    clip-path: polygon(
+      2% 4%, 26% 0%, 53% 3%, 79% 0%, 98% 4%, 96% 27%, 100% 52%, 97% 78%,
+      99% 97%, 75% 100%, 48% 97%, 22% 100%, 3% 96%, 4% 73%, 0% 47%, 3% 24%
+    );
+  }
+
+  /* The colour lives on its own layer so the cell face can stay the empty tone
+   * underneath it. That is what lets the ink grow and drain over nothing. */
+  .ink {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+  }
+
+  /* ---- FILL A · radial ------------------------------------------------ */
+  .fill-radial .ink { animation: ink-in-radial var(--fill-ms) var(--ease-out-quart) both; }
+  @keyframes ink-in-radial {
+    from { clip-path: circle(0% at 50% 50%); }
+    to   { clip-path: circle(75% at 50% 50%); }
+  }
+
+  /* ---- FILL B · box scale --------------------------------------------- */
+  .fill-box .ink { animation: ink-in-box var(--fill-ms) var(--ease-out-quart) both; }
+  @keyframes ink-in-box {
+    from { transform: scale(0); }
+    to   { transform: scale(1); }
+  }
+
+  /* ---- FILL C · splat (irregular, matches the hand-cut board) --------- */
+  .fill-splat .ink { animation: ink-in-splat var(--fill-ms) var(--ease-out-expo) both; }
+  @keyframes ink-in-splat {
+    from {
+      clip-path: polygon(48% 50%, 52% 48%, 53% 52%, 49% 53%);
+    }
+    to {
+      clip-path: polygon(
+        50% -12%, 74% 4%, 96% -6%, 104% 26%, 122% 48%, 102% 72%, 108% 104%,
+        74% 98%, 50% 114%, 26% 98%, -6% 106%, 2% 74%, -18% 50%, 4% 26%, -4% -4%, 26% 4%
+      );
+    }
+  }
+
+  /* ---- FILL D · radial + flash ---------------------------------------- */
+  .fill-flash .ink {
+    animation:
+      ink-in-radial var(--fill-ms) var(--ease-out-quart) both,
+      ink-flash calc(var(--fill-ms) + 90ms) ease-out both;
+  }
+  @keyframes ink-flash {
+    0%   { filter: brightness(1.75); }
+    55%  { filter: brightness(1.32); }
+    100% { filter: brightness(1); }
+  }
+
+  /* ---- DRAIN A · radial shrink ---------------------------------------- */
+  .drain-radial .ink { animation: ink-out-radial var(--drain-ms) var(--ease-out-quart) both; }
+  @keyframes ink-out-radial {
+    from { clip-path: circle(75% at 50% 50%); }
+    to   { clip-path: circle(0% at 50% 50%); }
+  }
+
+  /* ---- DRAIN B · shrink + fade ---------------------------------------- */
+  .drain-fade .ink { animation: ink-out-fade var(--drain-ms) var(--ease-out-quart) both; }
+  @keyframes ink-out-fade {
+    from { opacity: 1; clip-path: circle(75% at 50% 50%); }
+    to   { opacity: 0; clip-path: circle(0% at 50% 50%); }
+  }
+
+  /* ---- DRAIN D · reverse box scale (SHIPPED) -------------------------- */
+  /* Reversing cubic-bezier(0.25, 1, 0.5, 1) gives cubic-bezier(0.5, 0, 0.75, 0),
+   * so this is the fill run backwards in geometry and in timing. */
+  .drain-box .ink { animation: ink-out-box var(--drain-ms) cubic-bezier(0.5, 0, 0.75, 0) both; }
+  @keyframes ink-out-box {
+    from { transform: scale(1); }
+    to   { transform: scale(0); }
+  }
+
+  /* ---- DRAIN C · suck down (drains toward the floor of the cell) ------ */
+  .drain-suck .ink { animation: ink-out-suck var(--drain-ms) var(--ease-out-expo) both; }
+  @keyframes ink-out-suck {
+    from { clip-path: inset(0 0 0 0); }
+    to   { clip-path: inset(100% 0 0 0); }
+  }
+
+  .legend { margin-top: 2.5rem; color: #8d8d92; }
+  .legend code { color: var(--yellow); }
+  kbd { padding: 0.1rem 0.35rem; border: 1px solid #3a3a42; background: #1c1c21; font-size: 0.85em; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ink { animation-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Hidden — cell fill / drain prototype</h1>
+<p>
+  Click any cell to fill it, click again to drain it. Every lane runs off the same
+  two durations so they can be compared honestly. Empty face is
+  <code>#f5f5f5</code>; the colour is a separate layer on top, which is the change
+  that makes both animations possible at all.
+</p>
+
+<div class="controls">
+  <label>
+    fill <output id="fill-out">250ms</output>
+    <input id="fill-range" type="range" min="40" max="500" step="10" value="250" />
+  </label>
+  <label>
+    drain <output id="drain-out">500ms</output>
+    <input id="drain-range" type="range" min="60" max="800" step="10" value="500" />
+  </label>
+  <button id="play-all" type="button">Play every lane</button>
+  <button id="reset-all" type="button">Reset</button>
+</div>
+
+<h2>Fill — click an empty cell</h2>
+<div class="lanes" id="fill-lanes"></div>
+
+<h2>Drain — click a full cell</h2>
+<div class="lanes" id="drain-lanes"></div>
+
+<p class="legend">
+  Shipped: <code>fill-box</code> at <code>250ms</code> + <code>drain-box</code>
+  at <code>500ms</code>. Both are pure <code>transform</code>, so they run on the
+  compositor and never touch layout. The drain reverses the fill's easing curve
+  as well as its geometry, which is what keeps half a second from reading as lag:
+  it holds the square, then takes it.
+</p>
+
+<script>
+  const COLORS = ['var(--green)', 'var(--blue)', 'var(--red)']
+
+  const FILLS = [
+    ['fill-box',    'B · box scale — SHIPPED', 'The whole square scales up from the centre. Composited, so it is the cheapest of the four.'],
+    ['fill-radial', 'A · radial', 'Colour grows as a disc from the centre. Closest to "fills up from the middle".'],
+    ['fill-splat',  'C · splat', 'Irregular edge, so it lands like thrown ink rather than a perfect circle.'],
+    ['fill-flash',  'D · radial + flash', 'Radial, plus a brightness spike that decays after the fill lands.'],
+  ]
+
+  const DRAINS = [
+    ['drain-box',    'D · reverse box scale — SHIPPED', 'The fill run backwards, curve included. Holds the square, then takes it.'],
+    ['drain-radial', 'A · radial shrink', 'Reverse of the radial fill. Pure and symmetrical.'],
+    ['drain-fade',   'B · shrink + fade', 'Shrinks and fades together, so the last of it dissolves rather than snapping.'],
+    ['drain-suck',   'C · drain down', 'Wipes from the top down, like the colour is draining out of the floor.'],
+  ]
+
+  function buildLane([cls, name, note], container, filled) {
+    const lane = document.createElement('div')
+    lane.className = 'lane'
+
+    const label = document.createElement('div')
+    label.className = 'lane-name'
+    label.innerHTML = name + '<span class="lane-note">' + note + '</span>'
+
+    const grid = document.createElement('div')
+    grid.className = 'lane-grid'
+
+    COLORS.forEach((color) => {
+      const cell = document.createElement('button')
+      cell.type = 'button'
+      cell.className = 'cell'
+      cell.dataset.color = color
+      cell.dataset.variant = cls
+      if (filled) paint(cell, false)
+      cell.addEventListener('click', () => toggle(cell))
+      grid.appendChild(cell)
+    })
+
+    lane.append(label, grid)
+    container.appendChild(lane)
+  }
+
+  // Painting always replaces the layer rather than toggling a class: a fresh
+  // node is the only reliable way to restart a CSS animation.
+  function paint(cell, animate) {
+    cell.querySelector('.ink')?.remove()
+    const ink = document.createElement('span')
+    ink.className = 'ink'
+    ink.style.background = cell.dataset.color
+    if (animate) cell.classList.add(cell.dataset.variant)
+    else cell.classList.remove(cell.dataset.variant)
+    cell.appendChild(ink)
+    cell.dataset.state = 'full'
+  }
+
+  function drain(cell) {
+    const ink = cell.querySelector('.ink')
+    if (!ink) return
+    cell.classList.remove(cell.dataset.variant)
+    // Force a reflow so removing and re-adding the class actually restarts it.
+    void cell.offsetWidth
+    cell.classList.add(cell.dataset.variant)
+    cell.dataset.state = 'empty'
+    const ms = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--drain-ms'), 10)
+    setTimeout(() => { if (cell.dataset.state === 'empty') ink.remove() }, ms + 30)
+  }
+
+  function toggle(cell) {
+    const draining = cell.dataset.variant.startsWith('drain-')
+    if (draining) {
+      if (cell.dataset.state === 'full') drain(cell)
+      else paint(cell, false)
+      return
+    }
+    if (cell.dataset.state === 'full') {
+      cell.querySelector('.ink')?.remove()
+      cell.classList.remove(cell.dataset.variant)
+      cell.dataset.state = 'empty'
+    } else {
+      paint(cell, true)
+    }
+  }
+
+  const fillLanes = document.getElementById('fill-lanes')
+  const drainLanes = document.getElementById('drain-lanes')
+  FILLS.forEach((variant) => buildLane(variant, fillLanes, false))
+  DRAINS.forEach((variant) => buildLane(variant, drainLanes, true))
+
+  const bind = (rangeId, outId, prop) => {
+    const range = document.getElementById(rangeId)
+    const out = document.getElementById(outId)
+    range.addEventListener('input', () => {
+      out.textContent = range.value + 'ms'
+      document.documentElement.style.setProperty(prop, range.value + 'ms')
+    })
+  }
+  bind('fill-range', 'fill-out', '--fill-ms')
+  bind('drain-range', 'drain-out', '--drain-ms')
+
+  document.getElementById('play-all').addEventListener('click', () => {
+    document.querySelectorAll('.cell').forEach((cell, i) => {
+      setTimeout(() => {
+        if (cell.dataset.variant.startsWith('drain-')) {
+          if (cell.dataset.state !== 'full') paint(cell, false)
+          requestAnimationFrame(() => drain(cell))
+        } else {
+          cell.querySelector('.ink')?.remove()
+          cell.dataset.state = 'empty'
+          requestAnimationFrame(() => paint(cell, true))
+        }
+      }, i * 45)
+    })
+  })
+
+  document.getElementById('reset-all').addEventListener('click', () => {
+    document.querySelectorAll('.cell').forEach((cell) => {
+      cell.querySelector('.ink')?.remove()
+      cell.classList.remove(cell.dataset.variant)
+      cell.dataset.state = 'empty'
+      if (cell.dataset.variant.startsWith('drain-')) paint(cell, false)
+    })
+  })
+</script>
+</body>
+</html>

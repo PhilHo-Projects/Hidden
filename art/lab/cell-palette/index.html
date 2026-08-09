@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hidden — cell colour palette</title>
+<style>
+  @font-face {
+    font-family: "Edo SZ";
+    src: url("/game/fonts/edosz.woff2") format("woff2");
+    font-display: block;
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    src: url("/game/fonts/jetbrains-mono-bold.woff2") format("woff2");
+    font-weight: 700;
+    font-display: block;
+  }
+
+  :root {
+    /* Shipping values, straight out of web/src/game/constants.ts and
+     * web/src/animations/cell-desecration.css. Keep them in step by hand — the
+     * lab has no build step, which is the price of it having no dependencies. */
+    --ship-green: #6EDC3C;
+    --ship-blue: #4C6EF5;
+    --ship-red: #DC2626;
+    --ship-desec: linear-gradient(150deg, #4a5058, #20242a);
+
+    --empty: #f5f5f5;
+    --yellow: #d7af13;
+
+    /* Texture layer. Every treatment below only sets these four. */
+    --tex-image: none;
+    --tex-size: auto;
+    --tex-opacity: 0;
+    --tex-blend: normal;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0 0 6rem;
+    /* Same plate the board actually sits on: the shell background image over #030303. */
+    background: #030303 url("/game/backgrounds/hidden-landscape.webp") center / cover no-repeat fixed;
+    color: #e9e9ea;
+    font: 700 13px/1.5 "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+
+  .page { max-width: 1680px; margin: 0 auto; padding: 2rem clamp(1rem, 3vw, 2.5rem) 0; }
+
+  .masthead { margin: 0 0 1.5rem; padding: 1.1rem 1.3rem; background: rgba(3,3,3,0.86); border-left: 4px solid var(--yellow); }
+
+  h1 {
+    margin: 0 0 0.35rem;
+    font-family: "Edo SZ", Impact, sans-serif;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 400;
+    line-height: 1;
+    text-shadow: 4px 4px 0 #000;
+  }
+  .sub { max-width: 78ch; margin: 0; color: rgba(255,255,255,0.68); font-size: 0.8rem; font-weight: 400; }
+  .sub b { color: var(--yellow); font-weight: 700; }
+
+  h2 {
+    margin: 2.6rem 0 0.9rem;
+    color: rgba(255,255,255,0.55);
+    font-size: 0.72rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+  }
+  h2 span { color: rgba(255,255,255,0.3); letter-spacing: 0.06em; text-transform: none; }
+  h2 { text-shadow: 0 0 8px #000, 0 0 8px #000, 2px 2px 0 #000; }
+
+  /* ---------- controls ---------- */
+
+  .controls {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.9rem 1.6rem;
+    margin: 0 0 1.5rem;
+    padding: 0.85rem 1.1rem;
+    border: 2px solid rgba(215,175,19,0.38);
+    background: rgba(5,5,5,0.94);
+    box-shadow: 0 6px 0 rgba(0,0,0,0.8);
+  }
+  .controls label { display: grid; gap: 0.3rem; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+  .controls select, .controls button {
+    padding: 0.45rem 0.7rem;
+    border: 2px solid #2a2a2a;
+    background: #111;
+    color: #e9e9ea;
+    font: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+  .controls select:hover, .controls button:hover { border-color: var(--yellow); }
+  .controls button[aria-pressed="true"] { border-color: var(--yellow); background: #221b0b; color: var(--yellow); }
+  .hint { margin-left: auto; color: rgba(255,255,255,0.42); font-size: 0.66rem; font-weight: 400; letter-spacing: 0.06em; }
+
+  /* ---------- the cell, lifted from index.css ---------- */
+
+  .cell {
+    --cell-ink: drop-shadow(2px 0 0 #0b0b0b) drop-shadow(-2px 0 0 #0b0b0b)
+      drop-shadow(0 2px 0 #0b0b0b) drop-shadow(0 -2px 0 #0b0b0b);
+    position: relative;
+    display: block;
+    aspect-ratio: 1;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border: 0;
+    padding: 0;
+    background: var(--empty);
+    filter: var(--cell-ink) drop-shadow(0 4px 0 #000);
+  }
+
+  /* The four hand-cut edges, same polygons, assigned the same way (index * 3 + 1) % 4. */
+  .cell-v0 { clip-path: polygon(2% 4%, 26% 0%, 53% 3%, 79% 0%, 98% 4%, 96% 27%, 100% 52%, 97% 78%, 99% 97%, 75% 100%, 48% 97%, 22% 100%, 3% 96%, 4% 73%, 0% 47%, 3% 24%); }
+  .cell-v1 { clip-path: polygon(3% 1%, 28% 4%, 51% 0%, 74% 4%, 97% 1%, 100% 23%, 96% 50%, 100% 75%, 96% 99%, 72% 96%, 50% 100%, 27% 96%, 1% 99%, 4% 77%, 0% 52%, 4% 28%); }
+  .cell-v2 { clip-path: polygon(4% 2%, 25% 0%, 50% 4%, 78% 1%, 96% 3%, 100% 26%, 97% 49%, 100% 77%, 97% 98%, 73% 100%, 52% 96%, 23% 100%, 4% 97%, 0% 74%, 3% 50%, 0% 23%); }
+  .cell-v3 { clip-path: polygon(1% 3%, 24% 3%, 54% 0%, 77% 3%, 99% 1%, 97% 25%, 100% 53%, 96% 74%, 99% 98%, 76% 99%, 47% 100%, 24% 97%, 1% 100%, 3% 72%, 0% 48%, 2% 27%); }
+
+  body.squares .cell { clip-path: none; border-radius: 2px; }
+
+  .ink, .desec {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+  }
+
+  /* Crosshatch, exactly as cell-desecration.css draws it: one light pass and one
+   * dark, so it stays legible across a fill running from slate to near-black. */
+  .desec.hatched::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      repeating-linear-gradient(
+        45deg,
+        rgb(255 255 255 / 13%) 0,
+        rgb(255 255 255 / 13%) max(1px, 0.05em),
+        transparent max(1px, 0.05em),
+        transparent max(6px, 0.34em)
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        rgb(0 0 0 / 32%) 0,
+        rgb(0 0 0 / 32%) max(1px, 0.05em),
+        transparent max(1px, 0.05em),
+        transparent max(6px, 0.34em)
+      );
+  }
+
+  /* The texture layer under test. Zero bytes shipped — every option is procedural. */
+  .ink::after, .desec::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: var(--tex-image);
+    background-size: var(--tex-size);
+    opacity: var(--tex-opacity);
+    mix-blend-mode: var(--tex-blend);
+    pointer-events: none;
+  }
+
+  /* ---------- texture treatments ---------- */
+
+  [data-texture="none"] { --tex-opacity: 0; }
+
+  [data-texture="hatch"] {
+    --tex-image: repeating-linear-gradient(135deg, rgb(0 0 0 / 30%) 0 2px, transparent 2px 7px);
+    --tex-opacity: 1;
+  }
+
+  [data-texture="crosshatch"] {
+    --tex-image:
+      repeating-linear-gradient(45deg, rgb(0 0 0 / 20%) 0 1.5px, transparent 1.5px 8px),
+      repeating-linear-gradient(-45deg, rgb(0 0 0 / 20%) 0 1.5px, transparent 1.5px 8px);
+    --tex-opacity: 1;
+  }
+
+  [data-texture="mottle"] {
+    --tex-image:
+      radial-gradient(38% 44% at 22% 28%, rgb(0 0 0 / 22%), transparent 70%),
+      radial-gradient(30% 36% at 78% 62%, rgb(0 0 0 / 20%), transparent 72%),
+      radial-gradient(44% 30% at 58% 12%, rgb(255 255 255 / 16%), transparent 74%),
+      radial-gradient(34% 40% at 12% 82%, rgb(255 255 255 / 12%), transparent 70%);
+    --tex-opacity: 1;
+  }
+
+  [data-texture="spray"] {
+    --tex-image: radial-gradient(circle at 48% 42%, rgb(255 255 255 / 10%) 0 22%, transparent 46%),
+      radial-gradient(circle at 50% 52%, transparent 38%, rgb(0 0 0 / 42%) 100%);
+    --tex-opacity: 1;
+  }
+
+  [data-texture="streak"] {
+    --tex-image: repeating-linear-gradient(
+      93deg,
+      rgb(0 0 0 / 14%) 0 1px,
+      transparent 1px 3px,
+      rgb(255 255 255 / 9%) 3px 4px,
+      transparent 4px 9px
+    );
+    --tex-opacity: 1;
+  }
+
+  /* Real generated noise: one inline SVG feTurbulence, ~200 bytes, no asset request. */
+  [data-texture="grain-fine"] {
+    --tex-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='90' height='90' filter='url(%23f)'/%3E%3C/svg%3E");
+    --tex-size: 90px 90px;
+    --tex-opacity: 0.42;
+    --tex-blend: multiply;
+  }
+
+  [data-texture="grain-coarse"] {
+    --tex-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.22' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23f)'/%3E%3C/svg%3E");
+    --tex-size: 180px 180px;
+    --tex-opacity: 0.5;
+    --tex-blend: multiply;
+  }
+
+  [data-texture="grain-paper"] {
+    --tex-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.045' numOctaves='5' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23f)'/%3E%3C/svg%3E");
+    --tex-size: 140px 140px;
+    --tex-opacity: 0.55;
+    --tex-blend: overlay;
+  }
+
+  /* ---------- palette rows ---------- */
+
+  .row {
+    display: grid;
+    grid-template-columns: 11rem minmax(0, 1fr);
+    gap: 1.4rem;
+    align-items: start;
+    margin-bottom: 1.1rem;
+    padding: 0.9rem 1.1rem;
+    border: 2px solid rgba(255,255,255,0.09);
+    background: rgba(3,3,3,0.82);
+  }
+  .row-head h3 {
+    margin: 0 0 0.15rem;
+    font-family: "Edo SZ", Impact, sans-serif;
+    font-size: 1.6rem;
+    font-weight: 400;
+    line-height: 1;
+    text-shadow: 3px 3px 0 #000;
+  }
+  .row-head p { margin: 0; color: rgba(255,255,255,0.42); font-size: 0.62rem; font-weight: 400; letter-spacing: 0.16em; text-transform: uppercase; }
+
+  .swatches { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 0.6rem; }
+
+  .sw {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .sw .cell { transition: transform 140ms ease, filter 140ms ease; }
+  .sw:hover .cell { transform: translateY(-4px) rotate(-0.6deg); filter: var(--cell-ink) drop-shadow(0 8px 0 #000) brightness(1.1); }
+  .sw:focus-visible { outline: 3px solid var(--yellow); outline-offset: 4px; }
+
+  .sw .hex { font-size: 0.66rem; letter-spacing: 0.02em; color: rgba(255,255,255,0.9); }
+  .sw .name { font-size: 0.58rem; font-weight: 400; letter-spacing: 0.04em; color: rgba(255,255,255,0.42); }
+  .sw[data-current="1"] .hex::after {
+    content: ' ●';
+    color: var(--yellow);
+  }
+  .sw[data-current="1"] .name { color: var(--yellow); }
+  .sw[aria-pressed="true"] .hex { color: #000; background: var(--yellow); padding: 0 0.25rem; }
+
+  /* ---------- preview board ---------- */
+
+  .preview {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: clamp(1rem, 3vw, 2.5rem);
+    align-items: center;
+    margin-bottom: 0.6rem;
+    padding: 1.2rem;
+    border: 2px solid rgba(255,255,255,0.09);
+    background: rgba(3,3,3,0.72);
+  }
+  .board { display: grid; width: clamp(15rem, 26vw, 22rem); grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem; }
+  .board .cell { cursor: default; }
+  .preview-notes { display: grid; gap: 0.5rem; align-content: center; }
+  .preview-notes p { margin: 0; max-width: 60ch; color: rgba(255,255,255,0.6); font-size: 0.72rem; font-weight: 400; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.6rem;
+    border: 2px solid #000;
+    background: #0d0d0d;
+    font-size: 0.66rem;
+  }
+  .chip i { display: block; width: 0.85rem; height: 0.85rem; border: 1px solid #000; }
+
+  /* Hidden (opponent) cell, for the "is my green still not a hidden tile" check. */
+  .ink.is-hidden { background: linear-gradient(145deg, #383838, #080808); }
+  .marker { position: absolute; inset: 0; display: grid; place-items: center; }
+  .marker span { width: 1.1rem; height: 1.1rem; border-radius: 999px; background: #f5f5f5; box-shadow: 0 0 18px rgba(255,255,255,0.58); }
+
+  /* ---------- texture comparison ---------- */
+
+  .tex-row { grid-template-columns: 11rem minmax(0, 1fr); }
+  .tex-row .swatches { grid-template-columns: repeat(4, minmax(0, 7rem)); }
+  .tex-row .row-head h3 { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; letter-spacing: 0.04em; text-shadow: none; }
+
+  /* ---------- colour-vision simulation ---------- */
+
+  body[data-cvd="deuter"] .simulated { filter: url(#deuter); }
+  body[data-cvd="prot"] .simulated { filter: url(#prot); }
+  body[data-cvd="trit"] .simulated { filter: url(#trit); }
+
+  /*
+   * The board really does sit straight on this background — no panel behind it.
+   * The panel makes ten swatches easier to line up against each other; raw is
+   * what the colour will actually have to survive. Both are worth a look.
+   */
+  body.raw .row, body.raw .preview { border-color: rgba(255,255,255,0.05); background: transparent; }
+  body.raw .row-head p, body.raw .sw .name, body.raw .sw .hex,
+  body.raw .row-head h3, body.raw .preview-notes p { text-shadow: 0 0 6px #000, 0 0 6px #000, 0 0 6px #000; }
+
+  @media (max-width: 1100px) {
+    .row, .preview { grid-template-columns: minmax(0, 1fr); }
+    .swatches { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  }
+</style>
+</head>
+<body data-texture="none" data-cvd="off">
+
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+  <filter id="deuter"><feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0"/></filter>
+  <filter id="prot"><feColorMatrix type="matrix" values="0.567 0.433 0 0 0  0.558 0.442 0 0 0  0 0.242 0.758 0 0  0 0 0 1 0"/></filter>
+  <filter id="trit"><feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.433 0.567 0 0  0 0.475 0.525 0 0  0 0 0 1 0"/></filter>
+</svg>
+
+<div class="page">
+  <div class="masthead">
+    <h1>Cell colour palette</h1>
+    <p class="sub">
+      On the real shell background, in the real cell shape, over the real <b>#f5f5f5</b> empty face
+      with the real <b>#0b0b0b</b> ink outline and drop stack. What ships today is marked <b>●</b>:
+      rock <b>#6EDC3C</b>, paper <b>#4C6EF5</b>, scissors <b>#DC2626</b>, and a cold-slate desecrated
+      tile under a crosshatch. Click any swatch to load it into the board below.
+    </p>
+  </div>
+
+  <div class="controls">
+    <label>Texture
+      <select id="texture">
+        <option value="none">flat fill (shipping)</option>
+        <option value="hatch">hatch</option>
+        <option value="crosshatch">crosshatch</option>
+        <option value="mottle">mottle</option>
+        <option value="spray">spray-can vignette</option>
+        <option value="streak">roller streak</option>
+        <option value="grain-fine">grain — fine (SVG noise)</option>
+        <option value="grain-coarse">grain — coarse (SVG noise)</option>
+        <option value="grain-paper">grain — paper (SVG noise)</option>
+      </select>
+    </label>
+    <label>Colour vision
+      <select id="cvd">
+        <option value="off">normal</option>
+        <option value="deuter">deuteranopia (red/green)</option>
+        <option value="prot">protanopia (red/green)</option>
+        <option value="trit">tritanopia (blue/yellow)</option>
+      </select>
+    </label>
+    <label>&nbsp;<button id="hatch" type="button" aria-pressed="true">desecration hatch</button></label>
+    <label>&nbsp;<button id="squares" type="button" aria-pressed="false">plain squares</button></label>
+    <label>&nbsp;<button id="raw" type="button" aria-pressed="false">raw background</button></label>
+    <label>&nbsp;<button id="reset" type="button">reset to shipping</button></label>
+    <span class="hint">everything here is CSS only — no image assets beyond the background</span>
+  </div>
+
+  <div class="preview simulated">
+    <div class="board" id="board"></div>
+    <div class="preview-notes">
+      <p><b>The set, together.</b> Three symbols, one desecrated tile, one hidden opponent tile, one empty.
+        A colour only works if it survives this: distinct from the other two, distinct from the near-black
+        hidden tile, and not confusable with the desecrated one.</p>
+      <div class="chips" id="chips"></div>
+    </div>
+  </div>
+
+  <h2>Green <span>— rock</span></h2>
+  <div class="row simulated" data-row="green"><div class="row-head"><h3>Green</h3><p>rock</p></div><div class="swatches"></div></div>
+
+  <h2>Red <span>— scissors</span></h2>
+  <div class="row simulated" data-row="red"><div class="row-head"><h3>Red</h3><p>scissors</p></div><div class="swatches"></div></div>
+
+  <h2>Blue <span>— paper</span></h2>
+  <div class="row simulated" data-row="blue"><div class="row-head"><h3>Blue</h3><p>paper</p></div><div class="swatches"></div></div>
+
+  <h2>Desecrated <span>— destroyed tile, locked until the owner's next turn</span></h2>
+  <div class="row simulated" data-row="desec"><div class="row-head"><h3>Spoiled</h3><p>overlay</p></div><div class="swatches"></div></div>
+
+  <h2>Texture vs flat fill <span>— same three colours plus the desecrated tile, one treatment per row</span></h2>
+  <div id="textures"></div>
+</div>
+
+<script>
+const SHIP = { green: '#6EDC3C', blue: '#4C6EF5', red: '#DC2626', desec: 'linear-gradient(150deg, #4a5058, #20242a)' };
+
+const PALETTE = {
+  green: [
+    ['#A6E22E', 'Monokai lime'],
+    ['#C6F04A', 'Highlighter'],
+    ['#8FE02B', 'Spray lime'],
+    ['#6EDC3C', 'Poster green'],
+    ['#47D14F', 'Grass'],
+    ['#2ECC71', 'Emerald'],
+    ['#22C55E', 'Signal green'],
+    ['#16B981', 'Jade'],
+    ['#7CB342', 'Moss'],
+    ['#58A32B', 'Deep field'],
+  ],
+  red: [
+    ['#CC3941', 'Brick'],
+    ['#FF4B45', 'Siren'],
+    ['#F03E3E', 'Poster red'],
+    ['#E5383B', 'Vermilion'],
+    ['#EF4444', 'Signal red'],
+    ['#DC2626', 'Deep signal'],
+    ['#D62839', 'Crimson'],
+    ['#B91C2C', 'Oxblood'],
+    ['#FF6B57', 'Coral'],
+    ['#E8442A', 'Flare'],
+  ],
+  blue: [
+    ['#4591DB', 'Slate blue'],
+    ['#3B82F6', 'Signal blue'],
+    ['#2E86DE', 'Poster blue'],
+    ['#1E90FF', 'Dodger'],
+    ['#38BDF8', 'Sky'],
+    ['#22A7F0', 'Electric'],
+    ['#4C6EF5', 'Indigo'],
+    ['#5B8DEF', 'Soft azure'],
+    ['#2563EB', 'Cobalt'],
+    ['#0EA5E9', 'Deep sky'],
+  ],
+  desec: [
+    ['linear-gradient(150deg, #6b4a2f, #3d2917)', 'Brown (was shipping)'],
+    ['linear-gradient(150deg, #4a3320, #241608)', 'Dark earth'],
+    ['linear-gradient(150deg, #5a4a3c, #2e251d)', 'Taupe'],
+    ['linear-gradient(150deg, #5a3a22, #0e0906)', 'Scorched'],
+    ['linear-gradient(150deg, #3a3a3a, #161616)', 'Charcoal'],
+    ['linear-gradient(150deg, #242424, #050505)', 'Soot'],
+    ['linear-gradient(150deg, #6e6e6e, #3a3a3a)', 'Ash grey'],
+    ['linear-gradient(150deg, #8a8a85, #4d4d49)', 'Concrete'],
+    ['linear-gradient(150deg, #4a5058, #20242a)', 'Cold slate'],
+    ['linear-gradient(150deg, #b9b2a4, #6e685c)', 'Dead bone'],
+  ],
+};
+
+const TEXTURES = [
+  ['none', 'flat fill', 'what ships today'],
+  ['hatch', 'hatch', 'the desecration hatch, on everything'],
+  ['crosshatch', 'crosshatch', 'two passes, 45°'],
+  ['mottle', 'mottle', 'four soft blobs, light and dark'],
+  ['spray', 'spray vignette', 'dense centre, thin edge'],
+  ['streak', 'roller streak', 'directional bands'],
+  ['grain-fine', 'grain fine', 'SVG feTurbulence, multiply'],
+  ['grain-coarse', 'grain coarse', 'SVG feTurbulence, multiply'],
+  ['grain-paper', 'grain paper', 'SVG feTurbulence, overlay'],
+];
+
+const picked = { ...SHIP };
+
+// Same variant assignment the board uses, so a swatch is cut like a real cell.
+const variant = (i) => (i * 3 + 1) % 4;
+
+function cellHtml(fill, index, opts = {}) {
+  const layer = opts.desec ? 'desec' : 'ink';
+  const hatch = opts.desec && document.body.dataset.hatch !== 'off' ? ' hatched' : '';
+  const inner = opts.empty
+    ? ''
+    : `<span class="${layer}${hatch}" style="background:${fill}"></span>`;
+  const hiddenInner = opts.hidden
+    ? `<span class="ink is-hidden"></span><span class="marker"><span></span></span>`
+    : '';
+  return `<span class="cell cell-v${variant(index)}">${opts.hidden ? hiddenInner : inner}</span>`;
+}
+
+function buildRow(family) {
+  const host = document.querySelector(`[data-row="${family}"] .swatches`);
+  host.innerHTML = PALETTE[family]
+    .map(([value, name], i) => {
+      const isShip = value === SHIP[family] ? '1' : '0';
+      const label = family === 'desec' ? value.match(/#[0-9a-f]{6}/gi).join(' → ') : value;
+      return `<button class="sw" type="button" data-family="${family}" data-value="${value}"
+        data-current="${isShip}" aria-pressed="${value === picked[family]}">
+        ${cellHtml(value, i, { desec: family === 'desec' })}
+        <span class="hex">${label}</span>
+        <span class="name">${name}</span>
+      </button>`;
+    })
+    .join('');
+}
+
+function buildBoard() {
+  const { green, blue, red, desec } = picked;
+  // A plausible mid-match board: two of each symbol, one spoiled, one hidden, one open.
+  const plan = [
+    { fill: green }, { fill: red }, { fill: blue },
+    { fill: desec, desec: true }, { fill: blue }, { hidden: true },
+    { fill: green }, { empty: true }, { fill: red },
+  ];
+  document.getElementById('board').innerHTML = plan
+    .map((slot, i) => cellHtml(slot.fill, i, slot))
+    .join('');
+
+  document.getElementById('chips').innerHTML = [
+    ['rock', green], ['paper', blue], ['scissors', red], ['spoiled', desec],
+  ]
+    .map(([label, value]) => `<span class="chip"><i style="background:${value}"></i>${label} ${
+      (value.match(/#[0-9a-f]{6}/gi) || []).join(' → ')
+    }</span>`)
+    .join('');
+}
+
+function buildTextures() {
+  document.getElementById('textures').innerHTML = TEXTURES.map(([key, name, note]) => `
+    <div class="row tex-row simulated" data-texture="${key}">
+      <div class="row-head"><h3>${name}</h3><p>${note}</p></div>
+      <div class="swatches">
+        ${cellHtml(picked.green, 0)}
+        ${cellHtml(picked.blue, 1)}
+        ${cellHtml(picked.red, 2)}
+        ${cellHtml(picked.desec, 3, { desec: true })}
+      </div>
+    </div>`).join('');
+}
+
+function renderAll() {
+  Object.keys(PALETTE).forEach(buildRow);
+  buildBoard();
+  buildTextures();
+}
+
+document.addEventListener('click', (event) => {
+  const swatch = event.target.closest('.sw');
+  if (!swatch) return;
+  picked[swatch.dataset.family] = swatch.dataset.value;
+  renderAll();
+});
+
+document.getElementById('texture').addEventListener('change', (event) => {
+  document.body.dataset.texture = event.target.value;
+});
+
+document.getElementById('cvd').addEventListener('change', (event) => {
+  document.body.dataset.cvd = event.target.value;
+});
+
+document.getElementById('hatch').addEventListener('click', (event) => {
+  const on = event.currentTarget.getAttribute('aria-pressed') === 'true';
+  event.currentTarget.setAttribute('aria-pressed', String(!on));
+  document.body.dataset.hatch = on ? 'off' : 'on';
+  renderAll();
+});
+
+document.getElementById('squares').addEventListener('click', (event) => {
+  const on = event.currentTarget.getAttribute('aria-pressed') === 'true';
+  event.currentTarget.setAttribute('aria-pressed', String(!on));
+  document.body.classList.toggle('squares', !on);
+});
+
+document.getElementById('raw').addEventListener('click', (event) => {
+  const on = event.currentTarget.getAttribute('aria-pressed') === 'true';
+  event.currentTarget.setAttribute('aria-pressed', String(!on));
+  document.body.classList.toggle('raw', !on);
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  Object.assign(picked, SHIP);
+  renderAll();
+});
+
+renderAll();
+</script>
+</body>
+</html>

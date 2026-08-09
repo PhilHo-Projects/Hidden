@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hidden — lab</title>
+<style>
+  @font-face {
+    font-family: "Edo SZ";
+    src: url("/game/fonts/edosz.woff2") format("woff2");
+    font-display: block;
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    src: url("/game/fonts/jetbrains-mono-bold.woff2") format("woff2");
+    font-weight: 700;
+    font-display: block;
+  }
+
+  :root { --yellow: #d7af13; }
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: clamp(1.5rem, 5vw, 4rem);
+    background: #030303 url("/game/backgrounds/hidden-landscape.webp") center / cover no-repeat fixed;
+    color: #e9e9ea;
+    font: 700 13px/1.6 "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+
+  .page { max-width: 62rem; margin: 0 auto; }
+
+  header { margin-bottom: 2rem; padding: 1.2rem 1.4rem; border-left: 4px solid var(--yellow); background: rgba(3,3,3,0.88); }
+  h1 {
+    margin: 0 0 0.4rem;
+    font-family: "Edo SZ", Impact, sans-serif;
+    font-size: clamp(2.2rem, 6vw, 3.6rem);
+    font-weight: 400;
+    line-height: 1;
+    text-shadow: 4px 4px 0 #000;
+  }
+  header p { max-width: 70ch; margin: 0; color: rgba(255,255,255,0.66); font-size: 0.8rem; font-weight: 400; }
+  header code { color: var(--yellow); }
+
+  ul { display: grid; gap: 0.9rem; margin: 0; padding: 0; list-style: none; }
+
+  a.tool {
+    display: grid;
+    gap: 0.3rem;
+    padding: 1rem 1.2rem;
+    border: 2px solid rgba(255,255,255,0.1);
+    background: rgba(3,3,3,0.86);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+  }
+  a.tool:hover { border-color: var(--yellow); background: rgba(12,10,3,0.9); transform: translateX(4px); }
+  a.tool:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+  a.tool b { font-size: 1rem; letter-spacing: 0.02em; }
+  a.tool span { color: rgba(255,255,255,0.58); font-size: 0.76rem; font-weight: 400; }
+  a.tool em { color: var(--yellow); font-size: 0.64rem; font-style: normal; letter-spacing: 0.14em; text-transform: uppercase; }
+
+  footer { margin-top: 2rem; padding: 1rem 1.2rem; background: rgba(3,3,3,0.86); color: rgba(255,255,255,0.5); font-size: 0.72rem; font-weight: 400; }
+  footer code { color: var(--yellow); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Hidden lab</h1>
+    <p>
+      Prototypes for the look of the game. Nothing here ships — it is the folder you open
+      when you want to try a colour, a curve, or an icon before it touches <code>web/src</code>.
+      Assets under <code>/game/</code> are the real ones from <code>web/src/assets/</code>,
+      served live, so a prototype never drifts from what the game actually looks like.
+    </p>
+  </header>
+
+  <ul>
+    <li>
+      <a class="tool" href="/cell-palette/">
+        <em>colour</em>
+        <b>Cell palette</b>
+        <span>Ten candidates each for rock, paper, scissors and the desecrated tile, drawn as real
+          board cells on the real background. Click a swatch to load it into a live board. Includes
+          texture treatments and a colourblind simulation.</span>
+      </a>
+    </li>
+    <li>
+      <a class="tool" href="/cell-fill/">
+        <em>motion</em>
+        <b>Cell fill &amp; drain</b>
+        <span>Four ways ink can arrive on a cell and four ways it can leave, all running off the
+          same two durations so they can be compared honestly. Sliders for both.</span>
+      </a>
+    </li>
+    <li>
+      <a class="tool" href="/nav-icons/">
+        <em>chrome</em>
+        <b>Navbar icons</b>
+        <span>Icon treatments for the top chrome at their real size, against the real bar.</span>
+      </a>
+    </li>
+  </ul>
+
+  <footer>
+    Add a prototype by dropping a folder with an <code>index.html</code> next to these and
+    linking it here. See <code>README.md</code>.
+  </footer>
+</div>
+</body>
+</html>
