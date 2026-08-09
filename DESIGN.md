@@ -72,10 +72,19 @@ there binds a stranger; a host sets the rules of a game they own.
 
 - Reveal opens the opponent board as a compact temporary overlay; it must not
   resize or replace the player's board.
+- Anything that lands on a cell grows from its middle, and anything that leaves
+  shrinks back into it. Colour and desecration both read the shared
+  `--cell-motion-*` tokens, so the two cannot drift into different motion for the
+  same event; the out curve is the in curve reversed, which is what keeps the
+  longer exit from reading as lag. Colour is a layer over the cell rather than
+  the cell's own background, because a background can neither grow from the
+  centre nor outlive the cell it belonged to. A board that mounts with its ink
+  already down — results, the revealed opponent peek — never replays it.
 - A destroyed player square uses a sharp red impact and collapse. Destroying an
   opponent square uses a cyan/yellow burst at the corresponding battle cell.
 - The destroyed cell then reads as desecrated brown until its owner's next turn,
-  when it washes back out. The whole look is `--cell-desecrated-fill` and
+  when it shrinks back out the way it came. The whole look is
+  `--cell-desecrated-fill` and
   `animations/cell-desecration.css`, so replacing it with a texture is a CSS
   change alone.
 - These effects are cosmetic engine events only. They do not change public

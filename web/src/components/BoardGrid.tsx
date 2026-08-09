@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import '../animations/cell-desecration.css'
 import '../animations/cell-destruction.css'
+import '../animations/cell-ink.css'
 import '../animations/score-count.css'
 import shieldIcon from '../assets/icons/battle/powerup-immune.png'
 import { COLOR_BY_SYMBOL } from '../game/constants'
+import { CELL_MOTION_OUT_MS, EMPTY_TONE, TONE_SEPARATOR, inkTone, useCellInk } from './cellInk'
 import type { GridState } from '../game/types'
 import type { ClassicSymbol } from '@hidden/game-core'
 import type { CSSProperties } from 'react'
@@ -57,18 +59,8 @@ function cellVariant(index: number) {
   return (index * 3 + 1) % CELL_VARIANTS
 }
 
-function cellTone(symbol: ClassicSymbol | null, hidden: boolean, occupied: boolean) {
-  if (!occupied) return '#f5f5f5'
-  if (hidden) return 'linear-gradient(145deg, #383838, #080808)'
-
-  return symbol ? COLOR_BY_SYMBOL[symbol] : '#F2EEE7'
-}
-
-// Long enough to read as a thaw rather than a flicker.
-const DESECRATION_RELEASE_MS = 800
-
 /**
- * Indices whose desecration just ended, held for the length of the fade.
+ * Indices whose desecration just ended, held for the length of the release.
  *
  * Removing a class cannot start an animation, so the overlay has to outlive the
  * state that created it. Keyed on a string of the flags rather than the cell
@@ -101,7 +93,7 @@ function useDesecrationRelease(desecrationKey: string, enabled: boolean) {
     if (releasing.size === 0) return
     const timeoutId = window.setTimeout(
       () => setReleasing(new Set()),
-      DESECRATION_RELEASE_MS,
+      CELL_MOTION_OUT_MS,
     )
     return () => window.clearTimeout(timeoutId)
   }, [releasing])
@@ -126,6 +118,11 @@ export function BoardGrid({
     .map((cell) => (cell.desecrated && !cell.occupied ? '1' : '0'))
     .join('')
   const releasing = useDesecrationRelease(desecrationKey, showDesecration)
+
+  const toneKey = grid.cells
+    .map((cell) => (cell.occupied ? inkTone(cell.symbol, hidden) : ''))
+    .join(TONE_SEPARATOR)
+  const { filling, draining } = useCellInk(toneKey)
 
   return (
     <section
@@ -163,6 +160,7 @@ export function BoardGrid({
           const scoreCount = scoreCountLabels[index]
           const desecrated = showDesecration && cell.desecrated && !cell.occupied
           const isReleasing = !desecrated && releasing.has(index)
+          const drainTone = cell.occupied ? undefined : draining.get(index)
 
           return (
             <button
@@ -183,12 +181,32 @@ export function BoardGrid({
                 destructionEffect ? `hidden-cell-destroying-${destructionEffect.tone}` : ''
               } ${scoreCount ? 'hidden-cell-score-counted' : ''} hidden-cell-v${cellVariant(index)}`}
               style={{
-                background: cellTone(cell.symbol, hidden, cell.occupied),
+                background: EMPTY_TONE,
                 '--score-order': scoreCount ?? 0,
                 '--score-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_CELL_OFFSET_MS : 0}ms`,
                 '--score-badge-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_BADGE_OFFSET_MS : 0}ms`,
               } as CSSProperties}
             >
+              {/* The two ink layers are separate slots on purpose. A cell that
+                * is destroyed and later reclaimed unmounts the first and mounts
+                * it again, and a remount is the only thing that reliably
+                * restarts a CSS animation. */}
+              {cell.occupied ? (
+                <span
+                  className={`cell-ink ${filling.has(index) ? 'cell-ink-fill' : ''}`}
+                  style={{ background: inkTone(cell.symbol, hidden) }}
+                  aria-hidden="true"
+                />
+              ) : null}
+
+              {drainTone ? (
+                <span
+                  className="cell-ink cell-ink-drain"
+                  style={{ background: drainTone }}
+                  aria-hidden="true"
+                />
+              ) : null}
+
               {/* The cell index is carried by `aria-label` above rather than
                 * printed. On the board it read as clutter; screen readers still
                 * need it to tell one cell from another. */}

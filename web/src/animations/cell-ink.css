@@ -1,0 +1,67 @@
+/*
+ * Ink arriving on a cell and ink leaving it.
+ *
+ * The colour is a layer over the cell rather than the cell's own background,
+ * which is what makes both animations possible: a background cannot grow from
+ * the middle, and a drain has to keep painting a colour the cell no longer has.
+ * The face underneath stays the empty tone the whole time, so the fill grows out
+ * of an empty square and the drain leaves one behind.
+ *
+ * `transform` is the material for both. It is composited, it does not touch
+ * layout, and scaling about the centre reads as "from the middle" whatever cut
+ * the cell happens to be wearing.
+ */
+
+.cell-ink {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+}
+
+/* Timing and curve are the shared cell-motion tokens in `index.css`, so ink and
+ * desecration arrive and leave as one gesture rather than two similar ones. */
+.cell-ink-fill {
+  animation: cell-ink-fill var(--cell-motion-in-ms) var(--cell-motion-in-ease) both;
+}
+
+.cell-ink-drain {
+  animation: cell-ink-drain var(--cell-motion-out-ms) var(--cell-motion-out-ease) both;
+}
+
+@keyframes cell-ink-fill {
+  from {
+    transform: scale(0);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes cell-ink-drain {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(0);
+  }
+}
+
+/*
+ * Both layers are mounted and unmounted by BoardGrid on a timer rather than by
+ * the animation, so dropping the motion leaves the states intact: ink appears
+ * when the cell is claimed and is gone when it is destroyed.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .cell-ink-fill,
+  .cell-ink-drain {
+    animation: none;
+  }
+
+  .cell-ink-drain {
+    transform: scale(0);
+  }
+}
