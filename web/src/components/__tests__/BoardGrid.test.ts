@@ -81,9 +81,9 @@ describe('board grid sizing', () => {
  */
 describe('board grid symbol colours', () => {
   it.each([
-    ['rock', '#A6E22E'],
-    ['paper', '#4591DB'],
-    ['scissors', '#CC3941'],
+    ['rock', '#6EDC3C'],
+    ['paper', '#4C6EF5'],
+    ['scissors', '#DC2626'],
   ] as const)('paints a %s cell %s', (symbol, hex) => {
     const markup = renderToStaticMarkup(
       createElement(BoardGrid, {
@@ -106,7 +106,7 @@ describe('board grid symbol colours', () => {
       }),
     )
 
-    expect(markup).not.toContain('#A6E22E')
+    expect(markup).not.toContain('#6EDC3C')
   })
 
   /*
@@ -125,7 +125,7 @@ describe('board grid symbol colours', () => {
 
     expect(markup).toContain('cell-ink')
     expect(markup).toContain('background:#f5f5f5')
-    expect(markup).toContain('background:#A6E22E')
+    expect(markup).toContain('background:#6EDC3C')
   })
 
   // Results boards and the revealed opponent peek mount with the ink already
@@ -151,21 +151,21 @@ describe('board grid symbol colours', () => {
  */
 describe('cell ink transitions', () => {
   it('fills a cell that gained a tone', () => {
-    expect(diffCellInk('||', '|#A6E22E|')).toEqual({
+    expect(diffCellInk('||', '|#6EDC3C|')).toEqual({
       filled: [1],
       drained: [],
     })
   })
 
   it('drains a cell that lost one, carrying the tone it lost', () => {
-    expect(diffCellInk('#CC3941|#4591DB', '#CC3941|')).toEqual({
+    expect(diffCellInk('#DC2626|#4C6EF5', '#DC2626|')).toEqual({
       filled: [],
-      drained: [[1, '#4591DB']],
+      drained: [[1, '#4C6EF5']],
     })
   })
 
   it('reports nothing when the board is unchanged', () => {
-    expect(diffCellInk('#A6E22E|', '#A6E22E|')).toEqual({
+    expect(diffCellInk('#6EDC3C|', '#6EDC3C|')).toEqual({
       filled: [],
       drained: [],
     })
@@ -175,7 +175,7 @@ describe('cell ink transitions', () => {
   // arise in play; treating it as neither is still the honest answer, because
   // the layer is already down and only its colour changed.
   it('treats a tone swapped in place as neither a fill nor a drain', () => {
-    expect(diffCellInk('#A6E22E', '#CC3941')).toEqual({
+    expect(diffCellInk('#6EDC3C', '#DC2626')).toEqual({
       filled: [],
       drained: [],
     })
@@ -187,11 +187,11 @@ describe('cell ink transitions', () => {
    * whole grid at once on a rule change.
    */
   it('reports nothing for cells outside the overlap when the board resizes', () => {
-    expect(diffCellInk('#A6E22E', '#A6E22E|#4591DB')).toEqual({
+    expect(diffCellInk('#6EDC3C', '#6EDC3C|#4C6EF5')).toEqual({
       filled: [],
       drained: [],
     })
-    expect(diffCellInk('#A6E22E|#4591DB', '#A6E22E')).toEqual({
+    expect(diffCellInk('#6EDC3C|#4C6EF5', '#6EDC3C')).toEqual({
       filled: [],
       drained: [],
     })

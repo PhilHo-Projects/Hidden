@@ -21,9 +21,9 @@
 :root {
   --chrome-height: 3.1rem;
   --hidden-yellow: #d7af13;
-  --hidden-green: #a6e22e;
-  --hidden-blue: #4591db;
-  --hidden-red: #cc3941;
+  --hidden-green: #6edc3c;
+  --hidden-blue: #4c6ef5;
+  --hidden-red: #dc2626;
   --hidden-black: #050505;
   --hidden-panel: #0a0a0a;
   --hidden-white: #f5f5f5;
@@ -590,7 +590,7 @@ summary:focus-visible {
 .history-row > .history-bookmark-error {
   grid-column: 1 / -1;
   padding: 0.35rem 1rem 0.5rem;
-  border-top: 1px solid rgba(204, 57, 65, 0.2);
+  border-top: 1px solid rgba(220, 38, 38, 0.2);
 }
 
 .history-more-error {
@@ -752,7 +752,7 @@ summary:focus-visible {
 .history-detail > .history-bookmark-error {
   margin: 0;
   padding: 0.5rem 2rem;
-  border-bottom: 1px solid rgba(204, 57, 65, 0.2);
+  border-bottom: 1px solid rgba(220, 38, 38, 0.2);
   text-align: right;
 }
 
@@ -1443,30 +1443,30 @@ summary:focus-visible {
 }
 
 .status-strip-working {
-  border-color: rgba(69, 145, 219, 0.65);
+  border-color: rgba(76, 110, 245, 0.65);
 }
 
 .status-strip-working .status-indicator {
-  background: #61b5ff;
-  box-shadow: 0 0 0 3px rgba(69, 145, 219, 0.2);
+  background: #8aa0ff;
+  box-shadow: 0 0 0 3px rgba(76, 110, 245, 0.2);
 }
 
 .status-strip-success {
-  border-color: rgba(166, 226, 46, 0.52);
+  border-color: rgba(110, 220, 60, 0.52);
 }
 
 .status-strip-success .status-indicator {
   background: var(--hidden-green);
-  box-shadow: 0 0 0 3px rgba(166, 226, 46, 0.16);
+  box-shadow: 0 0 0 3px rgba(110, 220, 60, 0.16);
 }
 
 .status-strip-error {
-  border-color: rgba(204, 57, 65, 0.82);
+  border-color: rgba(220, 38, 38, 0.82);
 }
 
 .status-strip-error .status-indicator {
   background: var(--hidden-red);
-  box-shadow: 0 0 0 3px rgba(204, 57, 65, 0.2);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
 }
 
 .big-action {

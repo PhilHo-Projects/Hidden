@@ -13,7 +13,13 @@
  */
 
 :root {
-  --cell-desecrated-fill: linear-gradient(150deg, #6b4a2f, #3d2917);
+  /*
+   * Cold slate, not brown. Green, blue and red mean *ownership*; a desecrated
+   * tile belongs to nobody, so it has to stay off that axis. A mid-lightness
+   * chromatic brown reads as a fourth player colour, which was exactly the wrong
+   * signal — an achromatic fill reads as spoiled ground instead.
+   */
+  --cell-desecrated-fill: linear-gradient(150deg, #4a5058, #20242a);
 }
 
 .cell-desecration {
@@ -25,18 +31,37 @@
   animation: cell-desecration-settle var(--cell-motion-in-ms) var(--cell-motion-in-ease) both;
 }
 
-/* Hatching, so the tile reads as spoiled ground rather than as a third symbol. */
+/*
+ * Crosshatch, so the tile reads as scratched out rather than as a third symbol.
+ *
+ * Two passes rather than one: a single set of parallel lines reads as a stripe,
+ * which is a pattern a tile could plausibly *be*, where crossed lines read as
+ * something done to it. One pass is light and one is dark because the fill runs
+ * from slate to near-black — black alone disappears into the dark end, white
+ * alone washes out the light end, and one of each stays legible across both.
+ *
+ * The stops are em-relative so the hatch keeps its weight rather than its pixel
+ * count as the board changes size.
+ */
 .cell-desecration::after {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgb(0 0 0 / 28%) 0,
-    rgb(0 0 0 / 28%) max(1px, 0.06em),
-    transparent max(1px, 0.06em),
-    transparent max(5px, 0.3em)
-  );
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgb(255 255 255 / 13%) 0,
+      rgb(255 255 255 / 13%) max(1px, 0.05em),
+      transparent max(1px, 0.05em),
+      transparent max(6px, 0.34em)
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgb(0 0 0 / 32%) 0,
+      rgb(0 0 0 / 32%) max(1px, 0.05em),
+      transparent max(1px, 0.05em),
+      transparent max(6px, 0.34em)
+    );
 }
 
 /*

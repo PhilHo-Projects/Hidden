@@ -1,8 +1,8 @@
 import type { ClassicSymbol } from '@hidden/game-core'
 
-export const COLOR_GREEN = '#A6E22E' as const
-export const COLOR_BLUE = '#4591DB' as const
-export const COLOR_RED = '#CC3941' as const
+export const COLOR_GREEN = '#6EDC3C' as const
+export const COLOR_BLUE = '#4C6EF5' as const
+export const COLOR_RED = '#DC2626' as const
 
 /**
  * The symbol is the value; the colour is only how it is drawn. Presentation
