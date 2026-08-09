@@ -85,7 +85,6 @@ describe('MatchHistoryRecorder', () => {
         {
           matchId: '00000000-0000-4000-8000-000000000101',
           errorClass: 'TypeError',
-          attempts: 3,
         },
       ],
     ])

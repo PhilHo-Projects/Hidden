@@ -53,7 +53,6 @@ export class MatchHistoryRecorder {
         this.logger('error', 'match_history.record_failed', {
           matchId: record.matchId,
           errorClass: errorClass(error),
-          attempts: attempt + 1,
         })
       }
     }
