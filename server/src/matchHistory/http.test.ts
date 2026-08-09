@@ -305,6 +305,35 @@ describe('match history HTTP API', () => {
     expect(mutations).toEqual([true, false])
   })
 
+  it('maps an oversized bookmark body to a stable JSON error', async () => {
+    const baseUrl = await startRouter({})
+
+    const response = await fetch(
+      `${baseUrl}/api/history/${MATCH_ID}/bookmark`,
+      {
+        method: 'PUT',
+        headers: {
+          ...sessionHeaders(),
+          Origin: 'http://localhost:5173',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bookmarked: true,
+          padding: 'x'.repeat(2_000),
+        }),
+      },
+    )
+
+    expect(response.status).toBe(413)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'invalid_input',
+        message: 'Bookmark request is too large.',
+      },
+    })
+  })
+
   it('contains repository failures behind a retryable response and safe log', async () => {
     const logs: Parameters<Logger>[] = []
     const baseUrl = await startRouter({

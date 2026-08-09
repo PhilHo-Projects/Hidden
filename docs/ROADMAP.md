@@ -62,8 +62,10 @@ Static match history and replay are now explicitly separate systems.
   winner seat, and both ordered final boards. It deliberately excludes seeds,
   commands, timing, power-up state, immunity, desecration, and other mechanical
   flags.
-- Persistence is asynchronous, idempotent, retried three times, and drained on
-  graceful shutdown. A history failure cannot delay game-over delivery.
+- Persistence is asynchronous, idempotent, attempted up to three times, and
+  drained on graceful shutdown. The recorder runs at most four writes at once
+  and admits at most 256 pending writes; capacity overflow is logged without
+  payload data instead of delaying game-over delivery.
 - Signed-in participants get W/L/T totals, newest-first keyset pagination, final
   board detail, and private per-account **Interesting** bookmarks. Guests cannot
   browse history, and authenticated nonparticipants receive 404.
@@ -71,6 +73,8 @@ Static match history and replay are now explicitly separate systems.
   remain visible as text instead of breaking an old result screen.
 - Twenty rows is a page size, not a deletion cap. There is no v1 retention job,
   public sharing, executable replay, notes, or global admin browser.
+- One signed-in account cannot occupy both seats of the same match, keeping
+  participant ownership and perspective unambiguous. Guest seats are unaffected.
 
 This deliberately change-resistant snapshot is the research notebook for the
 mechanics-discovery phase: a result remains readable even when the engine,

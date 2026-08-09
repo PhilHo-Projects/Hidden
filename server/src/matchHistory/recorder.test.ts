@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Logger } from '../logger'
 import type { MatchHistoryRecordV1 } from './types'
 import { MatchHistoryRecorder } from './recorder'
@@ -32,6 +32,10 @@ const record: MatchHistoryRecordV1 = {
     { columns: 3, cells: [{ locationId: 0, symbol: 'rock' }] },
     { columns: 3, cells: [{ locationId: 0, symbol: null }] },
   ],
+}
+
+function withMatchId(matchId: string): MatchHistoryRecordV1 {
+  return { ...record, matchId }
 }
 
 describe('MatchHistoryRecorder', () => {
@@ -90,5 +94,65 @@ describe('MatchHistoryRecorder', () => {
     ])
     expect(JSON.stringify(logs)).not.toContain('contains-sensitive-message')
     expect(JSON.stringify(logs)).not.toContain('powerupBySymbol')
+  })
+
+  it('bounds concurrent and admitted writes without blocking completion', async () => {
+    const insertResolvers: Array<() => void> = []
+    const insertedMatchIds: string[] = []
+    const logs: Parameters<Logger>[] = []
+    let activeWrites = 0
+    let peakActiveWrites = 0
+    const recorder = new MatchHistoryRecorder(
+      {
+        async insert(candidate) {
+          insertedMatchIds.push(candidate.matchId)
+          activeWrites += 1
+          peakActiveWrites = Math.max(peakActiveWrites, activeWrites)
+          await new Promise<void>((resolve) => {
+            insertResolvers.push(() => {
+              activeWrites -= 1
+              resolve()
+            })
+          })
+        },
+      },
+      (...entry) => logs.push(entry),
+      async () => undefined,
+      2,
+      3,
+    )
+
+    const ids = [
+      '00000000-0000-4000-8000-000000000201',
+      '00000000-0000-4000-8000-000000000202',
+      '00000000-0000-4000-8000-000000000203',
+      '00000000-0000-4000-8000-000000000204',
+    ]
+    for (const matchId of ids) {
+      expect(recorder.record(withMatchId(matchId))).toBeUndefined()
+    }
+
+    expect(insertedMatchIds).toEqual(ids.slice(0, 2))
+    expect(peakActiveWrites).toBe(2)
+    expect(logs).toEqual([
+      [
+        'error',
+        'match_history.record_dropped',
+        {
+          matchId: ids[3],
+          errorClass: 'RecorderCapacityExceeded',
+        },
+      ],
+    ])
+
+    insertResolvers.shift()?.()
+    await vi.waitFor(() => {
+      expect(insertedMatchIds).toEqual(ids.slice(0, 3))
+    })
+    expect(peakActiveWrites).toBe(2)
+
+    for (const resolve of insertResolvers.splice(0)) resolve()
+    await recorder.flush()
+    expect(activeWrites).toBe(0)
   })
 })

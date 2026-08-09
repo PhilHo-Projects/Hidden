@@ -43,12 +43,19 @@ idempotency key. Persistence never delays or alters the authoritative game-over
 update.
 
 A failed insert receives two bounded retries. Failures log only the match ID and
-error class, never config or board contents. Graceful shutdown waits for pending
-record attempts before closing the PostgreSQL pool.
+error class, never config or board contents. The recorder runs at most four
+inserts concurrently and admits at most 256 active or queued writes. If that
+capacity is exhausted, the record is dropped with the same payload-safe logging
+contract rather than blocking game completion. Graceful shutdown waits for all
+admitted record attempts before closing the PostgreSQL pool.
 
 Participants and bookmarks are separate relations. Deleting an account sets a
 participant account ID to null but retains its historical username. Each account
 has its own Interesting bookmark for a match.
+
+An authenticated account cannot occupy both seats: Quick Match skips its other
+connections and hosted games reject them as the host's own game. This preserves
+one perspective per account while still allowing anonymous guest seats.
 
 ## Account API
 

@@ -293,6 +293,20 @@ export function createMatchHistoryRouter(options: MatchHistoryRouterOptions) {
       response: Response,
       next: NextFunction,
     ) => {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'type' in error &&
+        error.type === 'entity.too.large'
+      ) {
+        sendError(
+          response,
+          413,
+          'invalid_input',
+          'Bookmark request is too large.',
+        )
+        return
+      }
       if (error instanceof SyntaxError) {
         sendError(response, 400, 'invalid_input', 'Bookmark request is invalid.')
         return

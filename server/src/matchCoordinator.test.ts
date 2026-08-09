@@ -103,6 +103,50 @@ describe('MatchCoordinator discovery and trusted rooms', () => {
     expect(room?.participants[0]).toMatchObject(firstParticipant)
     expect(room?.config).toEqual({ ...DEFAULT_GAME_CONFIG, rounds: 20, turnSeconds: 2, blindMode: false })
   })
+
+  it('never pairs two connections authenticated as the same account', () => {
+    const { dependencies } = deterministicDependencies({
+      uuids: ['stable-room-id'],
+    })
+    const coordinator = new MatchCoordinator(dependencies)
+    const sameAccount = {
+      ...firstParticipant,
+      connectionId: 33,
+      username: 'Account_One_Second_Tab',
+    }
+    const otherAccount = {
+      accountId: 'account-uuid-two',
+      connectionId: 44,
+      username: 'Account_Two',
+    }
+
+    expect(coordinator.enqueueQuickMatch(firstParticipant)).toBeUndefined()
+    expect(coordinator.enqueueQuickMatch(sameAccount)).toBeUndefined()
+
+    const room = coordinator.enqueueQuickMatch(otherAccount)
+
+    expect(
+      room?.participants.map(({ accountId, connectionId }) => ({
+        accountId,
+        connectionId,
+      })),
+    ).toEqual([
+      { accountId: 'account-uuid-one', connectionId: 11 },
+      { accountId: 'account-uuid-two', connectionId: 44 },
+    ])
+    expect(coordinator.getRoomForConnection(33)).toBeUndefined()
+  })
+
+  it('rejects direct room construction for the same authenticated account', () => {
+    const coordinator = new MatchCoordinator()
+
+    expect(() =>
+      coordinator.createRoom([
+        firstParticipant,
+        { ...firstParticipant, connectionId: 33 },
+      ]),
+    ).toThrow('A signed-in account cannot occupy both match seats.')
+  })
 })
 
 describe('MatchCoordinator run lifecycle', () => {
@@ -1021,6 +1065,35 @@ describe('MatchCoordinator finish, rematch, and legacy lifecycle', () => {
     expect(completed).toHaveLength(1)
   })
 
+  it('emits one final snapshot when deadline timeouts complete the run', () => {
+    const completed: unknown[] = []
+    const fixture = authoritativeFixture({
+      firstSeat: 0,
+      onMatchCompleted: (record) => completed.push(record),
+      rounds: 1,
+      seed: 1,
+      uuids: ['timeout-room', 'timeout-finished-run'],
+    })
+
+    fixture.clock.now = fixture.run.deadline
+    fixture.scheduled.at(-1)?.callback()
+    fixture.clock.now = fixture.run.deadline
+    const finishingCallback = fixture.scheduled.at(-1)?.callback
+    finishingCallback?.()
+
+    expect(fixture.run.phase).toBe('finished')
+    expect(completed).toEqual([
+      expect.objectContaining({
+        schemaVersion: 1,
+        matchId: 'timeout-finished-run',
+        turnCount: 2,
+      }),
+    ])
+
+    finishingCallback?.()
+    expect(completed).toHaveLength(1)
+  })
+
   it('does not emit a final snapshot for an abandoned run', () => {
     const completed: unknown[] = []
     const fixture = authoritativeFixture({
@@ -1212,6 +1285,34 @@ describe('MatchCoordinator private lobby', () => {
     expect(
       coordinator.createPendingGame(host, DEFAULT_GAME_CONFIG, false),
     ).toEqual({ error: 'already-hosting' })
+  })
+
+  it('treats another connection for the host account as its own game', () => {
+    const coordinator = lobbyCoordinator()
+    const accountHost = {
+      accountId: 'account-uuid-one',
+      connectionId: 10,
+      username: 'AccountHost',
+    }
+    const sameAccountJoiner = {
+      accountId: 'account-uuid-one',
+      connectionId: 20,
+      username: 'AccountHostSecondTab',
+    }
+    const otherAccountJoiner = {
+      accountId: 'account-uuid-two',
+      connectionId: 30,
+      username: 'OtherAccount',
+    }
+    coordinator.createPendingGame(accountHost, DEFAULT_GAME_CONFIG, true)
+
+    expect(
+      coordinator.joinPendingGame('AAAAA', sameAccountJoiner),
+    ).toEqual({ error: 'own-game' })
+    expect(coordinator.getPendingGame('AAAAA')).toBeDefined()
+    expect(
+      coordinator.joinPendingGame('AAAAA', otherAccountJoiner),
+    ).toMatchObject({ phase: 'ready' })
   })
 
   it('cancels a hosted game', () => {

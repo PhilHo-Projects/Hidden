@@ -14,14 +14,16 @@ a replay format while mechanics are unstable.
   symbol-only final boards. Guests are recorded; offline and abandoned games are
   not. Account deletion keeps the historical username snapshot.
 - `MatchCoordinator` emits completion once. The recorder writes off the game-over
-  path, retries three times, logs no payloads, and drains during graceful
-  shutdown.
+  path, makes three total attempts, caps work at four concurrent and 256 pending
+  writes, logs no payloads, and drains admitted writes during graceful shutdown.
 - Signed-in participants can browse perspective-correct W/L/T totals and
   newest-first pages, open final-board detail, and maintain independent
   **Interesting** bookmarks. Guests get 401 and nonparticipants get 404.
 - The profile menu now opens a responsive ledger with explicit loading, empty,
   expired-session, retry, pagination, detail, and bookmark-rollback states.
   Unknown future symbols render as text.
+- Quick Match and hosted rooms reject a second connection authenticated as the
+  same account, so one account cannot create an unpersistable two-seat record.
 
 Verified with a real PostgreSQL 16-backed six-round online match: the two
 accounts saw loss 0–6 and win 6–0 respectively, final boards matched, one

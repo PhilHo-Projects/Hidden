@@ -211,6 +211,17 @@ function freezeSpec(spec: ResolvedGameSpec): ResolvedGameSpec {
   })
 }
 
+function isSameAuthenticatedAccount(
+  first: QuickMatchParticipant,
+  second: QuickMatchParticipant,
+) {
+  return (
+    first.accountId !== undefined &&
+    second.accountId !== undefined &&
+    first.accountId === second.accountId
+  )
+}
+
 export function createMatchRoom(input: RoomFactoryInput): MatchRoom {
   return {
     id: input.id,
@@ -281,8 +292,29 @@ export class MatchCoordinator {
     }
 
     const entries = [...this.matchmakingQueue.values()]
-    const first = entries[0]!
-    const second = entries[1]!
+    let compatiblePair:
+      | readonly [QuickMatchEntry, QuickMatchEntry]
+      | undefined
+    for (let firstIndex = 0; firstIndex < entries.length; firstIndex += 1) {
+      const first = entries[firstIndex]!
+      const second = entries
+        .slice(firstIndex + 1)
+        .find(
+          (candidate) =>
+            !isSameAuthenticatedAccount(
+              first.participant,
+              candidate.participant,
+            ),
+        )
+      if (second) {
+        compatiblePair = [first, second]
+        break
+      }
+    }
+    if (!compatiblePair) {
+      return undefined
+    }
+    const [first, second] = compatiblePair
     this.matchmakingQueue.delete(first.participant.connectionId)
     this.matchmakingQueue.delete(second.participant.connectionId)
     return this.createRoom(
@@ -355,7 +387,10 @@ export class MatchCoordinator {
     if (!pending) {
       return { error: 'not-found' }
     }
-    if (pending.host.connectionId === joiner.connectionId) {
+    if (
+      pending.host.connectionId === joiner.connectionId ||
+      isSameAuthenticatedAccount(pending.host, joiner)
+    ) {
       return { error: 'own-game' }
     }
     if (this.roomByConnectionId.has(joiner.connectionId)) {
@@ -382,6 +417,9 @@ export class MatchCoordinator {
     participants: readonly [QuickMatchParticipant, QuickMatchParticipant],
     proposedConfig: GameConfig = DEFAULT_GAME_CONFIG,
   ): MatchRoom {
+    if (isSameAuthenticatedAccount(participants[0], participants[1])) {
+      throw new Error('A signed-in account cannot occupy both match seats.')
+    }
     const trustedParticipants = Object.freeze([
       freezeParticipant(participants[0], 0),
       freezeParticipant(participants[1], 1),
