@@ -11,7 +11,7 @@
     "pretest": "npm run build --workspace=@hidden/game-core",
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "npm run typecheck && vitest run",
-    "test:integration": "vitest run src/auth/repository.integration.test.ts",
+    "test:integration": "vitest run src/auth/repository.integration.test.ts && vitest run src/matchHistory/repository.integration.test.ts",
     "test:watch": "vitest"
   },
   "keywords": [],

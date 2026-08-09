@@ -29,7 +29,10 @@ describeDatabase('PostgreSQL auth repository', () => {
       'SELECT version FROM schema_migrations ORDER BY version',
     )
 
-    expect(result.rows).toEqual([{ version: '001_accounts' }])
+    expect(result.rows).toEqual([
+      { version: '001_accounts' },
+      { version: '002_match_history' },
+    ])
   })
 
   it('serializes migration runners with the PostgreSQL advisory lock', async () => {
