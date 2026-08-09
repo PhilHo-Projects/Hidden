@@ -21,6 +21,10 @@ import type {
   GameUpdate,
   GameUpdateRejectionReason,
 } from './protocol'
+import {
+  createMatchHistoryRecord,
+  type MatchHistoryRecordV1,
+} from './matchHistory/types'
 
 // The browser's visible 3-2-1-GO launch lasts 2.62 seconds. The first server
 // deadline includes this fixed transport/presentation grace; every reset after
@@ -143,6 +147,7 @@ export interface MatchCoordinatorDependencies {
   readonly createJoinCode: () => string
   readonly deliverySink: (deliveries: readonly GameUpdateDelivery[]) => void
   readonly onDeadline?: (room: MatchRoom, run: MatchRun) => void
+  readonly onMatchCompleted?: (record: MatchHistoryRecordV1) => void
   readonly roomFactory?: MatchRoomFactory
 }
 
@@ -893,9 +898,18 @@ export class MatchCoordinator {
   }
 
   private finishRun(room: MatchRoom, run: MatchRun) {
+    if (run.phase === 'finished') return
     this.clearRoomTimer(room)
     run.phase = 'finished'
     room.phase = 'finished'
+    this.dependencies.onMatchCompleted?.(
+      createMatchHistoryRecord({
+        matchId: run.id,
+        completedAtMs: this.dependencies.now(),
+        participants: room.participants,
+        state: run.state,
+      }),
+    )
   }
 
   private startRun(room: MatchRoom): MatchStart {

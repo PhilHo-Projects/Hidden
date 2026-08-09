@@ -245,6 +245,7 @@ function authoritativeFixture(
     cacheSize?: number
     firstSeat?: Seat
     now?: number
+    onMatchCompleted?: (record: unknown) => void
     rounds?: number
     seed?: number
     turnSeconds?: number
@@ -275,6 +276,9 @@ function authoritativeFixture(
     },
     commandCacheSize: options.cacheSize ?? 64,
     deliverySink: (deliveries) => pushedDeliveries.push(deliveries),
+    ...(options.onMatchCompleted
+      ? { onMatchCompleted: options.onMatchCompleted }
+      : {}),
   })
   coordinator.enqueueQuickMatch(firstParticipant, {
     rounds: options.rounds ?? 20,
@@ -933,6 +937,101 @@ describe('MatchCoordinator extra-turn delivery batching', () => {
 })
 
 describe('MatchCoordinator finish, rematch, and legacy lifecycle', () => {
+  it('emits one immutable final snapshot when an online run completes', () => {
+    const completed: unknown[] = []
+    const fixture = authoritativeFixture({
+      firstSeat: 0,
+      now: 8_000,
+      onMatchCompleted: (record) => completed.push(record),
+      rounds: 1,
+      uuids: ['stable-room', 'finished-run'],
+    })
+
+    fixture.issue(0, { type: 'place', locationId: 0, symbol: 'rock' })
+    const finishing = fixture.issue(1, {
+      type: 'place',
+      locationId: 1,
+      symbol: 'paper',
+    })
+
+    expect(completed).toEqual([
+      {
+        schemaVersion: 1,
+        matchId: 'finished-run',
+        completedAtMs: 8_000,
+        engine: { id: 'classic', revision: ENGINE_REVISION },
+        config: {
+          ...DEFAULT_GAME_CONFIG,
+          rounds: 1,
+          turnSeconds: 10,
+          blindMode: false,
+        },
+        turnCount: 2,
+        participants: [
+          {
+            seat: 0,
+            accountId: 'account-uuid-one',
+            username: 'Account_One',
+          },
+          { seat: 1, username: 'Guest#0022' },
+        ],
+        result: { scores: [1, 1], winner: null },
+        boards: [
+          {
+            columns: 3,
+            cells: [
+              { locationId: 0, symbol: 'rock' },
+              { locationId: 1, symbol: null },
+              { locationId: 2, symbol: null },
+              { locationId: 3, symbol: null },
+              { locationId: 4, symbol: null },
+              { locationId: 5, symbol: null },
+              { locationId: 6, symbol: null },
+              { locationId: 7, symbol: null },
+              { locationId: 8, symbol: null },
+            ],
+          },
+          {
+            columns: 3,
+            cells: [
+              { locationId: 0, symbol: null },
+              { locationId: 1, symbol: 'paper' },
+              { locationId: 2, symbol: null },
+              { locationId: 3, symbol: null },
+              { locationId: 4, symbol: null },
+              { locationId: 5, symbol: null },
+              { locationId: 6, symbol: null },
+              { locationId: 7, symbol: null },
+              { locationId: 8, symbol: null },
+            ],
+          },
+        ],
+      },
+    ])
+    expect(Object.isFrozen(completed[0])).toBe(true)
+
+    const exactFinishingRetry = fixture.coordinator.handleGameCommand(
+      22,
+      fixture.envelope(
+        { type: 'place', locationId: 1, symbol: 'paper' },
+        { commandId: 1, expectedRevision: 1 },
+      ),
+    )
+    expect(exactFinishingRetry).toEqual([finishing[0]])
+    expect(completed).toHaveLength(1)
+  })
+
+  it('does not emit a final snapshot for an abandoned run', () => {
+    const completed: unknown[] = []
+    const fixture = authoritativeFixture({
+      onMatchCompleted: (record) => completed.push(record),
+    })
+
+    fixture.coordinator.abandon(11)
+
+    expect(completed).toEqual([])
+  })
+
   it('locks a configured-limit finish, clears its timer, and starts a fresh run only after both finished seats ready', () => {
     const fixture = authoritativeFixture({
       firstSeat: 0,
