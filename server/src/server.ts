@@ -9,6 +9,7 @@ import {
 import { createDatabasePool } from './database'
 import { type LogLevel } from './logger'
 import { runMigrations } from './migrations'
+import { PostgresMatchHistoryRepository } from './matchHistory/repository'
 import { RuntimeLifecycle } from './runtimeLifecycle'
 import {
   resolveAllowedOrigins,
@@ -55,6 +56,7 @@ async function start(isStopping: () => boolean) {
     process.env.DATABASE_URL,
   )
   let authService: AuthService | undefined
+  let matchHistoryRepository: PostgresMatchHistoryRepository | undefined
   if (databaseUrl) {
     databasePool = createDatabasePool(databaseUrl)
     databasePool.on('error', (error) => {
@@ -72,6 +74,7 @@ async function start(isStopping: () => boolean) {
         adminUsernames: resolveAdminUsernames(process.env.ADMIN_USERNAMES),
       },
     )
+    matchHistoryRepository = new PostgresMatchHistoryRepository(databasePool)
     if (isStopping()) {
       return
     }
@@ -82,6 +85,7 @@ async function start(isStopping: () => boolean) {
   server = createHiddenServer({
     allowedOrigins,
     ...(authService ? { authService } : {}),
+    ...(matchHistoryRepository ? { matchHistoryRepository } : {}),
     heartbeatIntervalMs: parsePositiveInteger(
       process.env.HEARTBEAT_INTERVAL_MS,
       30_000,

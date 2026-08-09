@@ -14,7 +14,10 @@ import {
 import { readSessionToken } from './auth/sessionToken'
 import { GameHandler, type ClientIdentity } from './gameHandler'
 import { createLogger, type Logger, type LogLevel } from './logger'
-import type { MatchCoordinator } from './matchCoordinator'
+import { MatchCoordinator } from './matchCoordinator'
+import { createMatchHistoryRouter } from './matchHistory/http'
+import { MatchHistoryRecorder } from './matchHistory/recorder'
+import type { MatchHistoryRepository } from './matchHistory/repository'
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 16 * 1024
 
@@ -27,6 +30,7 @@ export interface HiddenServerOptions {
   logLevel?: LogLevel
   logger?: Logger
   matchCoordinator?: MatchCoordinator
+  matchHistoryRepository?: MatchHistoryRepository
   maxConnections?: number
   maxMessagesPerSecond?: number
   maxPayloadBytes?: number
@@ -56,12 +60,23 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
     noServer: true,
     maxPayload: options.maxPayloadBytes ?? DEFAULT_MAX_PAYLOAD_BYTES,
   })
+  const matchHistoryRecorder = options.matchHistoryRepository
+    ? new MatchHistoryRecorder(options.matchHistoryRepository, logger)
+    : undefined
+  const matchCoordinator =
+    options.matchCoordinator ??
+    new MatchCoordinator({
+      ...(matchHistoryRecorder
+        ? {
+            onMatchCompleted: (record) =>
+              matchHistoryRecorder.record(record),
+          }
+        : {}),
+    })
   const gameHandler = new GameHandler({
     logger,
     maxMessagesPerSecond: options.maxMessagesPerSecond ?? 30,
-    ...(options.matchCoordinator
-      ? { matchCoordinator: options.matchCoordinator }
-      : {}),
+    matchCoordinator,
   })
   const host = options.host ?? '0.0.0.0'
   const maxConnections = options.maxConnections ?? 100
@@ -92,6 +107,18 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
       secureCookie,
     }),
   )
+  if (options.authService && options.matchHistoryRepository) {
+    app.use(
+      '/api/history',
+      createMatchHistoryRouter({
+        allowedOrigins: options.allowedOrigins,
+        getSession: (token) => options.authService!.getSession(token),
+        repository: options.matchHistoryRepository,
+        logger,
+        secureCookie,
+      }),
+    )
+  }
   app.use(express.static(options.staticRoot, { index: false }))
   app.use((request, response, next) => {
     if (
@@ -267,6 +294,7 @@ export function createHiddenServer(options: HiddenServerOptions): HiddenServer {
         webSocketsClosed,
         waitForPendingUpgrades(),
       ])
+      await matchHistoryRecorder?.flush()
       logger('info', 'server.stopped')
     } finally {
       clearTimeout(forceClose)

@@ -10,6 +10,12 @@ import { createHiddenServer, type HiddenServer } from './app'
 import { DEFAULT_GAME_CONFIG } from './matchRules'
 import { PacketType } from './protocol'
 import { MatchCoordinator } from './matchCoordinator'
+import type {
+  MatchHistoryDetail,
+  MatchHistoryPage,
+  MatchHistoryRepository,
+} from './matchHistory/repository'
+import type { MatchHistoryRecordV1 } from './matchHistory/types'
 import {
   applyCommand,
   applyTimeout,
@@ -225,6 +231,150 @@ describe.sequential('Hidden server', () => {
 
     await expectUpgradeStatus(port, 404, ORIGIN, '/not-ws')
     await expectUpgradeStatus(port, 403, 'https://evil.example')
+  })
+
+  it('mounts personal history, records completed account matches, and drains writes on close', async () => {
+    const records: MatchHistoryRecordV1[] = []
+    let releaseInsert: (() => void) | undefined
+    const insertBlocked = new Promise<void>((resolve) => {
+      releaseInsert = resolve
+    })
+    const emptyPage: MatchHistoryPage = {
+      stats: { played: 0, wins: 0, losses: 0, ties: 0 },
+      matches: [],
+      nextCursor: null,
+    }
+    const repository: MatchHistoryRepository = {
+      async insert(record) {
+        records.push(record)
+        await insertBlocked
+      },
+      async listForAccount() {
+        return emptyPage
+      },
+      async getForAccount(): Promise<MatchHistoryDetail | undefined> {
+        return undefined
+      },
+      async setBookmarked() {
+        return false
+      },
+    }
+    const authService = authServiceForSessions(
+      new Map([
+        [
+          ADMIN_SESSION_TOKEN,
+          { id: 'account-admin', username: 'Admin', role: 'admin' as const },
+        ],
+        [
+          SECOND_ADMIN_SESSION_TOKEN,
+          {
+            id: 'account-second-admin',
+            username: 'SecondAdmin',
+            role: 'admin' as const,
+          },
+        ],
+      ]),
+    )
+    const { port } = await startServer({
+      authService,
+      matchHistoryRepository: repository,
+    })
+
+    const history = await fetch(`http://127.0.0.1:${port}/api/history`, {
+      headers: { Cookie: `hidden_session=${ADMIN_SESSION_TOKEN}` },
+    })
+    expect(history.status).toBe(200)
+    await expect(history.json()).resolves.toMatchObject({ stats: emptyPage.stats })
+
+    const first = await queueProbe(port, {
+      cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
+      proposedConfig: {
+        ...DEFAULT_GAME_CONFIG,
+        rounds: 1,
+        powerupsEnabled: false,
+      },
+    })
+    const second = await queueProbe(port, {
+      cookie: `hidden_session=${SECOND_ADMIN_SESSION_TOKEN}`,
+    })
+    await Promise.all([
+      first.waitFor(PacketType.MATCH_FOUND),
+      second.waitFor(PacketType.MATCH_FOUND),
+    ])
+    first.send([0, PacketType.READY_STATE, true])
+    second.send([0, PacketType.READY_STATE, true])
+    const [firstStart, secondStart] = await Promise.all([
+      first.waitFor(PacketType.GAME_START),
+      second.waitFor(PacketType.GAME_START),
+    ])
+    expect(firstStart[3]).toEqual(secondStart[3])
+    const descriptor = firstStart[3] as {
+      matchId: string
+      firstSeat: Seat
+    }
+    const probesBySeat = [first, second] as const
+    const firstSeat = descriptor.firstSeat
+    const secondSeat = (1 - firstSeat) as Seat
+
+    probesBySeat[firstSeat].send([
+      0,
+      PacketType.GAME_COMMAND,
+      {
+        matchId: descriptor.matchId,
+        commandId: 0,
+        expectedRevision: 0,
+        command: { type: 'place', locationId: 0, symbol: 'rock' },
+      },
+    ])
+    await Promise.all([
+      first.waitFor(PacketType.GAME_UPDATE),
+      second.waitFor(PacketType.GAME_UPDATE),
+    ])
+    probesBySeat[secondSeat].send([
+      0,
+      PacketType.GAME_COMMAND,
+      {
+        matchId: descriptor.matchId,
+        commandId: 0,
+        expectedRevision: 1,
+        command: { type: 'place', locationId: 1, symbol: 'paper' },
+      },
+    ])
+    const finishing = await Promise.all([
+      first.waitFor(PacketType.GAME_UPDATE),
+      second.waitFor(PacketType.GAME_UPDATE),
+    ])
+
+    expect(finishing[0][2]).toMatchObject({
+      status: 'accepted',
+      turnTimeRemainingMs: null,
+    })
+    expect(records).toHaveLength(1)
+    expect(records[0]?.participants).toEqual([
+      {
+        seat: 0,
+        accountId: 'account-admin',
+        username: 'Admin',
+      },
+      {
+        seat: 1,
+        accountId: 'account-second-admin',
+        username: 'SecondAdmin',
+      },
+    ])
+
+    let closed = false
+    const closing = server!.close().then(() => {
+      closed = true
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(closed).toBe(false)
+    releaseInsert?.()
+    await closing
+    expect(closed).toBe(true)
+    server = undefined
+    first.close()
+    second.close()
   })
 
   it('matches two clients, trusts the connection actor, rejects legacy relay, and reports disconnects', async () => {

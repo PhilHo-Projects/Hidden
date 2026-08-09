@@ -60,6 +60,23 @@ export interface ListMatchHistoryOptions {
   readonly bookmarkedOnly?: boolean
 }
 
+export interface MatchHistoryRepository {
+  insert(record: MatchHistoryRecordV1): Promise<void>
+  listForAccount(
+    accountId: string,
+    options: ListMatchHistoryOptions,
+  ): Promise<MatchHistoryPage>
+  getForAccount(
+    accountId: string,
+    matchId: string,
+  ): Promise<MatchHistoryDetail | undefined>
+  setBookmarked(
+    accountId: string,
+    matchId: string,
+    bookmarked: boolean,
+  ): Promise<boolean>
+}
+
 interface StatsRow {
   played: string
   wins: string
@@ -129,7 +146,7 @@ function perspectiveScores(
     : { playerScore: row.seat_1_score, opponentScore: row.seat_0_score }
 }
 
-export class PostgresMatchHistoryRepository {
+export class PostgresMatchHistoryRepository implements MatchHistoryRepository {
   constructor(private readonly pool: Pool) {}
 
   async insert(record: MatchHistoryRecordV1): Promise<void> {
