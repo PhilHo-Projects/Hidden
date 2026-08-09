@@ -1414,11 +1414,12 @@ function App() {
           <header className="battle-header">
             <h1>Current Round: {match.currentRound}</h1>
             <p>{statusText}</p>
-            {announcement ? (
-              <div className="battle-announcement" role="status" aria-live="polite">
-                {announcement}
-              </div>
-            ) : null}
+            {/* Always mounted. The strip is a fixed slot in the header, so a
+              * message arriving or expiring never resizes the header and shoves
+              * the board underneath it. */}
+            <div className="battle-announcement" role="status" aria-live="polite">
+              {announcement}
+            </div>
             <div className="timer-track" aria-label={`${turnTimeLeft.toFixed(1)} seconds left`}>
               <span style={{ width: `${Math.max(0, Math.min(100, (turnTimeLeft / match.config.turnSeconds) * 100))}%` }} />
             </div>

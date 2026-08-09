@@ -2,10 +2,14 @@
  * A cell whose piece was destroyed is desecrated until its owner's next turn.
  *
  * The whole look is `--cell-desecrated-fill` plus this file. It is painted as an
- * overlay rather than as the cell background for two reasons: the release has to
- * fade, and CSS cannot transition between two gradients — only opacity gets a
- * real tween. Swapping in a texture is still one token: a gradient, an
- * `image-set()`, or a `url()` all drop into the same custom property.
+ * overlay rather than as the cell background because the arrival and the release
+ * both have to animate, and a background can do neither. Swapping in a texture is
+ * still one token: a gradient, an `image-set()`, or a `url()` all drop into the
+ * same custom property.
+ *
+ * The motion is not this file's to choose. Brown arriving on a cell and brown
+ * leaving it are the same events as ink arriving and leaving, so both read the
+ * shared cell-motion tokens in `index.css` and scale from the middle together.
  */
 
 :root {
@@ -18,7 +22,7 @@
   z-index: 1;
   pointer-events: none;
   background: var(--cell-desecrated-fill);
-  animation: cell-desecration-settle 420ms ease-out both;
+  animation: cell-desecration-settle var(--cell-motion-in-ms) var(--cell-motion-in-ease) both;
 }
 
 /* Hatching, so the tile reads as spoiled ground rather than as a third symbol. */
@@ -37,25 +41,31 @@
 
 /*
  * The overlay outlives the desecration by design: BoardGrid keeps it mounted for
- * the length of this fade so the tile thaws instead of blinking out. `animation:
- * none` is required, because the settle keyframes hold their end state under
- * `both` and would otherwise pin the opacity the transition is trying to move.
+ * the length of this release so the tile empties instead of blinking out.
+ * Declaring `animation` here replaces the settle outright, which is what lets the
+ * release start from the size the settle left behind.
  */
 .cell-desecration-releasing {
-  animation: none;
-  opacity: 0;
-  transition: opacity 800ms ease-out;
+  animation: cell-desecration-release var(--cell-motion-out-ms) var(--cell-motion-out-ease) both;
 }
 
 @keyframes cell-desecration-settle {
   from {
-    opacity: 0;
-    transform: scale(1.12);
+    transform: scale(0);
   }
 
   to {
-    opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes cell-desecration-release {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(0);
   }
 }
 
@@ -65,6 +75,7 @@
   }
 
   .cell-desecration-releasing {
-    transition: none;
+    animation: none;
+    transform: scale(0);
   }
 }

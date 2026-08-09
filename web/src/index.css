@@ -30,6 +30,18 @@
   --hidden-muted: #777777;
   --font-brush: "Edo SZ", "Street Soul", Impact, sans-serif;
   --font-block: "JetBrains Mono", "Arial Black", system-ui, sans-serif;
+
+  /*
+   * How anything on a cell arrives and leaves. Ink and desecration both read
+   * these, so the two cannot drift into different motion for the same event.
+   * The out curve is the in curve reversed — reversing
+   * `cubic-bezier(0.25, 1, 0.5, 1)` is `cubic-bezier(0.5, 0, 0.75, 0)` — which
+   * is what keeps half a second from reading as lag: it holds, then goes.
+   */
+  --cell-motion-in-ms: 250ms;
+  --cell-motion-out-ms: 500ms;
+  --cell-motion-in-ease: cubic-bezier(0.25, 1, 0.5, 1);
+  --cell-motion-out-ease: cubic-bezier(0.5, 0, 0.75, 0);
   color: var(--hidden-white);
   background: var(--hidden-black);
   font-family: var(--font-block);
@@ -1283,9 +1295,19 @@ summary:focus-visible {
   text-shadow: 4px 4px 0 #000;
 }
 
+/*
+ * A permanent slot, not a element that comes and goes. Announcements last 2.4s
+ * and the header sits directly above the board, so mounting and unmounting the
+ * strip resized the header and shoved the whole board up and back down every
+ * time one expired. The element is always rendered and the slot is measured in
+ * `em` so it tracks the font size at every breakpoint: one line where the strip
+ * is wide enough that nothing wraps, two where it is not.
+ */
 .battle-announcement {
-  min-height: 1.15rem;
+  display: grid;
+  min-height: 1.35em;
   max-width: min(38rem, 84vw);
+  align-content: center;
   color: var(--hidden-yellow);
   font-size: clamp(0.75rem, 1.8vw, 0.95rem);
   line-height: 1.35;
@@ -1909,8 +1931,10 @@ summary:focus-visible {
     font-size: clamp(1rem, 5.5vw, 1.45rem);
   }
 
+  /* 84vw of a phone is narrow enough that the longer messages take two lines,
+   * so the slot reserves both up front rather than growing into the second. */
   .battle-announcement {
-    min-height: 1rem;
+    min-height: 2.7em;
     font-size: 0.68rem;
   }
 
@@ -2116,7 +2140,7 @@ summary:focus-visible {
   }
 
   .battle-announcement {
-    min-height: 0.7rem;
+    min-height: 2em;
     font-size: 0.55rem;
     line-height: 1;
   }

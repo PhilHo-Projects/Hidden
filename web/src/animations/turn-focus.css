@@ -49,20 +49,26 @@
 /*
  * Both rest keyframes carry all three shadows so the list interpolates by
  * position instead of relying on the browser to pad the shorter list.
+ *
+ * Order and offset both matter. Box shadows paint front to back, so the opaque
+ * drop has to come after the ring or it covers the ring's bottom band and the
+ * tile ends up gold on three sides and black on the fourth. The drop then grows
+ * from 4px to 7px alongside the ring, which keeps 4px of black visible below it
+ * throughout: the frame swells evenly instead of thickening underneath.
  */
 @keyframes turn-focus-ring {
   0%,
   100% {
     box-shadow:
-      0 4px 0 #000,
       0 0 0 0 rgba(246, 230, 0, 0),
+      0 4px 0 #000,
       0 0 0 rgba(246, 230, 0, 0);
   }
 
   50% {
     box-shadow:
-      0 4px 0 #000,
       0 0 0 3px rgba(246, 230, 0, 0.92),
+      0 7px 0 #000,
       0 0 20px rgba(246, 230, 0, 0.42);
   }
 }
@@ -87,8 +93,8 @@
   .rps-dock-awaiting .rps-tile {
     animation: none;
     box-shadow:
-      0 4px 0 #000,
-      0 0 0 3px rgba(246, 230, 0, 0.92);
+      0 0 0 3px rgba(246, 230, 0, 0.92),
+      0 7px 0 #000;
   }
 
   .rps-dock-awaiting .rps-tile::before {
