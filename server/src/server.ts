@@ -1,5 +1,6 @@
 import path from 'node:path'
 import type { Pool } from 'pg'
+import { PostgresAdminRepository } from './admin/postgresRepository'
 import { AuthService } from './auth/service'
 import { PostgresAuthRepository } from './auth/repository'
 import {
@@ -56,6 +57,7 @@ async function start(isStopping: () => boolean) {
     process.env.DATABASE_URL,
   )
   let authService: AuthService | undefined
+  let adminRepository: PostgresAdminRepository | undefined
   let matchHistoryRepository: PostgresMatchHistoryRepository | undefined
   if (databaseUrl) {
     databasePool = createDatabasePool(databaseUrl)
@@ -68,12 +70,14 @@ async function start(isStopping: () => boolean) {
     if (isStopping()) {
       return
     }
+    const adminUsernames = resolveAdminUsernames(process.env.ADMIN_USERNAMES)
     authService = await AuthService.create(
       new PostgresAuthRepository(databasePool),
       {
-        adminUsernames: resolveAdminUsernames(process.env.ADMIN_USERNAMES),
+        adminUsernames,
       },
     )
+    adminRepository = new PostgresAdminRepository(databasePool, adminUsernames)
     matchHistoryRepository = new PostgresMatchHistoryRepository(databasePool)
     if (isStopping()) {
       return
@@ -84,6 +88,7 @@ async function start(isStopping: () => boolean) {
 
   server = createHiddenServer({
     allowedOrigins,
+    ...(adminRepository ? { adminRepository } : {}),
     ...(authService ? { authService } : {}),
     ...(matchHistoryRepository ? { matchHistoryRepository } : {}),
     heartbeatIntervalMs: parsePositiveInteger(

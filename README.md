@@ -45,6 +45,44 @@ $env:DATABASE_URL='postgresql://hidden:password@127.0.0.1:5432/hidden'
 npm start
 ```
 
+### Admin workbench
+
+Administrators get a read-only workbench from the signed-in profile menu. It
+shows process-local activity, database totals, every stored match snapshot,
+account/session aggregates, and a small allowlisted console. The admin HTTP
+boundary is `/api/admin`; its responses are never cached and it returns `401`
+for guests and `403` for signed-in players. Password hashes, session-token
+hashes, and raw packets are never included.
+
+Roles are derived at login and request time from the case-insensitive
+`ADMIN_USERNAMES` allowlist. Configure the exact production list without
+putting it in source control:
+
+```powershell
+$env:ADMIN_USERNAMES='VinceAdmin,PhilAdmin'
+```
+
+Provision those accounts before enabling the allowlist. The provisioner reads
+one password line from standard input, creates separate Argon2id hashes inside
+one transaction, and creates no browser sessions. It is safe to rerun when both
+accounts already have that password; if either existing account has a different
+password, the whole operation rolls back. This PowerShell example keeps the
+password out of command arguments and shell history:
+
+```powershell
+$secret = Read-Host 'Shared admin password' -AsSecureString
+$secretPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
+try {
+  [Runtime.InteropServices.Marshal]::PtrToStringBSTR($secretPointer) |
+    npm run admin:provision --workspace=hidden-server -- --username VinceAdmin --username PhilAdmin
+} finally {
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($secretPointer)
+}
+```
+
+`DATABASE_URL` must be set for that command. Do not keep the password in a
+long-lived environment variable or deployment configuration.
+
 ## Verify
 
 ```powershell
@@ -80,9 +118,11 @@ the single-page app, and accepts WebSocket upgrades only at `/ws`.
 Username/password accounts and browser sessions are stored in PostgreSQL.
 Accounts are optional: guests retain unrestricted online and offline play.
 Matchmaking and active matches are still intentionally held in memory, so run
-exactly one application replica. Completed online matches persist as private,
-participant-authorized final snapshots with W/L/T totals and per-account
-bookmarks. Action replay and reconnection sessions are not part of this release.
+exactly one application replica. Completed online matches persist as final
+snapshots with W/L/T totals and per-account bookmarks. Participants see only
+their own history; administrators can inspect the global snapshot ledger.
+Snapshots contain final boards and metadata, not ordered commands, so action
+playback and reconnection sessions are not part of this release.
 
 Production configuration:
 

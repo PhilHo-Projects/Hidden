@@ -32,6 +32,8 @@ describeDatabase('PostgreSQL auth repository', () => {
     expect(result.rows).toEqual([
       { version: '001_accounts' },
       { version: '002_match_history' },
+      { version: '003_admin_workbench_indexes' },
+      { version: '004_user_last_seen' },
     ])
   })
 
@@ -183,6 +185,36 @@ describeDatabase('PostgreSQL auth repository', () => {
         new Date('2030-01-03T00:00:00.000Z'),
       ),
     ).resolves.toBeUndefined()
+  })
+
+  it('retains account activity after expired sessions are cleaned up', async () => {
+    const account = await repository.createAccount({
+      id: randomUUID(),
+      username: 'Remembered_Player',
+      usernameKey: 'remembered_player',
+      passwordHash: 'encoded-hash',
+      sessionTokenHash: Buffer.alloc(32, 10),
+      expiresAt: new Date('2030-01-03T00:00:00.000Z'),
+      now: new Date('2030-01-01T00:00:00.000Z'),
+    })
+
+    await expect(
+      repository.findSession(
+        Buffer.alloc(32, 10),
+        new Date('2030-01-02T00:00:00.000Z'),
+      ),
+    ).resolves.toEqual(account)
+    await expect(
+      repository.deleteExpiredSessions(new Date('2030-01-04T00:00:00.000Z')),
+    ).resolves.toBeGreaterThan(0)
+
+    const result = await pool.query<{ last_seen_at: Date }>(
+      'SELECT last_seen_at FROM users WHERE id = $1',
+      [account.id],
+    )
+    expect(result.rows[0]?.last_seen_at.toISOString()).toBe(
+      '2030-01-02T00:00:00.000Z',
+    )
   })
 
   it('deletes every session when its owning account is deleted', async () => {

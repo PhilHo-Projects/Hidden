@@ -86,8 +86,9 @@ export class PostgresAuthRepository implements AuthRepository {
         }
         const userResult = await client.query<AuthUser>(
           `INSERT INTO users (
-             id, username, username_key, password_hash, created_at
-           ) VALUES ($1, $2, $3, $4, $5)
+             id, username, username_key, password_hash, created_at,
+             last_seen_at
+           ) VALUES ($1, $2, $3, $4, $5, $5)
            RETURNING id, username`,
           [
             input.id,
@@ -152,6 +153,12 @@ export class PostgresAuthRepository implements AuthRepository {
          ) VALUES ($1, $2, $3, $3, $4)`,
         [input.tokenHash, input.userId, input.now, input.expiresAt],
       )
+      await client.query(
+        `UPDATE users
+         SET last_seen_at = GREATEST(last_seen_at, $2::timestamptz)
+         WHERE id = $1`,
+        [input.userId, input.now],
+      )
     })
   }
 
@@ -179,6 +186,13 @@ export class PostgresAuthRepository implements AuthRepository {
        WHERE token_hash = $1
          AND last_seen_at < $2::timestamptz - interval '15 minutes'`,
       [tokenHash, now],
+    )
+    await this.pool.query(
+      `UPDATE users
+       SET last_seen_at = $2::timestamptz
+       WHERE id = $1
+         AND last_seen_at < $2::timestamptz - interval '15 minutes'`,
+      [user.id, now],
     )
     return user
   }

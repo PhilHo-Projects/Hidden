@@ -30,7 +30,9 @@ there binds a stranger; a host sets the rules of a game they own.
 - Every non-landing screen uses one slim persistent bar: contextual Back on the
   left, live status in the center, and the account slot on the right.
 - Guest sessions show Sign In in the account slot. Authenticated sessions use a
-  profile disclosure with match history and account actions.
+  profile disclosure with match history and account actions. Administrators
+  additionally see the restricted Admin workbench entry whenever the current
+  match phase allows account navigation.
 - Back returns one decision at a time. Battles and results return to their
   relevant online menu or offline setup; repeated Back eventually reaches the
   landing screen.
@@ -70,6 +72,24 @@ there binds a stranger; a host sets the rules of a game they own.
   recovery copy.
 - Opening history remembers the exact screen under it. Global Back returns to
   that screen; the detail's local All matches control returns to the ledger.
+
+## Admin workbench
+
+- The workbench is a read-only operational surface for allowlisted
+  administrators. It opens as a near-full-screen native dialog over the current
+  pre-game screen and returns focus to the profile control when dismissed.
+- Stats is the default view. Matches and Accounts use dense ledger tables rather
+  than collections of cards; Console is an allowlisted client command registry,
+  never a shell, SQL prompt, evaluator, or destructive remote control.
+- Match rows open a persistent final-state inspector beside the ledger on wide
+  screens. On portrait phones the list remains the entry view and selection
+  moves into a dedicated detail view with an explicit return control.
+- Stored matches are final snapshots: participants, score, final boards, rules,
+  and completion metadata. The interface must not label them as playable
+  replays until ordered command recording and deterministic playback exist.
+- Operational counts refresh only while the visible Stats tab is open. Loading,
+  empty, retryable failure, and expired-session states stay inside the dialog
+  and never expose password hashes, session hashes, or packet bodies.
 
 ## Portrait-phone rules
 
@@ -135,7 +155,7 @@ screens own only the effect's placement and when it appears.
 
 ## Deferred systems
 
-Chess-style action replay, public sharing, admin-global research collections,
-reconnection, and shared matchmaking state require separate product and backend
-work. Their unavailable entry points must not imply that those systems already
-exist.
+Chess-style action replay, public sharing, admin moderation and destructive
+actions, public online counts, reconnection, and shared matchmaking state
+require separate product and backend work. Their unavailable entry points must
+not imply that those systems already exist.

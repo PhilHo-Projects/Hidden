@@ -1,6 +1,6 @@
 # Hidden roadmap
 
-Last reviewed: 2026-08-09.
+Last reviewed: 2026-08-10.
 
 Read this file to know where the project stands and what to do next. History
 lives in [JOURNAL.md](JOURNAL.md); finished plans are in
@@ -40,6 +40,9 @@ version more fun?" is not a priority.
 - Accounts, sessions, and completed online-match snapshots persist in
   PostgreSQL. Active matches and matchmaking are still process-local, so a
   deploy or restart destroys games that have not finished.
+- A read-only admin workbench is available to the environment-derived admin
+  allowlist. It exposes live service counts, the global snapshot ledger,
+  account/session aggregates, and the safe `help`/`status`/`clear` console.
 
 ## The one rule that must not be broken
 
@@ -72,7 +75,8 @@ Static match history and replay are now explicitly separate systems.
 - History DTOs are separate from live game types. Unknown historical symbols
   remain visible as text instead of breaking an old result screen.
 - Twenty rows is a page size, not a deletion cap. There is no v1 retention job,
-  public sharing, executable replay, notes, or global admin browser.
+  public sharing, executable replay, or notes. Global reads live behind the
+  separate read-only admin boundary rather than the participant-history API.
 - One signed-in account cannot occupy both seats of the same match, keeping
   participant ownership and perspective unambiguous. Guest seats are unaffected.
 
@@ -133,19 +137,20 @@ Timeout commands must remain explicit because `applyTimeout` consumes seeded
 RNG. A later **Try from here** experiment may hand reconstructed state at action
 N to offline practice, but it is not part of static history v1.
 
-### Admin research console
+### Admin workbench follow-ons
 
-After enough games exist to justify it:
+The read-only boundary and responsive workbench now exist. Later passes may:
 
-- Configure the eventual two admin usernames with the existing
-  `ADMIN_USERNAMES` support; do not hard-code account IDs or roles.
-- Let admins browse all matches, promote examples into shared collections, and
-  add research notes without changing participants' personal bookmarks.
-- Show record count plus PostgreSQL table and index storage so growth is visible
-  from the game instead of requiring SSH or SQL.
-- Provide individual and bulk deletion of unbookmarked records with retention
-  safeguards, previews, and explicit confirmation. Bookmarked/shared research
-  examples must not disappear in a broad cleanup by default.
+- Promote examples into shared collections and add research notes without
+  changing participants' personal bookmarks.
+- Show PostgreSQL table and index storage alongside the existing record counts.
+- Add individual and bulk deletion of unbookmarked records only with retention
+  safeguards, previews, audit records, and explicit confirmation.
+- Publish the safe online-player subset for all users without exposing the rest
+  of the admin statistics.
+
+The console remains deliberately non-destructive: no shell, SQL, eval, account
+moderation, or arbitrary RPC is available.
 
 ### R2 only if replay payloads become large
 

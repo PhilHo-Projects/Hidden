@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, useState } from 'react'
 
 interface ProfileMenuProps {
   username: string
+  role: 'player' | 'admin'
   busy: boolean
   disabled: boolean
+  onOpenAdmin?: () => void
   onOpenHistory: () => void
   onSignOut: () => void
 }
@@ -20,12 +22,16 @@ const UPCOMING_SECTIONS = [
 
 interface ProfileMenuPanelProps {
   username: string
+  role: 'player' | 'admin'
+  onOpenAdmin?: () => void
   onOpenHistory: () => void
   onSignOut: () => void
 }
 
 export function ProfileMenuPanel({
   username,
+  role,
+  onOpenAdmin,
   onOpenHistory,
   onSignOut,
 }: ProfileMenuPanelProps) {
@@ -37,6 +43,22 @@ export function ProfileMenuPanel({
       </p>
 
       <ul className="profile-menu-list">
+        {role === 'admin' ? (
+          <li>
+            <button
+              type="button"
+              className="profile-menu-item profile-menu-admin"
+              aria-label="Open admin workspace"
+              onClick={onOpenAdmin}
+            >
+              <span className="profile-menu-item-label">Admin workspace</span>
+              <span className="profile-menu-item-detail">
+                Matches, accounts, stats, and console
+              </span>
+            </button>
+          </li>
+        ) : null}
+
         <li>
           <button
             type="button"
@@ -85,8 +107,10 @@ export function ProfileMenuPanel({
  */
 export function ProfileMenu({
   username,
+  role,
   busy,
   disabled,
+  onOpenAdmin,
   onOpenHistory,
   onSignOut,
 }: ProfileMenuProps) {
@@ -149,6 +173,12 @@ export function ProfileMenu({
         <div id={panelId}>
           <ProfileMenuPanel
             username={username}
+            role={role}
+            onOpenAdmin={() => {
+              setOpen(false)
+              triggerRef.current?.focus()
+              onOpenAdmin?.()
+            }}
             onOpenHistory={() => {
               setOpen(false)
               onOpenHistory()
