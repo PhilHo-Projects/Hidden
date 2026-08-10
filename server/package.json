@@ -6,12 +6,13 @@
   "scripts": {
     "prebuild": "npm run build --workspace=@hidden/game-core",
     "build": "tsc",
+    "admin:provision": "npm run build && node dist/admin/provisionCli.js",
     "start": "node dist/server.js",
     "dev": "tsc --watch --preserveWatchOutput",
     "pretest": "npm run build --workspace=@hidden/game-core",
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "npm run typecheck && vitest run",
-    "test:integration": "vitest run src/auth/repository.integration.test.ts && vitest run src/matchHistory/repository.integration.test.ts",
+    "test:integration": "vitest run src/auth/repository.integration.test.ts && vitest run src/matchHistory/repository.integration.test.ts && vitest run src/admin/repository.integration.test.ts && vitest run src/admin/provision.integration.test.ts",
     "test:watch": "vitest"
   },
   "keywords": [],

@@ -267,6 +267,16 @@ export class MatchCoordinator {
     this.dependencies = { ...DEFAULT_DEPENDENCIES, ...dependencies }
   }
 
+  getRuntimeStats() {
+    return {
+      queuedPlayers: this.matchmakingQueue.size,
+      pendingLobbies: this.pendingGames.size,
+      activeMatches: [...this.roomsById.values()].filter(
+        (room) => room.currentRun?.phase === 'active',
+      ).length,
+    }
+  }
+
   enqueueQuickMatch(
     participant: QuickMatchParticipant,
     proposedConfig?: Partial<GameConfig>,

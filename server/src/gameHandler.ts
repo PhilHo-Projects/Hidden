@@ -1,4 +1,5 @@
 import WebSocket from 'ws'
+import type { AdminRuntimeStats } from './admin/repository'
 import { type UserRole } from './auth/service'
 import { type Logger } from './logger'
 import {
@@ -93,6 +94,24 @@ export class GameHandler {
 
   get connectionCount() {
     return this.sessionsById.size
+  }
+
+  getRuntimeStats(): AdminRuntimeStats {
+    const named = [...this.sessionsById.values()].filter(
+      (session) => typeof session.username === 'string',
+    )
+    const authenticatedPlayers = named.filter(
+      (session) => session.accountId !== undefined,
+    ).length
+    const coordinator = this.matchCoordinator.getRuntimeStats()
+    return {
+      connections: this.sessionsById.size,
+      onlinePlayers: this.sessionsById.size,
+      namedPlayers: named.length,
+      authenticatedPlayers,
+      guestPlayers: named.length - authenticatedPlayers,
+      ...coordinator,
+    }
   }
 
   heartbeat() {

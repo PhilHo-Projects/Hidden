@@ -79,11 +79,13 @@ describeDatabase('PostgreSQL match history repository', () => {
   beforeEach(async () => {
     await pool.query('TRUNCATE TABLE match_history_records, users CASCADE')
     await pool.query(
-      `INSERT INTO users (id, username, username_key, password_hash, created_at)
+      `INSERT INTO users (
+         id, username, username_key, password_hash, created_at, last_seen_at
+       )
        VALUES
-         ($1, 'Wooshylooshy', 'wooshylooshy', 'hash', now()),
-         ($2, 'Friend', 'friend', 'hash', now()),
-         ($3, 'Observer', 'observer', 'hash', now())`,
+         ($1, 'Wooshylooshy', 'wooshylooshy', 'hash', now(), now()),
+         ($2, 'Friend', 'friend', 'hash', now(), now()),
+         ($3, 'Observer', 'observer', 'hash', now(), now())`,
       [ACCOUNT_ONE, ACCOUNT_TWO, ACCOUNT_THREE],
     )
   })

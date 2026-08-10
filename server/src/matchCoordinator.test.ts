@@ -57,6 +57,41 @@ function deterministicDependencies(overrides: {
 }
 
 describe('MatchCoordinator discovery and trusted rooms', () => {
+  it('reports queue, pending lobby, and active match counts without exposing rooms', () => {
+    const { dependencies } = deterministicDependencies({
+      uuids: ['pending-id', 'room-id', 'run-id'],
+    })
+    const coordinator = new MatchCoordinator(dependencies)
+
+    expect(coordinator.getRuntimeStats()).toEqual({
+      queuedPlayers: 0,
+      pendingLobbies: 0,
+      activeMatches: 0,
+    })
+
+    coordinator.enqueueQuickMatch(firstParticipant)
+    coordinator.createPendingGame(
+      { ...secondParticipant, connectionId: 33 },
+      DEFAULT_GAME_CONFIG,
+      false,
+    )
+    expect(coordinator.getRuntimeStats()).toEqual({
+      queuedPlayers: 1,
+      pendingLobbies: 1,
+      activeMatches: 0,
+    })
+
+    const room = coordinator.enqueueQuickMatch(secondParticipant)
+    expect(room).toBeDefined()
+    coordinator.setReady(firstParticipant.connectionId, true)
+    coordinator.setReady(secondParticipant.connectionId, true)
+    expect(coordinator.getRuntimeStats()).toEqual({
+      queuedPlayers: 0,
+      pendingLobbies: 1,
+      activeMatches: 1,
+    })
+  })
+
   it('discovers two eligible participants through the reusable room factory with frozen trusted seats and rules', () => {
     const roomFactory = vi.fn((input: RoomFactoryInput) => createMatchRoom(input))
     const { dependencies } = deterministicDependencies({

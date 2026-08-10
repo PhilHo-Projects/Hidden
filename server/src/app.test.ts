@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { AuthServiceLike } from './auth/http'
 import type { AuthenticatedUser } from './auth/service'
+import type { AdminRepository } from './admin/repository'
 import { createHiddenServer, type HiddenServer } from './app'
 import { DEFAULT_GAME_CONFIG } from './matchRules'
 import { PacketType } from './protocol'
@@ -218,6 +219,72 @@ async function startServer(
 }
 
 describe.sequential('Hidden server', () => {
+  it('serves admin stats from live connections and process-local game state', async () => {
+    const adminRepository: AdminRepository = {
+      async getStorageStats() {
+        return { accounts: 10, activeSessions: 3, matches: 20 }
+      },
+      async listMatches() {
+        return { items: [], nextCursor: null }
+      },
+      async getMatch() {
+        return undefined
+      },
+      async listAccounts() {
+        return { items: [], nextCursor: null }
+      },
+    }
+    const authService = authServiceForSessions(
+      new Map([
+        [
+          ADMIN_SESSION_TOKEN,
+          {
+            id: '00000000-0000-4000-8000-000000000001',
+            username: 'PhilAdmin',
+            role: 'admin' as const,
+          },
+        ],
+      ]),
+    )
+    const { port } = await startServer({ authService, adminRepository })
+    const admin = await connectProbe(
+      port,
+      ORIGIN,
+      '/ws',
+      `hidden_session=${ADMIN_SESSION_TOKEN}`,
+    )
+    await admin.waitFor(PacketType.ID_ASSIGN)
+    const guest = await connectProbe(port)
+    await guest.waitFor(PacketType.ID_ASSIGN)
+    guest.send([0, PacketType.USER_INFO, 'Guest#4444'])
+    await guest.waitFor(PacketType.SERVER_RESPONSE)
+    const unnamed = await connectProbe(port)
+    await unnamed.waitFor(PacketType.ID_ASSIGN)
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/admin/stats`, {
+      headers: { Cookie: `hidden_session=${ADMIN_SESSION_TOKEN}` },
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      runtime: {
+        connections: 3,
+        onlinePlayers: 3,
+        namedPlayers: 2,
+        authenticatedPlayers: 1,
+        guestPlayers: 1,
+        queuedPlayers: 0,
+        pendingLobbies: 0,
+        activeMatches: 0,
+      },
+      storage: { accounts: 10, activeSessions: 3, matches: 20 },
+    })
+
+    admin.close()
+    guest.close()
+    unnamed.close()
+  })
+
   it('serves health and the React shell while restricting websocket upgrades', async () => {
     const { port } = await startServer()
 

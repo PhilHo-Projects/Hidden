@@ -7,6 +7,7 @@ const render = (overrides: Partial<Parameters<typeof ProfileMenu>[0]> = {}) =>
   renderToStaticMarkup(
     createElement(ProfileMenu, {
       username: 'Ecco',
+      role: 'player',
       busy: false,
       disabled: false,
       onSignOut: () => undefined,
@@ -51,6 +52,7 @@ describe('ProfileMenu', () => {
     const markup = renderToStaticMarkup(
       createElement(ProfileMenuPanel, {
         username: 'Ecco',
+        role: 'player',
         onOpenHistory: () => undefined,
         onSignOut: () => undefined,
       }),
@@ -62,5 +64,30 @@ describe('ProfileMenu', () => {
     expect(markup).toContain('Preferences')
     expect(markup.match(/disabled=""/g)).toHaveLength(2)
     expect(markup.match(/Soon/g)).toHaveLength(2)
+  })
+
+  it('shows the admin workspace only to administrator accounts', () => {
+    const player = renderToStaticMarkup(
+      createElement(ProfileMenuPanel, {
+        username: 'Player',
+        role: 'player',
+        onOpenAdmin: () => undefined,
+        onOpenHistory: () => undefined,
+        onSignOut: () => undefined,
+      }),
+    )
+    const admin = renderToStaticMarkup(
+      createElement(ProfileMenuPanel, {
+        username: 'PhilAdmin',
+        role: 'admin',
+        onOpenAdmin: () => undefined,
+        onOpenHistory: () => undefined,
+        onSignOut: () => undefined,
+      }),
+    )
+
+    expect(player).not.toContain('Admin workspace')
+    expect(admin).toContain('Admin workspace')
+    expect(admin).toContain('Matches, accounts, stats, and console')
   })
 })

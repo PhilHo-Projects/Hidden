@@ -10,6 +10,7 @@ this index does not.
 | What shipped and when | [JOURNAL.md](JOURNAL.md) | ~155 lines |
 | Why the rules engine is shaped this way | [specs/2026-08-03-game-mode-testbed-design.md](superpowers/specs/2026-08-03-game-mode-testbed-design.md) | ~245 lines |
 | Why static history is separate from replay | [specs/2026-08-08-durable-static-match-history-design.md](superpowers/specs/2026-08-08-durable-static-match-history-design.md) | ~90 lines |
+| Admin access, data boundaries, and workbench UX | [specs/2026-08-10-admin-workbench-design.md](superpowers/specs/2026-08-10-admin-workbench-design.md) | ~90 lines |
 
 `ROADMAP.md` alone is enough to pick up work. Everything else is background.
 

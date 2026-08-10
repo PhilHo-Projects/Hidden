@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import './animations/turn-focus.css'
+import { createAdminClient } from './admin/adminClient'
 import paperIcon from './assets/icons/battle/move-paper.png'
 import rockIcon from './assets/icons/battle/move-rock.png'
 import scissorsIcon from './assets/icons/battle/move-scissors.png'
@@ -11,6 +12,7 @@ import {
 } from './auth/authClient'
 import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
+import { AdminPanel } from './components/AdminPanel'
 import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
 import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
 import { MatchHistoryScreen } from './components/MatchHistory'
@@ -97,6 +99,7 @@ const pieces: ReadonlyArray<{
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 type DestructionEffectMap = Partial<Record<number, CellDestructionEffect>>
 const accountClient = createAuthClient()
+const adminClient = createAdminClient()
 const matchHistoryClient = createMatchHistoryClient()
 
 const wsUrl = () =>
@@ -137,6 +140,8 @@ function BrushButton({ children, className = '', tone = 'yellow', type = 'button
 function App() {
   const [screen, setScreen] = useState<Screen>('intro')
   const [howToPlayOpen, setHowToPlayOpen] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(false)
+  const [adminLockActive, setAdminLockActive] = useState(false)
   const [guestUsername] = useState(createGuestName)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authHydrated, setAuthHydrated] = useState(false)
@@ -638,6 +643,7 @@ function App() {
     setAuthError(null)
     try {
       await accountClient.logout()
+      setAdminOpen(false)
       closeClient()
       setAuthUser(null)
       setUsers([])
@@ -758,6 +764,26 @@ function App() {
     setAnnouncement('')
     setScreen('history')
   }, [])
+
+  const closeAdmin = useCallback(() => setAdminOpen(false), [])
+
+  const expireAdminSession = useCallback(() => {
+    closeClient()
+    setAuthUser(null)
+    setAdminOpen(false)
+    setUsers([])
+    setReadyLocked(false)
+    setMatch(null)
+    matchRef.current = null
+    setAuthError('Your session expired. Sign in again to use the admin workspace.')
+    setStatus({
+      tone: 'error',
+      label: 'SESSION EXPIRED',
+      detail: 'Sign in again to use the admin workspace.',
+    })
+    setAuthMode('login')
+    setScreen('account')
+  }, [closeClient])
 
   const startOffline = async () => {
     setStatus({
@@ -1083,6 +1109,11 @@ function App() {
     screen === 'battle' ||
     screen === 'results'
 
+  if (adminLockActive !== accountChangeLocked) {
+    setAdminLockActive(accountChangeLocked)
+    if (accountChangeLocked && adminOpen) setAdminOpen(false)
+  }
+
   return (
     <main className={`hidden-shell hidden-${screen}`}>
       {screen !== 'intro' ? (
@@ -1101,8 +1132,10 @@ function App() {
             {authUser ? (
               <ProfileMenu
                 username={authUser.username}
+                role={authUser.role}
                 busy={authBusy}
                 disabled={accountChangeLocked || screen === 'account'}
+                onOpenAdmin={() => setAdminOpen(true)}
                 onOpenHistory={openHistory}
                 onSignOut={() => void logout()}
               />
@@ -1594,6 +1627,12 @@ function App() {
       <HowToPlayModal
         open={howToPlayOpen}
         onClose={() => setHowToPlayOpen(false)}
+      />
+      <AdminPanel
+        open={adminOpen}
+        client={adminClient}
+        onClose={closeAdmin}
+        onSessionExpired={expireAdminSession}
       />
     </main>
   )
