@@ -13,7 +13,7 @@ import {
 import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { AdminPanel } from './components/AdminPanel'
-import { BoardGrid, type CellDestructionEffect } from './components/BoardGrid'
+import { BoardGrid } from './components/BoardGrid'
 import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
 import { MatchHistoryScreen } from './components/MatchHistory'
 import { PowerupTray } from './components/PowerupTray'
@@ -74,6 +74,7 @@ import {
   type UserEntry,
 } from './game/protocol'
 import type { EngineResult, GameState, MatchConfig, PowerupKey } from './game/types'
+import { useDestructionEffects } from './hooks/useDestructionEffects'
 import {
   createGuestName,
   getBackTarget,
@@ -97,7 +98,6 @@ const pieces: ReadonlyArray<{
 ]
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
-type DestructionEffectMap = Partial<Record<number, CellDestructionEffect>>
 const accountClient = createAuthClient()
 const adminClient = createAdminClient()
 const matchHistoryClient = createMatchHistoryClient()
@@ -176,7 +176,11 @@ function App() {
   const [turnTimeLeft, setTurnTimeLeft] = useState(0)
   const [clientId, setClientId] = useState<number | null>(null)
   const [onlineInputPending, setOnlineInputPending] = useState(false)
-  const [playerDestructionEffects, setPlayerDestructionEffects] = useState<DestructionEffectMap>({})
+  const {
+    playerDestructionEffects,
+    queueDestructionEffect,
+    clearDestructionEffects,
+  } = useDestructionEffects()
 
   const clientRef = useRef<NetworkClient | null>(null)
   const matchRef = useRef<GameState | null>(null)
@@ -184,8 +188,6 @@ function App() {
   const historyReturnScreenRef = useRef<Screen>('intro')
   const manualCloseRef = useRef(false)
   const onlineAuthorityRef = useRef<OnlineAuthorityState | null>(null)
-  const destructionSequenceRef = useRef(0)
-  const destructionTimeoutsRef = useRef<number[]>([])
   const countdownRunRef = useRef(0)
   const username = resolvePlayerName(authUser?.username, guestUsername)
 
@@ -237,37 +239,6 @@ function App() {
     return () => window.clearInterval(id)
   }, [screen])
 
-  useEffect(
-    () => () => {
-      for (const timeoutId of destructionTimeoutsRef.current) {
-        window.clearTimeout(timeoutId)
-      }
-    },
-    [],
-  )
-
-  /*
-   * Only the local player's own losses animate. Taking a square must not reveal
-   * that it destroyed anything, or placing becomes a free probe: you would learn
-   * the opponent held that cell without risking the information back. What you
-   * are entitled to notice is your own piece dying, and the desecrated tile it
-   * leaves behind tells you that much.
-   */
-  const queueDestructionEffect = useCallback((index: number) => {
-    const id = ++destructionSequenceRef.current
-
-    setPlayerDestructionEffects((current) => ({ ...current, [index]: { id, tone: 'loss' } }))
-    const timeoutId = window.setTimeout(() => {
-      setPlayerDestructionEffects((current) => {
-        if (current[index]?.id !== id) return current
-        const next = { ...current }
-        delete next[index]
-        return next
-      })
-    }, 620)
-    destructionTimeoutsRef.current.push(timeoutId)
-  }, [])
-
   const applyEngineResult = useCallback((result: EngineResult) => {
     matchRef.current = result.state
     setMatch(result.state)
@@ -299,7 +270,7 @@ function App() {
           )
       matchRef.current = base
       setMatch(base)
-      setPlayerDestructionEffects({})
+      clearDestructionEffects()
       setTurnTimeLeft(
         config.isOnline && onlineAuthorityRef.current
           ? getDisplayedTurnTimeMs(onlineAuthorityRef.current, performance.now()) / 1_000
@@ -331,7 +302,7 @@ function App() {
       )
       setScreen('battle')
     },
-    [applyEngineResult],
+    [applyEngineResult, clearDestructionEffects],
   )
 
   const enterSyncLost = useCallback((detail: string) => {
@@ -686,7 +657,7 @@ function App() {
     setTurnTimeLeft(0)
     setSearchSeconds(0)
     setClientId(null)
-    setPlayerDestructionEffects({})
+    clearDestructionEffects()
     setStatus({
       tone: 'neutral',
       label: authUser ? 'ACCOUNT' : 'GUEST',
@@ -696,7 +667,7 @@ function App() {
     })
     setAnnouncement('')
     setScreen('intro')
-  }, [authUser, closeClient, username])
+  }, [authUser, clearDestructionEffects, closeClient, username])
 
   const navigateBack = useCallback(() => {
     const current = screenRef.current
@@ -734,7 +705,7 @@ function App() {
       setOnlineInputPending(false)
       setCountdown('3')
       setTurnTimeLeft(0)
-      setPlayerDestructionEffects({})
+      clearDestructionEffects()
     }
 
     if (current === 'matchmaking' || current === 'ready' || isOnlineMatch) {
@@ -755,7 +726,7 @@ function App() {
 
     setStatus(nextStatus)
     setScreen(target)
-  }, [backHome, closeClient, username])
+  }, [backHome, clearDestructionEffects, closeClient, username])
 
   const openHistory = useCallback(() => {
     const current = screenRef.current
