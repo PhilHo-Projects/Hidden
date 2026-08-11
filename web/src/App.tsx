@@ -5,11 +5,7 @@ import paperIcon from './assets/icons/battle/move-paper.png'
 import rockIcon from './assets/icons/battle/move-rock.png'
 import scissorsIcon from './assets/icons/battle/move-scissors.png'
 import exitDoorIcon from './assets/icons/exit-door.png'
-import {
-  AuthApiError,
-  createAuthClient,
-  type AuthUser,
-} from './auth/authClient'
+import { createAuthClient } from './auth/authClient'
 import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { AdminPanel } from './components/AdminPanel'
@@ -72,6 +68,7 @@ import {
   type UserEntry,
 } from './game/protocol'
 import type { EngineResult, GameState, MatchConfig, PowerupKey } from './game/types'
+import { useAccountSession } from './hooks/useAccountSession'
 import { useDestructionEffects } from './hooks/useDestructionEffects'
 import { useLobbyBrowser } from './hooks/useLobbyBrowser'
 import {
@@ -135,11 +132,6 @@ function App() {
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminLockActive, setAdminLockActive] = useState(false)
   const [guestUsername] = useState(createGuestName)
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
-  const [authHydrated, setAuthHydrated] = useState(false)
-  const [authMode, setAuthMode] = useState<AccountMode>('register')
-  const [authBusy, setAuthBusy] = useState(false)
-  const [authError, setAuthError] = useState<string | null>(null)
   // One config object rather than one state hook per knob: the knob count grows
   // with every rule experiment, the call sites should not.
   const [config, setConfig] = useState<GameConfig>(DEFAULT_GAME_CONFIG)
@@ -171,6 +163,21 @@ function App() {
     label: 'GUEST',
     detail: 'Choose how you want to play.',
   })
+  const {
+    authUser,
+    authHydrated,
+    authMode,
+    authBusy,
+    authError,
+    prepareAccount,
+    submitAccount: submitAccountCredentials,
+    logoutAccount,
+    invalidateSession,
+  } = useAccountSession({
+    client: accountClient,
+    guestUsername,
+    onStatusChange: setStatus,
+  })
   const [announcement, setAnnouncement] = useState('')
   const [users, setUsers] = useState<UserEntry[]>([])
   const [readyLocked, setReadyLocked] = useState(false)
@@ -193,34 +200,6 @@ function App() {
   const onlineAuthorityRef = useRef<OnlineAuthorityState | null>(null)
   const countdownRunRef = useRef(0)
   const username = resolvePlayerName(authUser?.username, guestUsername)
-
-  useEffect(() => {
-    let active = true
-
-    void accountClient
-      .getSession()
-      .then((user) => {
-        if (!active) return
-        setAuthUser(user)
-        if (user) {
-          setStatus({
-            tone: 'success',
-            label: 'ACCOUNT',
-            detail: `Signed in as ${user.username}.`,
-          })
-        }
-      })
-      .catch(() => {
-        // Account availability must never block guest or offline play.
-      })
-      .finally(() => {
-        if (active) setAuthHydrated(true)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [])
 
   useEffect(() => {
     matchRef.current = match
@@ -559,85 +538,29 @@ function App() {
     setOnlineInputPending(false)
     setUsers([])
     setReadyLocked(false)
-    setAuthMode(mode)
-    setAuthError(null)
-    setStatus({
-      tone: 'neutral',
-      label: 'ACCOUNT',
-      detail: mode === 'register' ? 'Create a permanent player name.' : 'Return to your account.',
-    })
+    prepareAccount(mode)
     setScreen('account')
-  }, [closeClient])
+  }, [closeClient, prepareAccount])
 
   const submitAccount = useCallback(
     async (submittedUsername: string, password: string) => {
-      setAuthBusy(true)
-      setAuthError(null)
-      try {
-        const user =
-          authMode === 'register'
-            ? await accountClient.register(submittedUsername, password)
-            : await accountClient.login(submittedUsername, password)
-        setAuthUser(user)
-        setStatus({
-          tone: 'success',
-          label: 'ACCOUNT',
-          detail: `Signed in as ${user.username}.`,
-        })
-        setScreen('mode-select')
-      } catch (cause) {
-        const message =
-          cause instanceof AuthApiError
-            ? cause.message
-            : 'Accounts are temporarily unavailable.'
-        setAuthError(message)
-        setStatus({
-          tone: 'error',
-          label: 'ACCOUNT ERROR',
-          detail: message,
-        })
-        throw cause
-      } finally {
-        setAuthBusy(false)
-      }
+      await submitAccountCredentials(submittedUsername, password)
+      setScreen('mode-select')
     },
-    [authMode],
+    [submitAccountCredentials],
   )
 
   const logout = useCallback(async () => {
-    setAuthBusy(true)
-    setAuthError(null)
-    try {
-      await accountClient.logout()
-      setAdminOpen(false)
-      closeClient()
-      setAuthUser(null)
-      setUsers([])
-      setReadyLocked(false)
-      setMatch(null)
-      matchRef.current = null
-      setStatus({
-        tone: 'neutral',
-        label: 'GUEST',
-        detail: `Playing as ${guestUsername}.`,
-      })
-      setAnnouncement('')
-      setScreen('intro')
-    } catch (cause) {
-      const message =
-        cause instanceof AuthApiError
-          ? cause.message
-          : 'Accounts are temporarily unavailable.'
-      setAuthError(message)
-      setStatus({
-        tone: 'error',
-        label: 'LOGOUT ERROR',
-        detail: message,
-      })
-    } finally {
-      setAuthBusy(false)
-    }
-  }, [closeClient, guestUsername])
+    if (!await logoutAccount()) return
+    setAdminOpen(false)
+    closeClient()
+    setUsers([])
+    setReadyLocked(false)
+    setMatch(null)
+    matchRef.current = null
+    setAnnouncement('')
+    setScreen('intro')
+  }, [closeClient, logoutAccount])
 
   const backHome = useCallback(() => {
     countdownRunRef.current += 1
@@ -735,21 +658,19 @@ function App() {
 
   const expireAdminSession = useCallback(() => {
     closeClient()
-    setAuthUser(null)
+    invalidateSession('Your session expired. Sign in again to use the admin workspace.')
     setAdminOpen(false)
     setUsers([])
     setReadyLocked(false)
     setMatch(null)
     matchRef.current = null
-    setAuthError('Your session expired. Sign in again to use the admin workspace.')
     setStatus({
       tone: 'error',
       label: 'SESSION EXPIRED',
       detail: 'Sign in again to use the admin workspace.',
     })
-    setAuthMode('login')
     setScreen('account')
-  }, [closeClient])
+  }, [closeClient, invalidateSession])
 
   const startOffline = async () => {
     setStatus({
@@ -1191,7 +1112,7 @@ function App() {
         <MatchHistoryScreen
           client={matchHistoryClient}
           onSignIn={() => {
-            setAuthUser(null)
+            invalidateSession()
             openAccount('login')
           }}
         />
