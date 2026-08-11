@@ -7,8 +7,14 @@ The repository contains only the browser game and its multiplayer service:
 
 - `web/` — React 19, TypeScript, and Vite 8.
 - `server/` — Express 5, `ws` 8, and MessagePack 3.
+- `packages/game-core/` — the dependency-free deterministic classic engine
+  shared by browser and server.
 - `Dockerfile` — a multi-stage Node 24 image that serves both the compiled app
   and WebSocket endpoint.
+
+Current direction is in [`docs/ROADMAP.md`](docs/ROADMAP.md). Read
+[`docs/README.md`](docs/README.md) for the shortest route to other project
+documentation.
 
 ## Run locally
 
