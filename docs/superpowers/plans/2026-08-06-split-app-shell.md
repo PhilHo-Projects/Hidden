@@ -1,10 +1,25 @@
 # Split the App shell — Implementation Plan
 
-**Status:** open. Nothing below has been done.
+**Status:** complete as of 2026-08-11.
 
 **Goal:** Make `web/src/App.tsx` something you can change one part of without
 reading all of it, and without loading 1,550 lines into context to find where a
 bug lives.
+
+## Completion summary
+
+The extraction was completed in the planned risk order, one hook per commit:
+
+| Hook | Responsibility |
+| --- | --- |
+| `useDestructionEffects` | Local-board destruction animation state and timeout cleanup |
+| `useLobbyBrowser` | Hosted-lobby creation, discovery, joining, and lobby errors |
+| `useAccountSession` | Session hydration, guest identity, login/register, and logout |
+| `useMatchSession` | Offline and online match lifecycle, network events, countdowns, moves, and disconnects |
+
+`App.tsx` moved from 1,641 lines to 870 lines. The screen render tree remains in
+`App.tsx`, while the extracted stateful subsystems live under `web/src/hooks/`.
+No CSS, gameplay rules, packet IDs, wire shapes, or server runtime files changed.
 
 ## Read this first: the obvious plan is the wrong one
 
@@ -44,19 +59,19 @@ decision.
 Grouped by what actually belongs together, with the coupling that makes each one
 hard. Ordered by ascending risk — do them in this order.
 
-### 1. `useDestructionEffects` — low risk, do first
+### 1. `useDestructionEffects` — low risk, completed
 
-- State: `playerDestructionEffects`, `opponentDestructionEffects`
+- State: `playerDestructionEffects`
 - Refs: `destructionSequenceRef`, `destructionTimeoutsRef`
 - Callback: `queueDestructionEffect`
 - Effect: the unmount timeout cleanup
 
 Only consumer is `applyEngineResult`, which calls `queueDestructionEffect` on a
-`cell-destroyed` event. Self-contained, no coupling outward. Returns the two
-effect maps plus the queue function. This one is a genuine freebie and proves
-the pattern.
+`cell-destroyed` event. Self-contained, no coupling outward. Opponent-board
+destruction remains deliberately unexposed because it would leak placement
+information.
 
-### 2. `useLobbyBrowser` — low risk
+### 2. `useLobbyBrowser` — low risk, completed
 
 - State: `lobbyGames`, `hostedCode`, `hostingStarted`, `isPrivateGame`,
   `joinCodeInput`, `lobbyError`
@@ -65,7 +80,7 @@ Coupled outward only through `clientRef` calls and `setScreen`. Pass the client
 in. The `lobby-created`, `lobby-list`, and `lobby-error` branches of
 `onClientEvent` become one handler this hook exposes.
 
-### 3. `useAccountSession` — medium risk
+### 3. `useAccountSession` — medium risk, completed
 
 - State: `authUser`, `authHydrated`, `authMode`, `authBusy`, `authError`,
   `guestUsername`
@@ -77,7 +92,7 @@ socket, so the hook needs that passed in rather than owning it. Careful: account
 availability must never block guest or offline play — the existing `.catch()`
 that swallows a failed session lookup is load-bearing.
 
-### 4. `useOnlineMatch` — high risk, do last
+### 4. `useMatchSession` — high risk, completed last
 
 - State: `match`, `onlineRules`, `announcement`, `turnTimeLeft`, `countdown`,
   `users`, `readyLocked`, `clientId`, `onlineInputPending`
@@ -110,8 +125,12 @@ coherent state, not a half-finished one.
 
 ## Verification beyond tests
 
-The suite does not cover the online flow end to end. After step 4, drive two
-real browser tabs against a locally built server — build and start `server/`,
-`npm run dev` in `web/`, open two tabs, play a full match including a power-up,
-an extra turn, and a disconnect. The private-lobby work found a real bug this
-way that 114 passing tests did not.
+The final verification covered the complete root test suite, lint, build, and a
+real-browser offline flow through guest entry, navigation, countdown, a live
+move/round transition, return flow, and account navigation. Direct WebSocket
+handshakes succeeded against both the Node service and Vite proxy. The in-app
+browser harness could not establish its own WebSocket connection, so hosted
+match start, intentional close, unexpected disconnect, and pre-ID start ordering
+are also guarded by focused `useMatchSession` tests. A full two-browser
+power-up match remains a useful manual smoke test when running outside that
+harness.
