@@ -314,6 +314,21 @@
   .marker { position: absolute; inset: 0; display: grid; place-items: center; }
   .marker span { width: 1.1rem; height: 1.1rem; border-radius: 999px; background: #f5f5f5; box-shadow: 0 0 18px rgba(255,255,255,0.58); }
 
+  /*
+   * Before/after. Memory is a bad instrument for colour: once a palette has been
+   * on screen for a day it becomes the baseline, and a real change reads as no
+   * change at all. The only honest test is the two of them touching.
+   */
+  .ab-pairs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.4rem; }
+  .ab-pair { display: grid; gap: 0.45rem; }
+  .ab-cells { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .ab-pair .cell { border-radius: 0; }
+  .ab-label { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.62rem; }
+  .ab-label span:first-child { color: rgba(255,255,255,0.42); }
+  .ab-label span:last-child { color: var(--yellow); }
+  .ab-title { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.75); }
+  .ab-delta { color: rgba(255,255,255,0.4); font-size: 0.6rem; font-weight: 400; }
+
   /* ---------- texture comparison ---------- */
 
   .tex-row { grid-template-columns: 11rem minmax(0, 1fr); }
@@ -399,6 +414,12 @@
     </div>
   </div>
 
+  <h2>Before / after <span>— the previous palette against the current selection</span></h2>
+  <div class="row simulated" id="ab-row">
+    <div class="row-head"><h3>A / B</h3><p>side by side</p></div>
+    <div class="ab-pairs" id="ab"></div>
+  </div>
+
   <h2>Green <span>— rock</span></h2>
   <div class="row simulated" data-row="green"><div class="row-head"><h3>Green</h3><p>rock</p></div><div class="swatches"></div></div>
 
@@ -468,6 +489,26 @@ const PALETTE = {
     ['linear-gradient(150deg, #b9b2a4, #6e685c)', 'Dead bone'],
   ],
 };
+
+/*
+ * The palette this replaced. Kept so the repaint can be judged against
+ * something: once a colour has been on screen for a day it becomes the
+ * baseline, and a real change starts reading as no change at all. Two swatches
+ * touching settles in a second what memory argues about for ten minutes.
+ */
+const WAS = {
+  green: '#A6E22E',
+  blue: '#4591DB',
+  red: '#CC3941',
+  desec: 'linear-gradient(150deg, #6b4a2f, #3d2917)',
+};
+
+const AB = [
+  ['green', 'rock', 'hue 75° → 113°'],
+  ['blue', 'paper', 'hue 210° → 228°'],
+  ['red', 'scissors', 'hue 356° → 0°, sat 57% → 70%'],
+  ['desec', 'spoiled', 'brown → cold slate'],
+];
 
 const TEXTURES = [
   ['none', 'flat fill', 'what ships today'],
@@ -548,9 +589,31 @@ function buildTextures() {
     </div>`).join('');
 }
 
+/*
+ * Both halves are drawn with the same cut, so the only thing that differs
+ * between them is the colour. A different polygon on each side would be one
+ * more variable in a comparison that exists to isolate exactly one.
+ */
+function buildAb() {
+  const hexes = (value) => (value.match(/#[0-9a-f]{6}/gi) || []).join(' → ');
+
+  document.getElementById('ab').innerHTML = AB.map(([family, label, delta]) => {
+    const desec = family === 'desec';
+    return `<div class="ab-pair">
+      <div class="ab-title">${label} <span class="ab-delta">${delta}</span></div>
+      <div class="ab-cells">
+        ${cellHtml(WAS[family], 0, { desec })}
+        ${cellHtml(picked[family], 0, { desec })}
+      </div>
+      <div class="ab-label"><span>was ${hexes(WAS[family])}</span><span>${hexes(picked[family])}</span></div>
+    </div>`;
+  }).join('');
+}
+
 function renderAll() {
   Object.keys(PALETTE).forEach(buildRow);
   buildBoard();
+  buildAb();
   buildTextures();
 }
 
