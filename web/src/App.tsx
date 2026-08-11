@@ -29,48 +29,16 @@ import {
 import { COLOR_BY_SYMBOL } from './game/constants'
 import { createMatchHistoryClient } from './history/historyClient'
 import {
-  applyOnlinePresentation,
-  applyOfflineLocalMove,
-  applyOfflinePowerup,
-  applyOfflineShieldSelection,
-  createOfflineState,
-  createOnlinePresentedState,
-  forceOfflineTimeout,
-  playOfflineBotTurn,
-  selectSymbol,
-  startOfflineMatch,
-} from './game/coreAdapter'
-import { NetworkClient, resolveWebSocketUrl, type ClientEvent } from './game/networkClient'
-import {
   clampGameConfig,
   clampOnlineGameConfig,
   DEFAULT_GAME_CONFIG,
   type ClassicSymbol,
   type GameConfig,
 } from '@hidden/game-core'
-import {
-  createOnlineMatchConfig,
-  isOnlineTerminalScreen,
-  MATCH_COUNTDOWN_STEPS,
-  restartMatch,
-  shouldResolveTimeoutLocally,
-  tryMarkOnlineTerminalScreen,
-} from './game/onlineMatch'
-import {
-  applyOnlineUpdate,
-  createOnlineAuthority,
-  getDisplayedTurnTimeMs,
-  queueOnlineCommand,
-  type OnlineAuthorityState,
-} from './game/onlineAuthority'
-import {
-  LOBBY_ROOM_ID,
-  type UserEntry,
-} from './game/protocol'
-import type { EngineResult, GameState, MatchConfig, PowerupKey } from './game/types'
 import { useAccountSession } from './hooks/useAccountSession'
 import { useDestructionEffects } from './hooks/useDestructionEffects'
 import { useLobbyBrowser } from './hooks/useLobbyBrowser'
+import { useMatchSession } from './hooks/useMatchSession'
 import {
   createGuestName,
   getBackTarget,
@@ -93,25 +61,9 @@ const pieces: ReadonlyArray<{
   { symbol: 'scissors', label: 'Scissors', icon: scissorsIcon },
 ]
 
-const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 const accountClient = createAuthClient()
 const adminClient = createAdminClient()
 const matchHistoryClient = createMatchHistoryClient()
-
-const wsUrl = () =>
-  resolveWebSocketUrl({
-    override: import.meta.env.VITE_WS_URL,
-    protocol: window.location.protocol,
-    host: window.location.host,
-  })
-
-function makeConfig(
-  config: GameConfig,
-  isOnline: boolean,
-  hasAI: boolean,
-): MatchConfig {
-  return { ...config, isOnline, hasAI }
-}
 
 interface BrushButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode
@@ -156,8 +108,6 @@ function App() {
     // Clamping here means the UI cannot produce an invalid config, so the
     // server clamp becomes a defence rather than the only guard.
     setConfig((current) => clampGameConfig({ ...current, ...patch }))
-  const [onlineRules, setOnlineRules] = useState<GameConfig | null>(null)
-  const [match, setMatch] = useState<GameState | null>(null)
   const [status, setStatus] = useState<UiStatus>({
     tone: 'neutral',
     label: 'GUEST',
@@ -178,369 +128,67 @@ function App() {
     guestUsername,
     onStatusChange: setStatus,
   })
-  const [announcement, setAnnouncement] = useState('')
-  const [users, setUsers] = useState<UserEntry[]>([])
-  const [readyLocked, setReadyLocked] = useState(false)
-  const [countdown, setCountdown] = useState('3')
-  const [searchSeconds, setSearchSeconds] = useState(0)
-  const [turnTimeLeft, setTurnTimeLeft] = useState(0)
-  const [clientId, setClientId] = useState<number | null>(null)
-  const [onlineInputPending, setOnlineInputPending] = useState(false)
   const {
     playerDestructionEffects,
     queueDestructionEffect,
     clearDestructionEffects,
   } = useDestructionEffects()
 
-  const clientRef = useRef<NetworkClient | null>(null)
-  const matchRef = useRef<GameState | null>(null)
   const screenRef = useRef<Screen>('intro')
   const historyReturnScreenRef = useRef<Screen>('intro')
-  const manualCloseRef = useRef(false)
-  const onlineAuthorityRef = useRef<OnlineAuthorityState | null>(null)
-  const countdownRunRef = useRef(0)
+  const {
+    onlineRules,
+    match,
+    announcement,
+    users,
+    readyLocked,
+    countdown,
+    searchSeconds,
+    turnTimeLeft,
+    clientId,
+    onlineInputPending,
+    clearAnnouncement,
+    resetForAccountChange,
+    resetForHome,
+    resetForNavigation,
+    startOffline,
+    hostGame,
+    findGames,
+    leaveLobbyScreen,
+    startOnline,
+    joinLobbyGame,
+    ready: onReady,
+    playAgain: onAgain,
+    selectSymbol: onSelectSymbol,
+    selectCell: onCellSelect,
+    activatePowerup: onPowerup,
+  } = useMatchSession({
+    screen,
+    screenRef,
+    setScreen,
+    setStatus,
+    clearDestructionEffects,
+    queueDestructionEffect,
+    lobby: {
+      clearLobbyError,
+      beginHosting,
+      beginBrowsing,
+      clearForMatchFound: clearLobbyForMatchFound,
+      leaveLobby,
+      handleClientEvent: handleLobbyClientEvent,
+    },
+  })
   const username = resolvePlayerName(authUser?.username, guestUsername)
-
-  useEffect(() => {
-    matchRef.current = match
-  }, [match])
 
   useEffect(() => {
     screenRef.current = screen
   }, [screen])
 
-  useEffect(() => {
-    if (!announcement) return
-    const id = window.setTimeout(() => setAnnouncement(''), 2400)
-    return () => window.clearTimeout(id)
-  }, [announcement])
-
-  useEffect(() => {
-    if (screen !== 'matchmaking') return
-    const id = window.setInterval(() => setSearchSeconds((value) => value + 1), 1000)
-    return () => window.clearInterval(id)
-  }, [screen])
-
-  const applyEngineResult = useCallback((result: EngineResult) => {
-    matchRef.current = result.state
-    setMatch(result.state)
-    const messages = result.events.filter((event) => event.type === 'announcement').map((event) => event.message)
-    if (messages.length > 0) setAnnouncement(messages.join(' / '))
-
-    for (const event of result.events) {
-      if (event.type === 'cell-destroyed' && event.board === 'player') {
-        queueDestructionEffect(event.index)
-      }
-      if (event.type === 'game-over') {
-        countdownRunRef.current += 1
-        setScreen('results')
-      }
-    }
-  }, [queueDestructionEffect])
-
-  const beginCountdown = useCallback(
-    async (
-      config: MatchConfig,
-      isMyTurn: boolean,
-      preparedOnlineState?: GameState,
-    ) => {
-      const runId = ++countdownRunRef.current
-      const base = preparedOnlineState ?? createOfflineState(
-            config,
-            isMyTurn,
-            crypto.getRandomValues(new Uint32Array(1))[0] ?? 0,
-          )
-      matchRef.current = base
-      setMatch(base)
-      clearDestructionEffects()
-      setTurnTimeLeft(
-        config.isOnline && onlineAuthorityRef.current
-          ? getDisplayedTurnTimeMs(onlineAuthorityRef.current, performance.now()) / 1_000
-          : config.turnSeconds,
-      )
-      setScreen('countdown')
-
-      for (const step of MATCH_COUNTDOWN_STEPS) {
-        if (runId !== countdownRunRef.current) return
-        setCountdown(step.label)
-        await sleep(step.durationMs)
-      }
-
-      if (runId !== countdownRunRef.current) return
-      const authority = onlineAuthorityRef.current
-      if (config.isOnline && (!authority || authority.status === 'sync-lost')) return
-      const started = config.isOnline
-        ? applyOnlinePresentation(
-            { ...(matchRef.current ?? base), phase: 'battle' },
-            authority!.canonical,
-            [],
-          )
-        : startOfflineMatch(base)
-      applyEngineResult(started)
-      setTurnTimeLeft(
-        config.isOnline
-          ? getDisplayedTurnTimeMs(authority!, performance.now()) / 1_000
-          : config.turnSeconds,
-      )
-      setScreen('battle')
-    },
-    [applyEngineResult, clearDestructionEffects],
-  )
-
-  const enterSyncLost = useCallback((detail: string) => {
-    if (!tryMarkOnlineTerminalScreen(screenRef, 'sync-lost')) return
-    const authority = onlineAuthorityRef.current
-    if (authority) {
-      onlineAuthorityRef.current = {
-        ...authority,
-        status: 'sync-lost',
-        syncLostReason: detail,
-        pending: null,
-      }
-    }
-    countdownRunRef.current += 1
-    setStatus({ tone: 'error', label: 'SYNC LOST', detail })
-    setAnnouncement('')
-    setScreen('sync-lost')
-    setOnlineInputPending(false)
-  }, [])
-
-  const onClientEvent = useCallback(
-    (event: ClientEvent) => {
-      if (event.type === 'open') {
-        setStatus({
-          tone: 'working',
-          label: 'CONNECTED',
-          detail: 'Syncing your player profile…',
-        })
-        return
-      }
-
-      if (event.type === 'close') {
-        if (manualCloseRef.current || screenRef.current === 'intro') {
-          manualCloseRef.current = false
-          return
-        }
-        if (!tryMarkOnlineTerminalScreen(screenRef, 'disconnected')) return
-        const authority = onlineAuthorityRef.current
-        if (authority) {
-          onlineAuthorityRef.current = { ...authority, pending: null }
-        }
-        setOnlineInputPending(false)
-        setStatus({
-          tone: 'error',
-          label: 'CONNECTION LOST',
-          detail: event.reason,
-        })
-        setScreen('disconnected')
-        return
-      }
-
-      if (event.type === 'error') {
-        setStatus({
-          tone: 'error',
-          label: 'CONNECTION ERROR',
-          detail: event.message,
-        })
-        return
-      }
-
-      if (event.type === 'sync-lost') {
-        enterSyncLost(event.message)
-        return
-      }
-
-      if (event.type === 'assigned-id') {
-        setClientId(event.clientId)
-        setStatus({
-          tone: 'working',
-          label: 'CONNECTED',
-          detail: `Client #${event.clientId} assigned. Syncing player profile…`,
-        })
-        return
-      }
-
-      if (event.type === 'users') {
-        setUsers(event.users)
-        return
-      }
-
-      if (handleLobbyClientEvent(event)) return
-
-      if (event.type === 'match-found') {
-        clearLobbyForMatchFound()
-        setOnlineRules(event.config)
-        setReadyLocked(false)
-        setStatus({
-          tone: 'success',
-          label: 'MATCH FOUND',
-          detail: 'Opponent connected. Ready up.',
-        })
-        setAnnouncement('')
-        setScreen('ready')
-        return
-      }
-
-      if (event.type === 'game-start') {
-        const localClientId = clientRef.current?.clientId
-        if (localClientId === null || localClientId === undefined) {
-          enterSyncLost('The match started before client identity was assigned.')
-          return
-        }
-        let authority: OnlineAuthorityState
-        try {
-          authority = createOnlineAuthority(
-            event.descriptor,
-            event.firstPlayerId,
-            localClientId,
-            performance.now(),
-          )
-        } catch {
-          enterSyncLost('This match mode cannot be safely started.')
-          return
-        }
-        onlineAuthorityRef.current = authority
-        setOnlineInputPending(false)
-        setOnlineRules(event.descriptor.config)
-        const config = createOnlineMatchConfig(event.descriptor.config)
-        const presented = createOnlinePresentedState(
-          config,
-          authority.canonical,
-          authority.localSeat,
-        )
-        setStatus({
-          tone: 'success',
-          label: 'STARTING',
-          detail: 'Both players are ready.',
-        })
-        void beginCountdown(config, presented.isMyTurn, presented)
-        return
-      }
-
-      if (event.type === 'game-update') {
-        if (isOnlineTerminalScreen(screenRef.current)) return
-        const authority = onlineAuthorityRef.current
-        const currentMatch = matchRef.current
-        if (!authority || !currentMatch) {
-          enterSyncLost('An authoritative update arrived before the match was ready.')
-          return
-        }
-        const result = applyOnlineUpdate(authority, event.update, performance.now())
-        onlineAuthorityRef.current = result.state
-        setOnlineInputPending(result.state.pending !== null)
-        if (result.state.status === 'sync-lost') {
-          enterSyncLost(result.state.syncLostReason ?? 'The match could not stay synchronized.')
-          return
-        }
-        setTurnTimeLeft(getDisplayedTurnTimeMs(result.state, performance.now()) / 1_000)
-        if (result.message) setAnnouncement(result.message)
-        if (event.update.status === 'accepted') {
-          applyEngineResult(
-            applyOnlinePresentation(
-              currentMatch,
-              result.state.canonical,
-              result.events,
-              result.clearLocalSelection,
-            ),
-          )
-        }
-        return
-      }
-
-      if (!matchRef.current) return
-
-      if (event.type === 'opponent-disconnected') {
-        if (!tryMarkOnlineTerminalScreen(screenRef, 'disconnected')) return
-        const authority = onlineAuthorityRef.current
-        if (authority) {
-          onlineAuthorityRef.current = { ...authority, pending: null }
-        }
-        setOnlineInputPending(false)
-        setStatus({
-          tone: 'error',
-          label: 'OPPONENT LEFT',
-          detail: 'Your opponent disconnected.',
-        })
-        setScreen('disconnected')
-      }
-    },
-    [
-      applyEngineResult,
-      beginCountdown,
-      clearLobbyForMatchFound,
-      enterSyncLost,
-      handleLobbyClientEvent,
-    ],
-  )
-
-  const onTimeout = useCallback(() => {
-    if (!matchRef.current) return
-    if (!shouldResolveTimeoutLocally(matchRef.current.config)) return
-    applyEngineResult(forceOfflineTimeout(matchRef.current))
-  }, [applyEngineResult])
-
-  const onAiTurn = useCallback(() => {
-    if (!matchRef.current) return
-    applyEngineResult(playOfflineBotTurn(matchRef.current))
-  }, [applyEngineResult])
-
-  useEffect(() => {
-    if (screen !== 'battle' || !match || match.phase !== 'battle') return
-    if (match.config.isOnline) {
-      const id = window.setInterval(() => {
-        const authority = onlineAuthorityRef.current
-        if (!authority) return
-        setTurnTimeLeft(getDisplayedTurnTimeMs(authority, performance.now()) / 1_000)
-      }, 100)
-      return () => window.clearInterval(id)
-    }
-    if (!match.isMyTurn) return
-    const startedAt = performance.now()
-    const id = window.setInterval(() => {
-      const remaining = Math.max(0, match.config.turnSeconds - (performance.now() - startedAt) / 1000)
-      setTurnTimeLeft(remaining)
-      if (remaining <= 0) {
-        window.clearInterval(id)
-        onTimeout()
-      }
-    }, 100)
-    return () => window.clearInterval(id)
-  }, [screen, match, onTimeout])
-
-  useEffect(() => {
-    if (screen !== 'battle' || !match || match.phase !== 'battle' || match.isMyTurn || !match.config.hasAI || match.config.isOnline) return
-    const id = window.setTimeout(() => onAiTurn(), 650)
-    return () => window.clearTimeout(id)
-  }, [screen, match, onAiTurn])
-
-  const closeClient = useCallback(() => {
-    const client = clientRef.current
-    if (!client) return
-
-    manualCloseRef.current = true
-    try {
-      client.cancelMatchmaking()
-    } catch {
-      // The socket may already be closed.
-    }
-    client.close('Returning to Hidden')
-    clientRef.current = null
-    onlineAuthorityRef.current = null
-    setOnlineInputPending(false)
-  }, [])
-
   const openAccount = useCallback((mode: AccountMode) => {
-    countdownRunRef.current += 1
-    closeClient()
-    setMatch(null)
-    matchRef.current = null
-    onlineAuthorityRef.current = null
-    setOnlineInputPending(false)
-    setUsers([])
-    setReadyLocked(false)
+    resetForAccountChange()
     prepareAccount(mode)
     setScreen('account')
-  }, [closeClient, prepareAccount])
+  }, [prepareAccount, resetForAccountChange])
 
   const submitAccount = useCallback(
     async (submittedUsername: string, password: string) => {
@@ -553,29 +201,12 @@ function App() {
   const logout = useCallback(async () => {
     if (!await logoutAccount()) return
     setAdminOpen(false)
-    closeClient()
-    setUsers([])
-    setReadyLocked(false)
-    setMatch(null)
-    matchRef.current = null
-    setAnnouncement('')
+    resetForAccountChange(true)
     setScreen('intro')
-  }, [closeClient, logoutAccount])
+  }, [logoutAccount, resetForAccountChange])
 
   const backHome = useCallback(() => {
-    countdownRunRef.current += 1
-    closeClient()
-    setUsers([])
-    setReadyLocked(false)
-    setMatch(null)
-    matchRef.current = null
-    onlineAuthorityRef.current = null
-    setOnlineInputPending(false)
-    setCountdown('3')
-    setTurnTimeLeft(0)
-    setSearchSeconds(0)
-    setClientId(null)
-    clearDestructionEffects()
+    resetForHome()
     setStatus({
       tone: 'neutral',
       label: authUser ? 'ACCOUNT' : 'GUEST',
@@ -583,24 +214,22 @@ function App() {
         ? `Signed in as ${username}.`
         : 'Choose how you want to play.',
     })
-    setAnnouncement('')
     setScreen('intro')
-  }, [authUser, clearDestructionEffects, closeClient, username])
+  }, [authUser, resetForHome, username])
 
   const navigateBack = useCallback(() => {
     const current = screenRef.current
 
     if (current === 'history') {
-      setAnnouncement('')
+      clearAnnouncement()
       setScreen(historyReturnScreenRef.current)
       return
     }
 
-    const currentMatch = matchRef.current
     const isOnlineMatch =
       current === 'disconnected' ||
       current === 'sync-lost' ||
-      currentMatch?.config.isOnline === true
+      match?.config.isOnline === true
     const target = getBackTarget(current, isOnlineMatch)
 
     if (target === 'intro') {
@@ -608,33 +237,7 @@ function App() {
       return
     }
 
-    const leavingActiveMatch =
-      current === 'countdown' ||
-      current === 'battle' ||
-      current === 'results' ||
-      current === 'disconnected' ||
-      current === 'sync-lost'
-
-    if (leavingActiveMatch) {
-      countdownRunRef.current += 1
-      setMatch(null)
-      matchRef.current = null
-      onlineAuthorityRef.current = null
-      setOnlineInputPending(false)
-      setCountdown('3')
-      setTurnTimeLeft(0)
-      clearDestructionEffects()
-    }
-
-    if (current === 'matchmaking' || current === 'ready' || isOnlineMatch) {
-      closeClient()
-      setUsers([])
-      setReadyLocked(false)
-      setSearchSeconds(0)
-      setClientId(null)
-    }
-
-    setAnnouncement('')
+    resetForNavigation(current, isOnlineMatch)
     const nextStatus: UiStatus =
       target === 'online-menu'
         ? { tone: 'neutral', label: 'ONLINE', detail: `Ready to connect as ${username}.` }
@@ -644,293 +247,29 @@ function App() {
 
     setStatus(nextStatus)
     setScreen(target)
-  }, [backHome, clearDestructionEffects, closeClient, username])
+  }, [backHome, clearAnnouncement, match, resetForNavigation, username])
 
   const openHistory = useCallback(() => {
     const current = screenRef.current
     if (current === 'history') return
     historyReturnScreenRef.current = current
-    setAnnouncement('')
+    clearAnnouncement()
     setScreen('history')
-  }, [])
+  }, [clearAnnouncement])
 
   const closeAdmin = useCallback(() => setAdminOpen(false), [])
 
   const expireAdminSession = useCallback(() => {
-    closeClient()
+    resetForAccountChange()
     invalidateSession('Your session expired. Sign in again to use the admin workspace.')
     setAdminOpen(false)
-    setUsers([])
-    setReadyLocked(false)
-    setMatch(null)
-    matchRef.current = null
     setStatus({
       tone: 'error',
       label: 'SESSION EXPIRED',
       detail: 'Sign in again to use the admin workspace.',
     })
     setScreen('account')
-  }, [closeClient, invalidateSession])
-
-  const startOffline = async () => {
-    setStatus({
-      tone: 'success',
-      label: 'OFFLINE',
-      detail: 'Practice bot ready.',
-    })
-    setAnnouncement('Battle starting.')
-    await beginCountdown(makeConfig(config, false, true), true)
-  }
-
-  // Connect, identify, and enter the lobby room. Shared by Quick Match and both
-  // private-lobby screens so they cannot drift apart.
-  const connectAndEnterLobby = async () => {
-    const client = new NetworkClient()
-    client.subscribe((event) => onClientEvent(event))
-    clientRef.current = client
-
-    await client.connect(wsUrl())
-    setStatus({
-      tone: 'working',
-      label: 'CONNECTED',
-      detail: `Registering ${username}…`,
-    })
-    const named = await client.sendUserName(username)
-    if (!named) throw new Error('Username rejected.')
-    const joined = await client.joinRoom(LOBBY_ROOM_ID)
-    if (!joined) throw new Error('Could not join the lobby.')
-    return client
-  }
-
-  const resetOnlineState = () => {
-    setUsers([])
-    setReadyLocked(false)
-    setSearchSeconds(0)
-    setAnnouncement('')
-    onlineAuthorityRef.current = null
-    setOnlineInputPending(false)
-    setOnlineRules(null)
-    clearLobbyError()
-  }
-
-  const hostGame = async () => {
-    resetOnlineState()
-    beginHosting()
-    setStatus({
-      tone: 'working',
-      label: 'CONNECTING',
-      detail: 'Reaching the Hidden server…',
-    })
-    setScreen('lobby-create')
-    try {
-      const client = await connectAndEnterLobby()
-      client.createLobbyGame(config, isPrivateGame)
-      setStatus({
-        tone: 'working',
-        label: 'HOSTING',
-        detail: 'Waiting for a player to join…',
-      })
-    } catch (cause) {
-      closeClient()
-      setScreen('online-menu')
-      setStatus({
-        tone: 'error',
-        label: 'OFFLINE',
-        detail: cause instanceof Error ? cause.message : 'Could not host a game.',
-      })
-    }
-  }
-
-  const findGames = async () => {
-    resetOnlineState()
-    beginBrowsing()
-    setStatus({
-      tone: 'working',
-      label: 'CONNECTING',
-      detail: 'Reaching the Hidden server…',
-    })
-    setScreen('lobby-find')
-    try {
-      const client = await connectAndEnterLobby()
-      client.subscribeLobby(true)
-      setStatus({
-        tone: 'neutral',
-        label: 'LOBBY',
-        detail: 'Pick a game to join.',
-      })
-    } catch (cause) {
-      closeClient()
-      setScreen('online-menu')
-      setStatus({
-        tone: 'error',
-        label: 'OFFLINE',
-        detail: cause instanceof Error ? cause.message : 'Could not open the lobby.',
-      })
-    }
-  }
-
-  const leaveLobbyScreen = () => {
-    clientRef.current?.cancelLobbyGame()
-    closeClient()
-    leaveLobby()
-    setScreen('online-menu')
-    setStatus({ tone: 'neutral', label: 'ONLINE', detail: 'Choose how to play.' })
-  }
-
-  const startOnline = async () => {
-    setUsers([])
-    setReadyLocked(false)
-    setSearchSeconds(0)
-    setStatus({
-      tone: 'working',
-      label: 'CONNECTING',
-      detail: 'Reaching the Hidden server…',
-    })
-    setAnnouncement('')
-    onlineAuthorityRef.current = null
-    setOnlineInputPending(false)
-    setOnlineRules(null)
-    setScreen('matchmaking')
-
-    const client = new NetworkClient()
-    client.subscribe((event) => onClientEvent(event))
-    clientRef.current = client
-
-    try {
-      await client.connect(wsUrl())
-      setStatus({
-        tone: 'working',
-        label: 'CONNECTED',
-        detail: `Registering ${username}…`,
-      })
-      const named = await client.sendUserName(username)
-      if (!named) throw new Error('Username rejected.')
-      setStatus({
-        tone: 'working',
-        label: 'JOINING',
-        detail: 'Entering the matchmaking lobby…',
-      })
-      const joined = await client.joinRoom(LOBBY_ROOM_ID)
-      if (!joined) throw new Error('Could not join the lobby.')
-      // Quick Match rules are still admin-only: a proposal here binds a
-      // stranger. A game you host yourself is configured on the create screen.
-      client.startMatchmaking(authUser?.role === 'admin' ? config : undefined)
-      setStatus({
-        tone: 'working',
-        label: 'SEARCHING',
-        detail: 'Looking for an opponent · 00:00',
-      })
-    } catch (cause) {
-      closeClient()
-      setStatus({
-        tone: 'error',
-        label: 'CONNECTION ERROR',
-        detail: cause instanceof Error ? cause.message : 'Connection failed.',
-      })
-      setScreen('online-menu')
-    }
-  }
-
-  const onReady = () => {
-    setReadyLocked(true)
-    setStatus({
-      tone: 'working',
-      label: 'READY',
-      detail: 'Waiting for your opponent…',
-    })
-    setAnnouncement('')
-    clientRef.current?.sendReady(true)
-  }
-
-  const onAgain = () => {
-    if (!match) return
-
-    restartMatch({
-      config: match.config,
-      sendReady: (ready) => clientRef.current?.sendReady(ready),
-      showReady: () => {
-        setReadyLocked(true)
-        setStatus({
-          tone: 'working',
-          label: 'READY',
-          detail: 'Waiting for your opponent…',
-        })
-        setAnnouncement('')
-        setScreen('ready')
-      },
-      beginLocalMatch: (config) => {
-        void beginCountdown(config, true)
-      },
-    })
-  }
-
-  const onSelectSymbol = (symbol: ClassicSymbol) => {
-    if (!matchRef.current) return
-    const next = selectSymbol(matchRef.current, symbol)
-    matchRef.current = next
-    setMatch(next)
-  }
-
-  const sendOnlineCommand = (
-    command:
-      | { type: 'place'; locationId: number; symbol: 'rock' | 'paper' | 'scissors' }
-      | { type: 'activate-powerup'; powerup: PowerupKey }
-      | { type: 'select-shield-target'; locationId: number },
-  ) => {
-    const authority = onlineAuthorityRef.current
-    if (!authority) {
-      enterSyncLost('The online match authority is unavailable.')
-      return
-    }
-    const queued = queueOnlineCommand(authority, command)
-    if (!queued.envelope) {
-      if (authority.pending) setAnnouncement('Waiting for the server…')
-      return
-    }
-    onlineAuthorityRef.current = queued.state
-    setOnlineInputPending(true)
-    try {
-      const client = clientRef.current
-      if (!client) throw new Error('WebSocket client is unavailable.')
-      client.sendGameCommand(queued.envelope)
-    } catch {
-      enterSyncLost('The action could not be delivered to the server.')
-    }
-  }
-
-  const onCellSelect = (index: number) => {
-    if (!matchRef.current) return
-    if (matchRef.current.shieldSelectionMode) {
-      if (matchRef.current.config.isOnline) {
-        sendOnlineCommand({ type: 'select-shield-target', locationId: index })
-      } else {
-        applyEngineResult(applyOfflineShieldSelection(matchRef.current, index))
-      }
-      return
-    }
-    if (!matchRef.current.selectedSymbol) {
-      setAnnouncement('Pick rock, paper, or scissors first.')
-      return
-    }
-    if (matchRef.current.config.isOnline) {
-      sendOnlineCommand({
-        type: 'place',
-        locationId: index,
-        symbol: matchRef.current.selectedSymbol,
-      })
-    } else {
-      applyEngineResult(applyOfflineLocalMove(matchRef.current, index))
-    }
-  }
-
-  const onPowerup = (powerup: PowerupKey) => {
-    if (!matchRef.current) return
-    if (matchRef.current.config.isOnline) {
-      sendOnlineCommand({ type: 'activate-powerup', powerup })
-    } else {
-      applyEngineResult(applyOfflinePowerup(matchRef.current, powerup))
-    }
-  }
+  }, [invalidateSession, resetForAccountChange])
 
   /*
    * One config is shared by every setup screen, so a sub-second turn timer set
@@ -1161,7 +500,11 @@ function App() {
             <ActionChoice
               label="QUICK MATCH"
               description="Find any available opponent."
-              onClick={() => void startOnline()}
+              onClick={() => void startOnline(
+                username,
+                // Quick Match rules are admin-only because they bind a stranger.
+                authUser?.role === 'admin' ? config : undefined,
+              )}
             />
             <ActionChoice
               label="CREATE GAME"
@@ -1176,7 +519,7 @@ function App() {
               label="FIND GAME"
               description="Join someone else's game."
               tone="secondary"
-              onClick={() => void findGames()}
+              onClick={() => void findGames(username)}
             />
           </div>
           <OnlineAdminSettings
@@ -1213,7 +556,11 @@ function App() {
                   />
                 </div>
               </section>
-              <BrushButton onClick={() => void hostGame()}>HOST GAME</BrushButton>
+              <BrushButton
+                onClick={() => void hostGame(username, config, isPrivateGame)}
+              >
+                HOST GAME
+              </BrushButton>
             </div>
           ) : null}
           {hostedCode ? (
@@ -1258,7 +605,7 @@ function App() {
                       key={game.code}
                       type="button"
                       className="lobby-row"
-                      onClick={() => clientRef.current?.joinLobbyGame(game.code)}
+                      onClick={() => joinLobbyGame(game.code)}
                     >
                       <strong>{game.hostName}</strong>
                       <MatchRulesSummary config={game.config} />
@@ -1286,7 +633,7 @@ function App() {
                   disabled={joinCodeInput.length !== 5}
                   onClick={() => {
                     if (joinCodeInput.length === 5) {
-                      clientRef.current?.joinLobbyGame(joinCodeInput)
+                      joinLobbyGame(joinCodeInput)
                     }
                   }}
                 >
@@ -1311,7 +658,10 @@ function App() {
             <p className="panel-description">
               Learn the board or tune the rules before going online.
             </p>
-            <BrushButton className="big-action" onClick={() => void startOffline()}>
+            <BrushButton
+              className="big-action"
+              onClick={() => void startOffline(config)}
+            >
               START PRACTICE
             </BrushButton>
             <AdvancedSettings
