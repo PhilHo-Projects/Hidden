@@ -1,13 +1,18 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const stylesheet = readFileSync(fileURLToPath(new URL('../src/index.css', import.meta.url)), 'utf8')
+const sourceRoot = fileURLToPath(new URL('../src/', import.meta.url))
+const stylesheets = readdirSync(sourceRoot, { recursive: true })
+  .filter((fileName) => fileName.endsWith('.css'))
+  .map((fileName) => readFileSync(join(sourceRoot, fileName), 'utf8'))
+  .join('\n')
 
 describe('source asset URLs', () => {
   it('uses root /src URLs for CSS-served assets during Vite development', () => {
-    expect(stylesheet).not.toContain('url("./assets/')
-    expect(stylesheet).toContain('url("/src/assets/fonts/edosz.woff2")')
-    expect(stylesheet).toContain('url("/src/assets/textures/button-splash.png")')
+    expect(stylesheets).not.toContain('url("./assets/')
+    expect(stylesheets).toContain('url("/src/assets/fonts/edosz.woff2")')
+    expect(stylesheets).toContain('url("/src/assets/textures/button-splash.png")')
   })
 })

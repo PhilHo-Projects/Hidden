@@ -1,0 +1,191 @@
+.lobby-waiting,
+/*
+ * The rules panel fills its container, so the container is what keeps it off
+ * the screen edges. Matches the width the offline setup card already uses.
+ */
+.lobby-host-setup {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  width: min(43rem, 92vw);
+}
+
+.lobby-code-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.lobby-code {
+  font-size: clamp(2rem, 9vw, 3.2rem);
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  /* Trailing letter-spacing would visually off-centre the code. */
+  text-indent: 0.28em;
+}
+
+/*
+ * Find-a-game screen. Both blocks previously ran the full viewport width, which
+ * is what threw the label and the join button to opposite edges. One shared
+ * column keeps them centred and tied together.
+ */
+.lobby-browser {
+  display: grid;
+  width: min(34rem, 92vw);
+  gap: 1rem;
+}
+
+.lobby-list-panel {
+  display: grid;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+/*
+ * The box is a fixed viewport, not a growing stack: one game and thirty games
+ * leave the surrounding screen identical, and the list scrolls inside itself.
+ */
+.lobby-list {
+  display: grid;
+  align-content: start;
+  gap: 0.4rem;
+  height: min(20rem, 38dvh);
+  padding: 0.4rem;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.72);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.lobby-row {
+  display: grid;
+  min-height: 3.25rem;
+  align-content: center;
+  justify-items: start;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 2px solid #2c2c2c;
+  background: #111;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.lobby-row:hover {
+  border-color: var(--hidden-yellow);
+  background: #1c1c1c;
+}
+
+.lobby-row > strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+/* Inside a row the summary is a caption, not the divider it is on the lobby screen. */
+.lobby-row .match-rules-summary {
+  padding: 0;
+  border: 0;
+  justify-content: start;
+  gap: 0.2rem 0.7rem;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.7rem;
+}
+
+.lobby-empty,
+.lobby-error {
+  opacity: 0.75;
+  text-align: center;
+}
+
+.lobby-empty {
+  align-self: center;
+  margin: 0;
+  padding: 0 1rem;
+}
+
+.lobby-error {
+  color: #ff8a80;
+  opacity: 1;
+}
+
+.lobby-code-entry {
+  display: grid;
+  gap: 0.4rem;
+  text-align: left;
+}
+
+.lobby-code-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+}
+
+.lobby-code-entry input {
+  min-width: 0;
+  min-height: 3rem;
+  padding: 0 0.75rem;
+  border: 2px solid #3a3a3a;
+  background: #111;
+  color: var(--hidden-white);
+  font-size: 1rem;
+  letter-spacing: 0.2em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.lobby-code-entry input::placeholder {
+  color: #6f6f6f;
+  letter-spacing: 0.2em;
+}
+
+.lobby-join {
+  min-height: 3rem;
+  padding: 0 1.4rem;
+  border: 2px solid var(--hidden-yellow);
+  background: var(--hidden-yellow);
+  color: #0a0a0a;
+  cursor: pointer;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  transition:
+    filter 140ms ease,
+    background 140ms ease;
+}
+
+.lobby-join:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+/* A 5-character code is the precondition; say so before the tap, not after. */
+.lobby-join:disabled {
+  border-color: #3a3a3a;
+  background: transparent;
+  color: #6f6f6f;
+  cursor: not-allowed;
+}
+
+.lobby-join:focus-visible,
+.lobby-row:focus-visible,
+.lobby-code-entry input:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby-row,
+  .lobby-join {
+    transition: none;
+  }
+}
+
+.lobby-room-section {
+  width: 100%;
+  text-align: left;
+}

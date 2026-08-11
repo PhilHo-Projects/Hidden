@@ -1,0 +1,179 @@
+
+@font-face {
+  font-family: "Edo SZ";
+  src: url("/src/assets/fonts/edosz.woff2") format("woff2");
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Street Soul";
+  src: url("/src/assets/fonts/street-soul.woff2") format("woff2");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/src/assets/fonts/jetbrains-mono-bold.woff2") format("woff2");
+  font-display: block;
+  font-style: normal;
+  font-weight: 700;
+}
+
+:root {
+  --chrome-height: 3.1rem;
+  --hidden-yellow: #d7af13;
+  --hidden-green: #6edc3c;
+  --hidden-blue: #4c6ef5;
+  --hidden-red: #dc2626;
+  --hidden-black: #050505;
+  --hidden-panel: #0a0a0a;
+  --hidden-white: #f5f5f5;
+  --hidden-muted: #777777;
+  --font-brush: "Edo SZ", "Street Soul", Impact, sans-serif;
+  --font-block: "JetBrains Mono", "Arial Black", system-ui, sans-serif;
+
+  /*
+   * How anything on a cell arrives and leaves. Ink and desecration both read
+   * these, so the two cannot drift into different motion for the same event.
+   * The out curve is the in curve reversed — reversing
+   * `cubic-bezier(0.25, 1, 0.5, 1)` is `cubic-bezier(0.5, 0, 0.75, 0)` — which
+   * is what keeps half a second from reading as lag: it holds, then goes.
+   */
+  --cell-motion-in-ms: 250ms;
+  --cell-motion-out-ms: 500ms;
+  --cell-motion-in-ease: cubic-bezier(0.25, 1, 0.5, 1);
+  --cell-motion-out-ease: cubic-bezier(0.5, 0, 0.75, 0);
+  color: var(--hidden-white);
+  background: var(--hidden-black);
+  font-family: var(--font-block);
+  font-weight: 700;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: #020202;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 3px;
+}
+
+.hidden-shell {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding:
+    max(clamp(0.8rem, 2vw, 1.5rem), env(safe-area-inset-top))
+    max(clamp(0.8rem, 2vw, 1.5rem), env(safe-area-inset-right))
+    max(clamp(0.8rem, 2vw, 1.5rem), env(safe-area-inset-bottom))
+    max(clamp(0.8rem, 2vw, 1.5rem), env(safe-area-inset-left));
+  isolation: isolate;
+  background: #030303 url("/src/assets/backgrounds/hidden-landscape.webp") center / cover no-repeat;
+}
+
+.hidden-shell:not(.hidden-intro) {
+  padding-top: calc(var(--chrome-height) + 0.75rem + env(safe-area-inset-top));
+}
+
+@media (orientation: portrait) {
+  .hidden-shell {
+    background-image: url("/src/assets/backgrounds/hidden-portrait.webp");
+  }
+}
+
+.top-chrome {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 20;
+  background: #050505;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.72);
+}
+
+.game-navbar {
+  display: grid;
+  min-height: calc(var(--chrome-height) + env(safe-area-inset-top));
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(0.35rem, 1.2vw, 0.9rem);
+  padding:
+    env(safe-area-inset-top)
+    max(0.75rem, env(safe-area-inset-right))
+    0
+    max(0.75rem, env(safe-area-inset-left));
+  border-bottom: 1px solid rgba(215, 175, 19, 0.38);
+}
+
+.nav-brush-button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  background: transparent;
+  color: var(--hidden-yellow);
+  font-family: var(--font-brush);
+  font-size: 1.25rem;
+  line-height: 1;
+  text-shadow: 2px 2px 0 #000;
+  cursor: pointer;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.nav-brush-button:not(:disabled):hover {
+  color: #f6cf27;
+  transform: translateY(-1px);
+}
+
+.nav-brush-button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.nav-back-button {
+  justify-self: start;
+}
+
+.nav-back-button > span {
+  font-family: var(--font-block);
+  font-size: 1.15rem;
+}
+
+.nav-account-button {
+  justify-self: end;
+}
+
+.nav-account-button:disabled {
+  color: rgba(255, 255, 255, 0.62);
+  cursor: not-allowed;
+}

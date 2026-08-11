@@ -45,6 +45,15 @@ function escapeRegExp(value: string) {
 }
 
 describe('critical font loading', () => {
+  it('bundles all styles into one production stylesheet', () => {
+    const stylesheets = readdirSync(distAssets).filter((fileName) =>
+      fileName.endsWith('.css'),
+    )
+
+    expect(stylesheets).toHaveLength(1)
+    expect(stylesheets[0]).toMatch(/^index-[\w-]+\.css$/)
+  })
+
   it('builds and preloads compressed critical fonts without a fallback-font swap', () => {
     const html = readFileSync(`${distRoot}/index.html`, 'utf8')
     const stylesheetName = findBuiltAsset('index', '.css')
