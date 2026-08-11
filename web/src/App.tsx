@@ -69,12 +69,11 @@ import {
 } from './game/onlineAuthority'
 import {
   LOBBY_ROOM_ID,
-  type LobbyErrorReason,
-  type PublicGameSummary,
   type UserEntry,
 } from './game/protocol'
 import type { EngineResult, GameState, MatchConfig, PowerupKey } from './game/types'
 import { useDestructionEffects } from './hooks/useDestructionEffects'
+import { useLobbyBrowser } from './hooks/useLobbyBrowser'
 import {
   createGuestName,
   getBackTarget,
@@ -108,13 +107,6 @@ const wsUrl = () =>
     protocol: window.location.protocol,
     host: window.location.host,
   })
-
-const LOBBY_ERROR_MESSAGES: Record<LobbyErrorReason, string> = {
-  'not-found': 'No game with that code. It may have started or been cancelled.',
-  'already-hosting': 'You are already hosting a game.',
-  'already-in-match': 'You are already in a match.',
-  'own-game': 'You cannot join your own game.',
-}
 
 function makeConfig(
   config: GameConfig,
@@ -151,12 +143,23 @@ function App() {
   // One config object rather than one state hook per knob: the knob count grows
   // with every rule experiment, the call sites should not.
   const [config, setConfig] = useState<GameConfig>(DEFAULT_GAME_CONFIG)
-  const [lobbyGames, setLobbyGames] = useState<PublicGameSummary[]>([])
-  const [hostedCode, setHostedCode] = useState<string | null>(null)
-  const [hostingStarted, setHostingStarted] = useState(false)
-  const [isPrivateGame, setIsPrivateGame] = useState(false)
-  const [joinCodeInput, setJoinCodeInput] = useState('')
-  const [lobbyError, setLobbyError] = useState<string | null>(null)
+  const {
+    lobbyGames,
+    hostedCode,
+    hostingStarted,
+    isPrivateGame,
+    joinCodeInput,
+    lobbyError,
+    clearLobbyError,
+    prepareCreate: prepareLobbyCreate,
+    beginHosting,
+    beginBrowsing,
+    clearForMatchFound: clearLobbyForMatchFound,
+    leaveLobby,
+    togglePrivateGame,
+    setJoinCodeInput,
+    handleClientEvent: handleLobbyClientEvent,
+  } = useLobbyBrowser()
   const applyConfigPatch = (patch: Partial<GameConfig>) =>
     // Clamping here means the UI cannot produce an invalid config, so the
     // server clamp becomes a defence rather than the only guard.
@@ -383,24 +386,10 @@ function App() {
         return
       }
 
-      if (event.type === 'lobby-created') {
-        setHostedCode(event.code)
-        return
-      }
-
-      if (event.type === 'lobby-list') {
-        setLobbyGames(event.games)
-        return
-      }
-
-      if (event.type === 'lobby-error') {
-        setLobbyError(LOBBY_ERROR_MESSAGES[event.reason])
-        return
-      }
+      if (handleLobbyClientEvent(event)) return
 
       if (event.type === 'match-found') {
-        setLobbyError(null)
-        setHostedCode(null)
+        clearLobbyForMatchFound()
         setOnlineRules(event.config)
         setReadyLocked(false)
         setStatus({
@@ -496,7 +485,13 @@ function App() {
         setScreen('disconnected')
       }
     },
-    [applyEngineResult, beginCountdown, enterSyncLost],
+    [
+      applyEngineResult,
+      beginCountdown,
+      clearLobbyForMatchFound,
+      enterSyncLost,
+      handleLobbyClientEvent,
+    ],
   )
 
   const onTimeout = useCallback(() => {
@@ -794,13 +789,12 @@ function App() {
     onlineAuthorityRef.current = null
     setOnlineInputPending(false)
     setOnlineRules(null)
-    setLobbyError(null)
+    clearLobbyError()
   }
 
   const hostGame = async () => {
     resetOnlineState()
-    setHostedCode(null)
-    setHostingStarted(true)
+    beginHosting()
     setStatus({
       tone: 'working',
       label: 'CONNECTING',
@@ -828,7 +822,7 @@ function App() {
 
   const findGames = async () => {
     resetOnlineState()
-    setLobbyGames([])
+    beginBrowsing()
     setStatus({
       tone: 'working',
       label: 'CONNECTING',
@@ -857,10 +851,7 @@ function App() {
   const leaveLobbyScreen = () => {
     clientRef.current?.cancelLobbyGame()
     closeClient()
-    setHostedCode(null)
-    setHostingStarted(false)
-    setLobbyGames([])
-    setLobbyError(null)
+    leaveLobby()
     setScreen('online-menu')
     setStatus({ tone: 'neutral', label: 'ONLINE', detail: 'Choose how to play.' })
   }
@@ -1256,9 +1247,7 @@ function App() {
               description="Host with your own rules."
               tone="secondary"
               onClick={() => {
-                setHostedCode(null)
-                setHostingStarted(false)
-                setLobbyError(null)
+                prepareLobbyCreate()
                 setScreen('lobby-create')
               }}
             />
@@ -1299,7 +1288,7 @@ function App() {
                     id="isPrivateGame"
                     label="Private (code only)"
                     pressed={isPrivateGame}
-                    onToggle={() => setIsPrivateGame(!isPrivateGame)}
+                    onToggle={togglePrivateGame}
                   />
                 </div>
               </section>
@@ -1367,9 +1356,7 @@ function App() {
                   value={joinCodeInput}
                   maxLength={5}
                   placeholder="ABC12"
-                  onChange={(event) =>
-                    setJoinCodeInput(event.target.value.toUpperCase())
-                  }
+                  onChange={(event) => setJoinCodeInput(event.target.value)}
                 />
                 {/* Compact rather than brush: an inline field action, not navigation. */}
                 <button
