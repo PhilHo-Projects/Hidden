@@ -2874,32 +2874,35 @@ summary:focus-visible {
  * what vertical room remained, and the `43vh` term measured the large viewport,
  * which assumes retracted browser toolbars.
  *
- * `.opponent-peek` anchors to `left: 100%` of this box, so the arena has to stay
- * shrink-wrapped to the board rather than filling the stage column.
+ * The arena deliberately fills the stage rather than shrink-wrapping the board.
+ * Shrink-wrapping makes the arena's width depend on a child whose width comes
+ * from a percentage height, and that circular dependency resolves to zero in
+ * WebKit -- the board vanished entirely on iOS. Siblings that need the board's
+ * real width read `--board-side`, measured by `useBoardSideVar`.
  */
 .battle-arena {
   position: relative;
   height: 100%;
   min-height: 0;
-  width: fit-content;
-  max-width: 86vw;
+  width: 100%;
+  justify-self: stretch;
 }
 
 .battle-arena > .hidden-board {
   height: 100%;
   min-height: 0;
+  width: 100%;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 /*
- * `width: 0` withdraws the header from the arena's intrinsic width so the board
- * alone decides how wide the arena is; `min-width: 100%` then stretches it back
- * across whatever the board resolved to. Without this the caption text is the
- * widest thing in the box and the label sits proud of the board's edges.
+ * The caption belongs to the board, not to the stage, so it takes the board's
+ * measured width and centres over it. The `100%` fallback only applies for the
+ * first frame, before the observer has published a measurement.
  */
 .battle-arena > .hidden-board > .hidden-board-header {
-  width: 0;
-  min-width: 100%;
+  width: var(--board-side, 100%);
+  margin-inline: auto;
 }
 
 .battle-arena > .hidden-board > .hidden-board-header h3 {
@@ -2937,7 +2940,9 @@ summary:focus-visible {
 .opponent-peek {
   position: absolute;
   top: 50%;
-  left: calc(100% + clamp(0.8rem, 2vw, 1.5rem));
+  /* Anchored to the board's right edge rather than the arena's. The arena now
+   * spans the whole stage, so `left: 100%` would fling this off the screen. */
+  left: calc(50% + var(--board-side, 0px) / 2 + clamp(0.8rem, 2vw, 1.5rem));
   z-index: 4;
   width: clamp(11rem, 18vw, 15rem);
   padding: 0.65rem;
