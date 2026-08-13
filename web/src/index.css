@@ -107,6 +107,26 @@ summary:focus-visible {
   padding-top: calc(var(--chrome-height) + 0.75rem + env(safe-area-inset-top));
 }
 
+/*
+ * The match screen is the one surface that may not scroll: the power-up tray and
+ * the move dock are required controls, and a control below the fold is a control
+ * the player cannot reach. Every other screen keeps `min-height` and scrolls.
+ *
+ * `svh` rather than `dvh` is deliberate. `dvh` tracks the browser toolbar as it
+ * retracts, so a `dvh`-sized board would resize under the player's finger during
+ * a match. `svh` is the toolbars-visible height -- the only one always on screen.
+ *
+ * Height here rather than on `.battle-screen` so the shell's own padding, which
+ * already carries the fixed navbar and the safe-area insets, is subtracted by
+ * `border-box` instead of being restated as a `calc()` that can drift from it.
+ */
+.hidden-shell.hidden-battle {
+  min-height: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+}
+
 @media (orientation: portrait) {
   .hidden-shell {
     background-image: url("/src/assets/backgrounds/hidden-portrait.webp");
@@ -2750,16 +2770,23 @@ summary:focus-visible {
   text-shadow: 8px 8px 0 #000;
 }
 
+/*
+ * `height`, not `min-height`. A floor lets content grow past the fold and hand
+ * the overflow to the shell's scrollbar, which is exactly how the move dock
+ * ended up underneath the iOS toolbar. A definite height plus `overflow: hidden`
+ * makes overflow structurally impossible, and forces the elastic row below to
+ * absorb the difference instead.
+ */
 .battle-screen {
   display: grid;
-  min-height: calc(100vh - var(--chrome-height) - 2rem);
-  min-height: calc(100dvh - var(--chrome-height) - 2rem);
+  height: 100%;
+  min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
   gap: clamp(0.75rem, 1.7vh, 1.1rem);
-  align-content: start;
   width: min(82rem, 100%);
   margin: 0 auto;
   padding: clamp(0.35rem, 1vw, 0.75rem) 0;
+  overflow: hidden;
 }
 
 .battle-header {
@@ -2831,19 +2858,79 @@ summary:focus-visible {
 
 .battle-stage {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   justify-items: center;
   gap: clamp(0.7rem, 1.5vh, 1rem);
 }
 
+/*
+ * The board is the only elastic element on this screen. The header, the docks
+ * and the labels keep their sizes; the board takes whatever vertical space is
+ * left after them and can never claim more.
+ *
+ * It was previously `width: min(43vh, 29rem, 86vw)`, which lost twice over: the
+ * `86vw` term won on a phone, so the board was sized by width and had no idea
+ * what vertical room remained, and the `43vh` term measured the large viewport,
+ * which assumes retracted browser toolbars.
+ *
+ * `.opponent-peek` anchors to `left: 100%` of this box, so the arena has to stay
+ * shrink-wrapped to the board rather than filling the stage column.
+ */
 .battle-arena {
   position: relative;
-  width: min(43vh, 29rem, 86vw);
+  height: 100%;
+  min-height: 0;
+  width: fit-content;
+  max-width: 86vw;
+}
+
+.battle-arena > .hidden-board {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/*
+ * `width: 0` withdraws the header from the arena's intrinsic width so the board
+ * alone decides how wide the arena is; `min-width: 100%` then stretches it back
+ * across whatever the board resolved to. Without this the caption text is the
+ * widest thing in the box and the label sits proud of the board's edges.
+ */
+.battle-arena > .hidden-board > .hidden-board-header {
+  width: 0;
+  min-width: 100%;
+}
+
+.battle-arena > .hidden-board > .hidden-board-header h3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Sized by height and squared by `aspect-ratio` -- the inverse of the old
+ * width-driven rule. The row template has to be explicit: the cells' own
+ * `aspect-ratio` cannot size tracks in a grid whose height is already definite,
+ * so without it the implicit rows would overflow the square.
+ */
+.battle-arena > .hidden-board > .hidden-board-grid {
+  height: 100%;
+  /* Carried over from the `29rem` term of the old width formula. Without a
+   * ceiling a tall monitor hands the board every spare pixel, which on 1080p
+   * produced 172px cells -- larger than the design has ever called for. */
+  max-height: 29rem;
+  min-height: 0;
+  width: auto;
+  max-width: 100%;
+  aspect-ratio: 1;
+  grid-template-rows: repeat(var(--board-size, 3), minmax(0, 1fr));
+  justify-self: center;
 }
 
 .battle-controls {
   display: grid;
-  width: min(43vh, 29rem, 86vw);
+  width: min(29rem, 86vw);
   gap: clamp(0.65rem, 1.4vh, 0.9rem);
 }
 
@@ -3144,7 +3231,9 @@ summary:focus-visible {
 .rps-tile {
   position: relative;
   display: grid;
-  width: clamp(4.6rem, 9vh, 5.8rem);
+  /* `svh`, not `vh`: this is a control that should track the height actually on
+   * screen, and `vh` reads the toolbars-retracted height a phone never shows. */
+  width: clamp(4.6rem, 9svh, 5.8rem);
   min-width: 4.6rem;
   min-height: 4.6rem;
   aspect-ratio: 1;
@@ -3453,9 +3542,13 @@ summary:focus-visible {
     gap: 0.55rem;
   }
 
-  .battle-arena,
+  /*
+   * `.battle-arena` is deliberately absent, as in the shorter-viewport block
+   * below. Its width follows the height left over on the stage; naming it here
+   * would hand the board back to width control, which is the original bug.
+   */
   .battle-controls {
-    width: min(43vh, 24rem, 86vw);
+    width: min(24rem, 86vw);
   }
 
   .hidden-board {
@@ -3646,12 +3739,13 @@ summary:focus-visible {
     line-height: 1;
   }
 
-  .battle-arena,
+  /*
+   * `.battle-arena` is deliberately absent. Its width is now derived from the
+   * height left over on the stage, and restating it here as a viewport fraction
+   * would put the board back under width control -- the original bug.
+   */
   .battle-controls {
-    width: min(38vh, 78vw);
-  }
-
-  .battle-controls {
+    width: min(29rem, 78vw);
     gap: 0.35rem;
   }
 
