@@ -36,6 +36,7 @@ import {
   type GameConfig,
 } from '@hidden/game-core'
 import { useAccountSession } from './hooks/useAccountSession'
+import { useBoardSideVar } from './hooks/useBoardSideVar'
 import { useDestructionEffects } from './hooks/useDestructionEffects'
 import { useLobbyBrowser } from './hooks/useLobbyBrowser'
 import { useMatchSession } from './hooks/useMatchSession'
@@ -136,6 +137,7 @@ function App() {
 
   const screenRef = useRef<Screen>('intro')
   const historyReturnScreenRef = useRef<Screen>('intro')
+  const battleArenaRef = useRef<HTMLDivElement>(null)
   const {
     onlineRules,
     match,
@@ -183,6 +185,8 @@ function App() {
   useEffect(() => {
     screenRef.current = screen
   }, [screen])
+
+  useBoardSideVar(battleArenaRef, screen === 'battle')
 
   const openAccount = useCallback((mode: AccountMode) => {
     resetForAccountChange()
@@ -724,7 +728,7 @@ function App() {
           </header>
 
           <div className="battle-stage">
-            <div className="battle-arena">
+            <div className="battle-arena" ref={battleArenaRef}>
               <BoardGrid
                 title="Player Board"
                 subtitle={username.trim() || 'Player'}

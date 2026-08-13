@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover` is load-bearing, not cosmetic. iOS resolves every
+         `env(safe-area-inset-*)` to zero without it, which silently disables the
+         safe-area padding the stylesheet relies on to clear the notch and the
+         home indicator. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta name="description" content="Hidden — a blind-board strategy game." />
     <link
       rel="preload"
