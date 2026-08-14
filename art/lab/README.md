@@ -34,6 +34,7 @@ asset paths point nowhere. It is one command; run the server.
 | `cell-palette/` | Candidate colours for rock, paper, scissors and the desecrated tile, drawn as real board cells. Also compares flat fill against texture treatments, and simulates colour-vision deficiency. |
 | `cell-fill/` | How ink arrives on a cell and how it leaves. Four of each, on shared duration sliders. |
 | `nav-icons/` | Top-chrome icon treatments at their real size against the real bar. |
+| `reveal-snapshot/` | Three ways to show the opponent's board as a timed snapshot that covers your own board, each putting the countdown on the frame instead of in a bar or a number. Shared duration slider; stages are a literal 390px wide. |
 
 ## Adding one
 
