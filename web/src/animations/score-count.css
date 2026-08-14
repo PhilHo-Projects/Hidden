@@ -7,12 +7,39 @@
  * Change the cycle length and the percentages have to move with it.
  */
 .hidden-cell-score-counted,
+.score-count-flash,
 .score-count-badge {
   --score-cycle: 15s;
 }
 
 .hidden-cell-score-counted {
   animation: score-cell-pop var(--score-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: var(--score-delay);
+}
+
+/*
+ * The lift is its own layer rather than a `filter` on the cell.
+ *
+ * `.hidden-cell` draws its hand-cut outline and drop stack as a `filter` chain,
+ * and `filter` is one property: a keyframe setting `brightness()` on the cell
+ * replaces the whole chain, and an animation outranks the normal declaration.
+ * Every scored cell on the results screen lost its ink that way, permanently,
+ * because the walk loops. Washing an overlay in and out leaves the cell's own
+ * filter untouched -- and `opacity` is the one property every compositor is
+ * reliable about, which matters on a screen holding one looping animation per
+ * scored cell.
+ *
+ * Clipped by the cell's `overflow: hidden`, so it follows the torn edge. No
+ * `z-index`: it sits after the ink and before the markers in DOM order, which
+ * is exactly where it belongs, and staying out of the stacking order keeps the
+ * shield and the score badge on top of it.
+ */
+.score-count-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: score-flash-pop var(--score-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
   animation-delay: var(--score-delay);
 }
 
@@ -56,13 +83,25 @@
   0%,
   5%,
   100% {
-    filter: brightness(1);
     transform: scale(1);
   }
 
   2.4% {
-    filter: brightness(1.85) saturate(1.22);
     transform: scale(1.045);
+  }
+}
+
+/* Peak is tuned to land where `brightness(1.85) saturate(1.22)` used to: enough
+ * to read as a hit on the saturated cell colours without washing them out. */
+@keyframes score-flash-pop {
+  0%,
+  5%,
+  100% {
+    opacity: 0;
+  }
+
+  2.4% {
+    opacity: 0.38;
   }
 }
 
@@ -80,6 +119,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hidden-cell-score-counted,
+  .score-count-flash,
   .score-count-badge {
     animation: none;
   }
