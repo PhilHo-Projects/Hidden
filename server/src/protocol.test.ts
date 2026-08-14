@@ -116,6 +116,33 @@ describe('decodeClientPacket', () => {
     })
   })
 
+  it('decodes an early reveal close', () => {
+    // The player may close the snapshot before the authority's window expires,
+    // so this is a legitimate client command. `timeout` stays server-only.
+    expect(
+      decodeClientPacket(
+        encode([
+          999,
+          PacketType.GAME_COMMAND,
+          {
+            matchId: 'run-uuid',
+            commandId: 9,
+            expectedRevision: 4,
+            command: { type: 'end-reveal', ignoredCommandKey: 'never canonical' },
+          },
+        ]),
+      ),
+    ).toEqual({
+      type: PacketType.GAME_COMMAND,
+      envelope: {
+        matchId: 'run-uuid',
+        commandId: 9,
+        expectedRevision: 4,
+        command: { type: 'end-reveal' },
+      },
+    })
+  })
+
   it.each([
     { type: 'timeout' },
     { type: 'place', locationId: 0, symbol: 'lizard' },

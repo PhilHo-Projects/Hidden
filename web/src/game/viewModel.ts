@@ -88,9 +88,26 @@ export function getOpponentName(users: UserEntry[], clientId: number | null | un
   )
 }
 
-export function shouldShowOpponentBoard(match: GameState | null, screen: Screen) {
+/**
+ * The timed snapshot, open only while a reveal is actually running.
+ *
+ * Gated on blind mode as well as the flag. A variant that never hid the board
+ * has nothing to reveal, and without that clause a non-blind match would hold
+ * the snapshot open permanently -- a countdown that runs out over a card that
+ * never leaves.
+ */
+export function isRevealSnapshotOpen(match: GameState | null) {
   if (!match) return false
-  return !match.config.blindMode || match.playerPowerups.revealActive || screen === 'results'
+  return match.config.blindMode && match.playerPowerups.revealActive
+}
+
+/**
+ * The standing side panel, for the variant that does not hide the opponent's
+ * board at all. Nothing times out here because nothing is being revealed.
+ */
+export function shouldShowOpponentPanel(match: GameState | null) {
+  if (!match) return false
+  return !match.config.blindMode
 }
 
 /**

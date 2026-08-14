@@ -30,6 +30,7 @@ function record(
       streak: 3,
       rounds: 2,
       turnSeconds: 10,
+      revealSeconds: 1.5,
       blindMode: false,
       powerupsEnabled: false,
       powerups: { shield: true, reveal: true, extraTurn: true },

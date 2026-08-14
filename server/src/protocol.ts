@@ -204,6 +204,10 @@ function normalizeClientGameCommand(value: unknown): ClientGameCommand | null {
         type: 'select-shield-target',
         locationId: Number(value.locationId),
       }
+    case 'end-reveal':
+      // Carries nothing. The seat comes from the connection, never the packet,
+      // and a close can only ever lower the sender's own reveal.
+      return { type: 'end-reveal' }
     default:
       return null
   }

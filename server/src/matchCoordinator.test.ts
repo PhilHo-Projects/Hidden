@@ -1383,3 +1383,96 @@ describe('MatchCoordinator private lobby', () => {
     expect(coordinator.listPublicGames()).toHaveLength(2)
   })
 })
+
+/*
+ * Reveal is a timed snapshot. `game-core` has no clock, so the coordinator owns
+ * the window and closes it with an `end-reveal` command; see
+ * docs/superpowers/specs/2026-08-14-reveal-snapshot-design.md.
+ */
+describe('reveal window', () => {
+  // Reveal unlocks off a completed line of paper under the default mapping.
+  function fixtureWithRevealUnlocked() {
+    const fixture = authoritativeFixture({ firstSeat: 0 })
+    fixture.issue(0, { type: 'place', locationId: 0, symbol: 'paper' })
+    fixture.issue(1, { type: 'place', locationId: 3, symbol: 'rock' })
+    fixture.issue(0, { type: 'place', locationId: 1, symbol: 'paper' })
+    fixture.issue(1, { type: 'place', locationId: 4, symbol: 'rock' })
+    fixture.issue(0, { type: 'place', locationId: 2, symbol: 'paper' })
+    fixture.issue(1, { type: 'place', locationId: 5, symbol: 'rock' })
+    expect(fixture.run.state.powerups[0].unlocked.reveal).toBe(true)
+    return fixture
+  }
+
+  it('arms a window for the configured length when reveal is activated', () => {
+    const fixture = fixtureWithRevealUnlocked()
+    fixture.issue(0, { type: 'activate-powerup', powerup: 'reveal' })
+
+    expect(fixture.run.state.powerups[0].revealActive).toBe(true)
+    // The turn deadline is a separate timer that keeps running underneath, so
+    // the newest one is the reveal window.
+    expect(fixture.scheduled.at(-1)?.delayMs).toBe(
+      DEFAULT_GAME_CONFIG.revealSeconds * 1_000,
+    )
+  })
+
+  it('closes the window when it expires', () => {
+    const fixture = fixtureWithRevealUnlocked()
+    fixture.issue(0, { type: 'activate-powerup', powerup: 'reveal' })
+    const before = fixture.run.revision
+
+    fixture.scheduled.at(-1)!.callback()
+
+    expect(fixture.run.state.powerups[0].revealActive).toBe(false)
+    expect(fixture.run.revision).toBe(before + 1)
+  })
+
+  it('tells both players the window closed', () => {
+    // Both sides replay commands into their own copy of the core, so an expiry
+    // only one of them applies would diverge the revision into sync-lost.
+    const fixture = fixtureWithRevealUnlocked()
+    fixture.issue(0, { type: 'activate-powerup', powerup: 'reveal' })
+    fixture.scheduled.at(-1)!.callback()
+
+    const delivered = fixture.pushedDeliveries.at(-1) ?? []
+    expect(delivered.map((delivery) => delivery.connectionId).sort()).toEqual([11, 22])
+    for (const delivery of delivered) {
+      expect(delivery.update).toMatchObject({
+        status: 'accepted',
+        actorSeat: 0,
+        commands: [{ type: 'end-reveal' }],
+      })
+    }
+  })
+
+  it('does nothing when the reveal is already down', () => {
+    // Placing clears the reveal, so by the time the armed window fires there is
+    // nothing left to close. It must not burn a revision on a no-op.
+    const fixture = fixtureWithRevealUnlocked()
+    fixture.issue(0, { type: 'activate-powerup', powerup: 'reveal' })
+    const window = fixture.scheduled.at(-1)!
+    fixture.issue(0, { type: 'place', locationId: 6, symbol: 'rock' })
+    expect(fixture.run.state.powerups[0].revealActive).toBe(false)
+
+    const before = fixture.run.revision
+    const pushes = fixture.pushedDeliveries.length
+    window.callback()
+
+    expect(fixture.run.revision).toBe(before)
+    expect(fixture.pushedDeliveries).toHaveLength(pushes)
+  })
+
+  it('lets the player close early and leaves the armed window inert', () => {
+    // The early close and the armed window race by design. The client can only
+    // ever end its own reveal sooner than the rule allows, never later.
+    const fixture = fixtureWithRevealUnlocked()
+    fixture.issue(0, { type: 'activate-powerup', powerup: 'reveal' })
+    const window = fixture.scheduled.at(-1)!
+
+    fixture.issue(0, { type: 'end-reveal' })
+    expect(fixture.run.state.powerups[0].revealActive).toBe(false)
+
+    const before = fixture.run.revision
+    window.callback()
+    expect(fixture.run.revision).toBe(before)
+  })
+})
