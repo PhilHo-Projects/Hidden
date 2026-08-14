@@ -11,6 +11,7 @@ this index does not.
 | Why the rules engine is shaped this way | [specs/2026-08-03-game-mode-testbed-design.md](superpowers/specs/2026-08-03-game-mode-testbed-design.md) | ~245 lines |
 | Why static history is separate from replay | [specs/2026-08-08-durable-static-match-history-design.md](superpowers/specs/2026-08-08-durable-static-match-history-design.md) | ~90 lines |
 | Admin access, data boundaries, and workbench UX | [specs/2026-08-10-admin-workbench-design.md](superpowers/specs/2026-08-10-admin-workbench-design.md) | ~90 lines |
+| Why reveal is a timed snapshot and who owns its clock | [specs/2026-08-14-reveal-snapshot-design.md](superpowers/specs/2026-08-14-reveal-snapshot-design.md) | ~120 lines |
 
 `ROADMAP.md` alone is enough to pick up work. Everything else is background.
 
