@@ -197,3 +197,65 @@ describe('cell ink transitions', () => {
     })
   })
 })
+
+/*
+ * The result walk lights each scored cell in turn. It used to do that with a
+ * `filter: brightness()` keyframe on the cell itself, which is a whole-property
+ * replacement: `.hidden-cell` builds its hand-cut outline and drop stack out of
+ * a `filter` chain, and an animation outranks the normal declaration, so every
+ * scored cell on the results screen lost its ink for as long as the walk ran --
+ * which is forever, because the walk loops. The lift lives on its own layer now.
+ */
+describe('result score walk', () => {
+  const scoredGrid: GridState = {
+    cells: [
+      { occupied: true, symbol: 'rock', immune: false, desecrated: false },
+      { occupied: false, symbol: null, immune: false, desecrated: false },
+    ],
+  }
+
+  const render = () =>
+    renderToStaticMarkup(
+      createElement(BoardGrid, {
+        title: '',
+        subtitle: 'Board',
+        grid: scoredGrid,
+        scoreCountLabels: { 0: 1 },
+      }),
+    )
+
+  it('gives a counted cell its own lift layer', () => {
+    const markup = render()
+
+    expect(markup).toContain('hidden-cell-score-counted')
+    expect(markup.match(/score-count-flash/g)).toHaveLength(1)
+  })
+
+  it('leaves an uncounted cell without one', () => {
+    // One cell is counted and one is not, so a single flash layer in the markup
+    // is also the assertion that the other cell did not get one.
+    expect(render().match(/hidden-cell-score-counted/g)).toHaveLength(1)
+  })
+
+  it('walks the cells in scoring order', () => {
+    const markup = renderToStaticMarkup(
+      createElement(BoardGrid, {
+        title: '',
+        subtitle: 'Board',
+        grid: {
+          cells: Array.from({ length: 3 }, () => ({
+            occupied: true,
+            symbol: 'rock' as ClassicSymbol,
+            immune: false,
+            desecrated: false,
+          })),
+        },
+        scoreCountLabels: { 0: 1, 1: 2, 2: 3 },
+      }),
+    )
+
+    expect(markup).toContain('--score-delay:500ms')
+    expect(markup).toContain('--score-delay:840ms')
+    expect(markup).toContain('--score-delay:1180ms')
+  })
+})

@@ -9,7 +9,8 @@ import {
   getTurnStatusText,
   resolvePlayerName,
   shouldPromptMoveChoice,
-  shouldShowOpponentBoard,
+  isRevealSnapshotOpen,
+  shouldShowOpponentPanel,
 } from '../viewModel'
 import type { GameState } from '../types'
 
@@ -97,24 +98,41 @@ describe('view model helpers', () => {
     expect(getOpponentName([], 1, makeMatch({ config: { ...makeMatch().config, hasAI: false } }))).toBe('Opponent')
   })
 
-  it('reveals the opponent board only when the current mode allows it', () => {
-    expect(shouldShowOpponentBoard(null, 'intro')).toBe(false)
-    expect(shouldShowOpponentBoard(makeMatch(), 'battle')).toBe(false)
-    expect(
-      shouldShowOpponentBoard(
-        makeMatch({
-          playerPowerups: {
-            unlocked: { shield: false, reveal: true, extraTurn: false },
-            used: { shield: false, reveal: true, extraTurn: false },
-            revealActive: true,
-            extraTurnArmed: false,
-          },
-        }),
-        'battle',
-      ),
-    ).toBe(true)
-    expect(shouldShowOpponentBoard(makeMatch(), 'results')).toBe(true)
-    expect(shouldShowOpponentBoard(makeMatch({ config: { ...makeMatch().config, blindMode: false } }), 'battle')).toBe(true)
+  const revealing = () =>
+    makeMatch({
+      playerPowerups: {
+        unlocked: { shield: false, reveal: true, extraTurn: false },
+        used: { shield: false, reveal: true, extraTurn: false },
+        revealActive: true,
+        extraTurnArmed: false,
+      },
+    })
+
+  const seeing = (match = makeMatch()) =>
+    makeMatch({ ...match, config: { ...match.config, blindMode: false } })
+
+  /*
+   * These were one predicate, and conflating them is what made the snapshot
+   * possible to leave open forever: a non-blind match satisfied "show the
+   * opponent board" permanently, which as a timed modal meant a countdown that
+   * ran out and a card that never left.
+   */
+  it('opens the snapshot only while a reveal is actually running', () => {
+    expect(isRevealSnapshotOpen(null)).toBe(false)
+    expect(isRevealSnapshotOpen(makeMatch())).toBe(false)
+    expect(isRevealSnapshotOpen(revealing())).toBe(true)
+  })
+
+  it('never opens the snapshot in a mode that was never hiding anything', () => {
+    expect(isRevealSnapshotOpen(seeing())).toBe(false)
+    expect(isRevealSnapshotOpen(seeing(revealing()))).toBe(false)
+  })
+
+  it('shows the standing panel only when the mode does not hide the board', () => {
+    expect(shouldShowOpponentPanel(null)).toBe(false)
+    expect(shouldShowOpponentPanel(makeMatch())).toBe(false)
+    expect(shouldShowOpponentPanel(revealing())).toBe(false)
+    expect(shouldShowOpponentPanel(seeing())).toBe(true)
   })
 
   it('prompts the move choice only while the player owes an unloaded move', () => {
