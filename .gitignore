@@ -9,5 +9,6 @@ Thumbs.db
 .vite/
 .playwright-cli/
 .playwright-mcp/
+.superpowers/
 .worktrees/
 .claude/worktrees/
