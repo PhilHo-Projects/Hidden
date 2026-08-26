@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { RuntimeLifecycle } from './runtimeLifecycle'
+import { RuntimeLifecycle } from './runtimeLifecycle.js'
 
 describe('RuntimeLifecycle', () => {
   it('prevents listening after shutdown starts during asynchronous setup', async () => {

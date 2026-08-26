@@ -4,7 +4,7 @@ import {
   hashPassword,
   parseCredentials,
   verifyPassword,
-} from '../auth/password'
+} from '../auth/password.js'
 
 export class AdminProvisionConflictError extends Error {
   constructor(readonly username: string) {

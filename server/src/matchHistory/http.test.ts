@@ -1,14 +1,14 @@
 import express from 'express'
 import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { AuthenticatedUser } from '../auth/service'
-import type { Logger } from '../logger'
+import type { AuthenticatedUser } from '../auth/service.js'
+import type { Logger } from '../logger.js'
 import type {
   ListMatchHistoryOptions,
   MatchHistoryDetail,
   MatchHistoryPage,
-} from './repository'
-import { createMatchHistoryRouter } from './http'
+} from './repository.js'
+import { createMatchHistoryRouter } from './http.js'
 
 const ACCOUNT_ID = '00000000-0000-4000-8000-000000000001'
 const MATCH_ID = '00000000-0000-4000-8000-000000000101'

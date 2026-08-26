@@ -1,20 +1,20 @@
 import WebSocket from 'ws'
-import type { AdminRuntimeStats } from './admin/repository'
-import { type UserRole } from './auth/service'
-import { type Logger } from './logger'
+import type { AdminRuntimeStats } from './admin/repository.js'
+import { type UserRole } from './auth/service.js'
+import { type Logger } from './logger.js'
 import {
   MatchCoordinator,
   type GameUpdateDelivery,
   type MatchRoom,
-} from './matchCoordinator'
-import { type GameConfig } from './matchRules'
+} from './matchCoordinator.js'
+import { type GameConfig } from './matchRules.js'
 import {
   decodeClientPacket,
   encodePacket,
   PacketType,
   ProtocolError,
   type ClientPacket,
-} from './protocol'
+} from './protocol.js'
 
 interface ClientSession {
   accountId: string | undefined

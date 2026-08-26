@@ -1,7 +1,7 @@
 import express, { type Response } from 'express'
-import type { AuthenticatedUser } from '../auth/service'
-import { readSessionToken } from '../auth/sessionToken'
-import type { Logger } from '../logger'
+import type { AuthenticatedUser } from '../auth/service.js'
+import { readSessionToken } from '../auth/sessionToken.js'
+import type { Logger } from '../logger.js'
 import type {
   AdminAccountCursor,
   AdminAccountSummary,
@@ -10,7 +10,7 @@ import type {
   AdminMatchSummary,
   AdminRepository,
   AdminRuntimeStatsProvider,
-} from './repository'
+} from './repository.js'
 
 const PAGE_SIZE = 50
 const UUID_PATTERN =

@@ -1,12 +1,16 @@
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Pool } from 'pg'
 
 const MIGRATION_FILE_PATTERN = /^(\d{3}_[a-z0-9_]+)\.sql$/
+const DEFAULT_MIGRATIONS_DIRECTORY = fileURLToPath(
+  new URL('../migrations/', import.meta.url),
+)
 
 export async function runMigrations(
   pool: Pool,
-  migrationsDirectory = path.resolve(__dirname, '..', 'migrations'),
+  migrationsDirectory = DEFAULT_MIGRATIONS_DIRECTORY,
 ) {
   const client = await pool.connect()
   try {

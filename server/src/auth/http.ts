@@ -3,20 +3,20 @@ import express, {
   type Request,
   type Response,
 } from 'express'
-import type { Logger } from '../logger'
-import { FixedWindowRateLimiter } from './rateLimiter'
+import type { Logger } from '../logger.js'
+import { FixedWindowRateLimiter } from './rateLimiter.js'
 import {
   AuthServiceError,
   SESSION_DURATION_MS,
   type AuthenticatedUser,
   type AuthSession,
-} from './service'
+} from './service.js'
 import {
   clearSessionCookie,
   createSessionCookie,
   hasSessionCookie,
   readSessionToken,
-} from './sessionToken'
+} from './sessionToken.js'
 
 export interface AuthServiceLike {
   register(value: unknown, previousRawToken?: string): Promise<AuthSession>

@@ -2,12 +2,12 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createHiddenServer, type HiddenServer } from '../app'
+import { createHiddenServer, type HiddenServer } from '../app.js'
 import {
   AuthServiceError,
   type AuthenticatedUser,
   type AuthSession,
-} from './service'
+} from './service.js'
 
 const ORIGIN = 'http://localhost:5173'
 const USER: AuthenticatedUser = {

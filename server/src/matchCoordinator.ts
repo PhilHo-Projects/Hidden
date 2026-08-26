@@ -20,11 +20,11 @@ import type {
   GameCommandEnvelope,
   GameUpdate,
   GameUpdateRejectionReason,
-} from './protocol'
+} from './protocol.js'
 import {
   createMatchHistoryRecord,
   type MatchHistoryRecordV1,
-} from './matchHistory/types'
+} from './matchHistory/types.js'
 
 // The browser's visible 3-2-1-GO launch lasts 2.62 seconds. The first server
 // deadline includes this fixed transport/presentation grace; every reset after

@@ -4,13 +4,13 @@ import {
   hashPassword,
   parseCredentials,
   verifyPassword,
-} from './password'
+} from './password.js'
 import {
   UsernameTakenError,
   type AuthRepository,
   type AuthUser,
-} from './repository'
-import { createSessionToken, hashSessionToken } from './sessionToken'
+} from './repository.js'
+import { createSessionToken, hashSessionToken } from './sessionToken.js'
 
 export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1_000
 

@@ -3,7 +3,7 @@ import {
   resolveAllowedOrigins,
   resolveAdminUsernames,
   resolveDatabaseUrl,
-} from './serverConfig'
+} from './serverConfig.js'
 
 describe('resolveDatabaseUrl', () => {
   it('allows explicit guest-only local development', () => {

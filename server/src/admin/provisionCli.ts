@@ -1,9 +1,9 @@
-import { createDatabasePool } from '../database'
-import { runMigrations } from '../migrations'
+import { createDatabasePool } from '../database.js'
+import { runMigrations } from '../migrations.js'
 import {
   AdminProvisionConflictError,
   provisionAdminAccounts,
-} from './provision'
+} from './provision.js'
 
 function usernamesFromArguments(arguments_: readonly string[]) {
   const usernames: string[] = []
@@ -57,7 +57,7 @@ export async function runProvisionCli(
   }
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   void runProvisionCli().catch((error: unknown) => {
     const fields =
       error instanceof AdminProvisionConflictError

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createDatabasePool } from './database'
+import { createDatabasePool } from './database.js'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const itDatabase = databaseUrl ? it : it.skip

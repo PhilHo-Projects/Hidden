@@ -1,16 +1,16 @@
 import express from 'express'
 import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { AuthenticatedUser } from '../auth/service'
-import type { Logger } from '../logger'
-import { createAdminRouter } from './http'
+import type { AuthenticatedUser } from '../auth/service.js'
+import type { Logger } from '../logger.js'
+import { createAdminRouter } from './http.js'
 import type {
   AdminAccountPage,
   AdminMatchDetail,
   AdminMatchPage,
   AdminRepository,
   AdminRuntimeStatsProvider,
-} from './repository'
+} from './repository.js'
 
 const SESSION_TOKEN = 'A'.repeat(43)
 const ADMIN: AuthenticatedUser = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FixedWindowRateLimiter } from './rateLimiter'
+import { FixedWindowRateLimiter } from './rateLimiter.js'
 
 describe('FixedWindowRateLimiter', () => {
   it('allows the configured attempts then returns the remaining retry window', () => {

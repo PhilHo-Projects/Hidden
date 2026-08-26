@@ -10,16 +10,16 @@ import { WebSocketServer } from 'ws'
 import {
   createAuthRouter,
   type AuthServiceLike,
-} from './auth/http'
-import { createAdminRouter } from './admin/http'
-import type { AdminRepository } from './admin/repository'
-import { readSessionToken } from './auth/sessionToken'
-import { GameHandler, type ClientIdentity } from './gameHandler'
-import { createLogger, type Logger, type LogLevel } from './logger'
-import { MatchCoordinator } from './matchCoordinator'
-import { createMatchHistoryRouter } from './matchHistory/http'
-import { MatchHistoryRecorder } from './matchHistory/recorder'
-import type { MatchHistoryRepository } from './matchHistory/repository'
+} from './auth/http.js'
+import { createAdminRouter } from './admin/http.js'
+import type { AdminRepository } from './admin/repository.js'
+import { readSessionToken } from './auth/sessionToken.js'
+import { GameHandler, type ClientIdentity } from './gameHandler.js'
+import { createLogger, type Logger, type LogLevel } from './logger.js'
+import { MatchCoordinator } from './matchCoordinator.js'
+import { createMatchHistoryRouter } from './matchHistory/http.js'
+import { MatchHistoryRecorder } from './matchHistory/recorder.js'
+import type { MatchHistoryRepository } from './matchHistory/repository.js'
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 16 * 1024
 

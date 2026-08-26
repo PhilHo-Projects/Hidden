@@ -6,7 +6,7 @@ import {
   createSessionToken,
   hashSessionToken,
   readSessionToken,
-} from './sessionToken'
+} from './sessionToken.js'
 
 describe('session tokens', () => {
   const opaqueToken = 'a'.repeat(43)

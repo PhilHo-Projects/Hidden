@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createDatabasePool } from '../database'
-import { runMigrations } from '../migrations'
+import { createDatabasePool } from '../database.js'
+import { runMigrations } from '../migrations.js'
 import {
   PostgresAuthRepository,
   UsernameTakenError,
-} from './repository'
+} from './repository.js'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const describeDatabase = databaseUrl ? describe.sequential : describe.skip

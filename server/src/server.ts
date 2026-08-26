@@ -1,22 +1,22 @@
 import path from 'node:path'
 import type { Pool } from 'pg'
-import { PostgresAdminRepository } from './admin/postgresRepository'
-import { AuthService } from './auth/service'
-import { PostgresAuthRepository } from './auth/repository'
+import { PostgresAdminRepository } from './admin/postgresRepository.js'
+import { AuthService } from './auth/service.js'
+import { PostgresAuthRepository } from './auth/repository.js'
 import {
   createHiddenServer,
   type HiddenServer,
-} from './app'
-import { createDatabasePool } from './database'
-import { type LogLevel } from './logger'
-import { runMigrations } from './migrations'
-import { PostgresMatchHistoryRepository } from './matchHistory/repository'
-import { RuntimeLifecycle } from './runtimeLifecycle'
+} from './app.js'
+import { createDatabasePool } from './database.js'
+import { type LogLevel } from './logger.js'
+import { runMigrations } from './migrations.js'
+import { PostgresMatchHistoryRepository } from './matchHistory/repository.js'
+import { RuntimeLifecycle } from './runtimeLifecycle.js'
 import {
   resolveAllowedOrigins,
   resolveAdminUsernames,
   resolveDatabaseUrl,
-} from './serverConfig'
+} from './serverConfig.js'
 
 function parsePositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value)

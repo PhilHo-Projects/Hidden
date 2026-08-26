@@ -3,15 +3,15 @@ import type {
   AuthRepository,
   AuthUser,
   UserWithPassword,
-} from './repository'
-import { UsernameTakenError } from './repository'
+} from './repository.js'
+import { UsernameTakenError } from './repository.js'
 import {
   AuthService,
   AuthServiceError,
   SESSION_DURATION_MS,
-} from './service'
-import { hashSessionToken } from './sessionToken'
-import { verifyPassword } from './password'
+} from './service.js'
+import { hashSessionToken } from './sessionToken.js'
+import { verifyPassword } from './password.js'
 
 class MemoryAuthRepository implements AuthRepository {
   readonly users = new Map<string, UserWithPassword>()

@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { createDatabasePool } from '../database'
-import { runMigrations } from '../migrations'
-import { PostgresMatchHistoryRepository } from './repository'
-import type { MatchHistoryRecordV1 } from './types'
+import { createDatabasePool } from '../database.js'
+import { runMigrations } from '../migrations.js'
+import { PostgresMatchHistoryRepository } from './repository.js'
+import type { MatchHistoryRecordV1 } from './types.js'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const describeDatabase = databaseUrl ? describe.sequential : describe.skip

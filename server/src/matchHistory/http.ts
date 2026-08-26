@@ -1,12 +1,12 @@
 import express, { type NextFunction, type Request, type Response } from 'express'
-import type { AuthenticatedUser } from '../auth/service'
-import { readSessionToken } from '../auth/sessionToken'
-import type { Logger } from '../logger'
+import type { AuthenticatedUser } from '../auth/service.js'
+import { readSessionToken } from '../auth/sessionToken.js'
+import type { Logger } from '../logger.js'
 import type {
   MatchHistoryCursor,
   MatchHistoryDetail,
   MatchHistoryRepository,
-} from './repository'
+} from './repository.js'
 
 const PAGE_SIZE = 20
 const UUID_PATTERN =

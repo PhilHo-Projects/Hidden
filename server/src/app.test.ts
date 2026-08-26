@@ -4,19 +4,19 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
-import type { AuthServiceLike } from './auth/http'
-import type { AuthenticatedUser } from './auth/service'
-import type { AdminRepository } from './admin/repository'
-import { createHiddenServer, type HiddenServer } from './app'
-import { DEFAULT_GAME_CONFIG } from './matchRules'
-import { PacketType } from './protocol'
-import { MatchCoordinator } from './matchCoordinator'
+import type { AuthServiceLike } from './auth/http.js'
+import type { AuthenticatedUser } from './auth/service.js'
+import type { AdminRepository } from './admin/repository.js'
+import { createHiddenServer, type HiddenServer } from './app.js'
+import { DEFAULT_GAME_CONFIG } from './matchRules.js'
+import { PacketType } from './protocol.js'
+import { MatchCoordinator } from './matchCoordinator.js'
 import type {
   MatchHistoryDetail,
   MatchHistoryPage,
   MatchHistoryRepository,
-} from './matchHistory/repository'
-import type { MatchHistoryRecordV1 } from './matchHistory/types'
+} from './matchHistory/repository.js'
+import type { MatchHistoryRecordV1 } from './matchHistory/types.js'
 import {
   applyCommand,
   applyTimeout,
