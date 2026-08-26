@@ -120,9 +120,20 @@ describeDatabase('Better Auth migration', () => {
     )
     const matches = await pool.query<{
       completed_at: Date
+      config_snapshot: Record<string, never>
+      engine_id: string
+      engine_revision: number
+      final_boards: never[]
       id: string
+      schema_version: number
+      seat_0_score: number
+      seat_1_score: number
+      turn_count: number
+      winner_seat: number
     }>(
-      `SELECT id, completed_at
+      `SELECT id, schema_version, completed_at, engine_id, engine_revision,
+              config_snapshot, turn_count, winner_seat, seat_0_score,
+              seat_1_score, final_boards
        FROM match_history_records`,
     )
     const participants = await pool.query<{
@@ -138,8 +149,17 @@ describeDatabase('Better Auth migration', () => {
     expect(bookmarks.rows).toEqual([])
     expect(matches.rows).toEqual([
       {
-        id: '20000000-0000-4000-8000-000000000002',
         completed_at: new Date('2030-01-03T00:00:00.000Z'),
+        config_snapshot: {},
+        engine_id: 'hidden',
+        engine_revision: 1,
+        final_boards: [],
+        id: '20000000-0000-4000-8000-000000000002',
+        schema_version: 1,
+        seat_0_score: 10,
+        seat_1_score: 8,
+        turn_count: 4,
+        winner_seat: 0,
       },
     ])
     expect(participants.rows).toEqual([
@@ -195,13 +215,21 @@ describeDatabase('Better Auth migration', () => {
          '2030-02-01T00:00:00.000Z'
        )`,
     )
-    await pool.query(
-      `INSERT INTO auth_rate_limits (id, key, count, last_request)
-       VALUES (
-         '70000000-0000-4000-8000-000000000007',
-         'sign-up:127.0.0.1', 1, 1893456000000
-       )`,
-    )
+    await expect(
+      pool.query<{ id: string }>(
+        `INSERT INTO auth_rate_limits (key, count, last_request)
+         VALUES ('sign-up:127.0.0.1', 1, 1893456000000)
+         RETURNING id`,
+      ),
+    ).resolves.toMatchObject({
+      rows: [
+        {
+          id: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+          ),
+        },
+      ],
+    })
 
     const authRows = await pool.query<{ count: string }>(
       `SELECT (
