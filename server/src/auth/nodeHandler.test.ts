@@ -57,7 +57,7 @@ async function start(
 function send(
   port: number,
   options: {
-    body?: string
+    body?: string | Buffer
     headers?: Record<string, string>
     agent?: Agent
     method?: string
@@ -100,6 +100,52 @@ describe('createBoundedAuthHandler', () => {
 
     expect(response.status).toBe(200)
   })
+
+  it.each(['GET', 'HEAD'])(
+    'rejects a body-bearing %s with an unsupported Content-Type',
+    async (method) => {
+      let routed = false
+      const port = await start(async () => {
+        routed = true
+        return new Response('unexpected')
+      })
+
+      const response = await send(port, {
+        method,
+        headers: {
+          'content-type': 'text/plain',
+          'content-length': '2',
+        },
+        body: '{}',
+      })
+
+      expect(response.status).toBe(415)
+      expect(routed).toBe(false)
+    },
+  )
+
+  it.each(['GET', 'HEAD'])(
+    'enforces the streaming limit for a body-bearing %s',
+    async (method) => {
+      let routed = false
+      const port = await start(async () => {
+        routed = true
+        return new Response('unexpected')
+      })
+
+      const response = await send(port, {
+        method,
+        headers: {
+          'content-type': 'application/json',
+          'transfer-encoding': 'chunked',
+        },
+        body: Buffer.alloc(AUTH_BODY_LIMIT_BYTES + 1, 0x78),
+      })
+
+      expect(response.status).toBe(413)
+      expect(routed).toBe(false)
+    },
+  )
 
   it('rejects body-bearing requests that are not JSON with a stable 415 response', async () => {
     let routed = false
@@ -202,6 +248,62 @@ describe('createBoundedAuthHandler', () => {
       expect(routed).toBe(1)
     } finally {
       agent.destroy()
+    }
+  })
+
+  it('returns 413 immediately after a chunked body crosses 4096 bytes', async () => {
+    let routed = false
+    const port = await start(async () => {
+      routed = true
+      return new Response('unexpected')
+    })
+    let request: ReturnType<typeof httpRequest> | undefined
+    let timeout: ReturnType<typeof setTimeout> | undefined
+
+    try {
+      const responsePromise = new Promise<ReceivedResponse>((resolve, reject) => {
+        request = httpRequest(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/api/auth/probe',
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+          },
+          (response) => {
+            const chunks: Buffer[] = []
+            response.on('data', (chunk: Buffer) => chunks.push(chunk))
+            response.on('end', () =>
+              resolve({
+                status: response.statusCode ?? 0,
+                headers: response.headers,
+                body: Buffer.concat(chunks).toString('utf8'),
+                reusedSocket: request?.reusedSocket ?? false,
+              }),
+            )
+          },
+        )
+        request.once('error', reject)
+        request.write(Buffer.alloc(AUTH_BODY_LIMIT_BYTES + 1, 0x78))
+      })
+
+      const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Timed out waiting for immediate 413.')),
+          750,
+        )
+      })
+      const response = await Promise.race([responsePromise, timeoutPromise])
+
+      expect(response.status).toBe(413)
+      expect(JSON.parse(response.body)).toEqual({
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'Auth request body exceeds 4096 bytes.',
+      })
+      expect(routed).toBe(false)
+    } finally {
+      clearTimeout(timeout)
+      request?.destroy()
     }
   })
 

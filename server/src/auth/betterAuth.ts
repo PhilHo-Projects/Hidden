@@ -1,4 +1,5 @@
-import { betterAuth, type BetterAuthOptions } from 'better-auth'
+import { APIError, betterAuth, type BetterAuthOptions } from 'better-auth'
+import { createAuthMiddleware } from 'better-auth/api'
 import { captcha } from 'better-auth/plugins'
 import { haveIBeenPwned } from 'better-auth/plugins/haveibeenpwned'
 import { username } from 'better-auth/plugins/username'
@@ -10,6 +11,38 @@ import { hashPassword, verifyPassword } from './password.js'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,24}$/
 const DISPLAY_USERNAME_PATTERN = /^[A-Za-z0-9_]{3,24}$/
+
+const enforceUsernamePolicy = createAuthMiddleware(async (context) => {
+  const body = context.body as Record<string, unknown> | undefined
+
+  if (context.path === '/sign-up/email') {
+    const username = body?.username
+    const displayUsername = body?.displayUsername
+    if (typeof username !== 'string' || typeof displayUsername !== 'string') {
+      throw APIError.from('BAD_REQUEST', {
+        code: 'USERNAME_PAIR_REQUIRED',
+        message: 'Username and display username are required.',
+      })
+    }
+    if (username !== displayUsername.toLowerCase()) {
+      throw APIError.from('BAD_REQUEST', {
+        code: 'USERNAME_PAIR_MISMATCH',
+        message: 'Username must match the lowercase display username.',
+      })
+    }
+  }
+
+  if (
+    context.path === '/update-user' &&
+    body &&
+    (Object.hasOwn(body, 'username') || Object.hasOwn(body, 'displayUsername'))
+  ) {
+    throw APIError.from('BAD_REQUEST', {
+      code: 'USERNAME_IS_IMMUTABLE',
+      message: 'Username cannot be updated.',
+    })
+  }
+})
 
 export interface HiddenAuthFactoryOverrides {
   turnstileVerifyURL?: string
@@ -34,6 +67,9 @@ export function createHiddenAuthOptions({
     basePath: '/api/auth',
     secret: config.secret,
     trustedOrigins: config.allowedOrigins,
+    hooks: {
+      before: enforceUsernamePolicy,
+    },
     database: pool,
     user: {
       modelName: 'users',

@@ -13,6 +13,11 @@ const PAYLOAD_TOO_LARGE = {
   message: 'Auth request body exceeds 4096 bytes.',
 }
 
+interface BodyReadResult {
+  body?: Buffer
+  tooLarge: boolean
+}
+
 interface ExpressCompatibleRequest extends IncomingMessage {
   ip?: string
   originalUrl?: string
@@ -32,6 +37,17 @@ function firstHeader(value: string | string[] | undefined) {
 function isJsonRequest(headers: IncomingHttpHeaders) {
   const contentType = firstHeader(headers['content-type'])
   return contentType?.split(';', 1)[0]?.trim().toLowerCase() === 'application/json'
+}
+
+function hasDeclaredBody(headers: IncomingHttpHeaders) {
+  if (firstHeader(headers['transfer-encoding'])) {
+    return true
+  }
+  const contentLength = firstHeader(headers['content-length'])
+  if (contentLength === undefined) {
+    return false
+  }
+  return !/^\d+$/.test(contentLength) || Number(contentLength) > 0
 }
 
 function copyHeaders(headers: IncomingHttpHeaders) {
@@ -54,25 +70,61 @@ function copyHeaders(headers: IncomingHttpHeaders) {
   return result
 }
 
-async function readBoundedBody(request: IncomingMessage) {
-  const chunks: Buffer[] = []
-  let received = 0
-  let tooLarge = false
-  for await (const rawChunk of request) {
-    const chunk = Buffer.isBuffer(rawChunk)
-      ? rawChunk
-      : Buffer.from(rawChunk as Uint8Array)
-    received += chunk.byteLength
-    if (received > AUTH_BODY_LIMIT_BYTES) {
-      tooLarge = true
-      chunks.length = 0
-      continue
+function readBoundedBody(request: IncomingMessage): Promise<BodyReadResult> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let received = 0
+    let settled = false
+
+    const cleanup = () => {
+      request.off('data', onData)
+      request.off('end', onEnd)
+      request.off('error', onError)
+      request.off('aborted', onAborted)
     }
-    if (!tooLarge) {
+    const onData = (rawChunk: Buffer | Uint8Array) => {
+      const chunk = Buffer.isBuffer(rawChunk)
+        ? rawChunk
+        : Buffer.from(rawChunk)
+      received += chunk.byteLength
+      if (received > AUTH_BODY_LIMIT_BYTES) {
+        settled = true
+        chunks.length = 0
+        request.off('data', onData)
+        request.resume()
+        resolve({ tooLarge: true })
+        return
+      }
       chunks.push(chunk)
     }
-  }
-  return tooLarge ? undefined : Buffer.concat(chunks, received)
+    const onEnd = () => {
+      cleanup()
+      if (!settled) {
+        settled = true
+        resolve({ body: Buffer.concat(chunks, received), tooLarge: false })
+      }
+    }
+    const onError = (error: Error) => {
+      cleanup()
+      if (!settled) {
+        settled = true
+        reject(error)
+      }
+    }
+    const onAborted = () => {
+      cleanup()
+      if (!settled) {
+        settled = true
+        reject(new Error('Auth request body was aborted.'))
+      }
+    }
+
+    request.on('data', onData)
+    request.once('end', onEnd)
+    request.once('error', onError)
+    request.once('aborted', onAborted)
+    request.resume()
+  })
 }
 
 function sendJson(
@@ -114,15 +166,18 @@ export function createBoundedAuthHandler(
     response: ServerResponse,
   ): Promise<void> => {
     const method = request.method?.toUpperCase() ?? 'GET'
-    const mayOmitContentType = method === 'GET' || method === 'HEAD'
-    if (!mayOmitContentType && !isJsonRequest(request.headers)) {
+    const isGetOrHead = method === 'GET' || method === 'HEAD'
+    const bodyBearing = !isGetOrHead || hasDeclaredBody(request.headers)
+    if (bodyBearing && !isJsonRequest(request.headers)) {
       request.resume()
       sendJson(response, 415, UNSUPPORTED_MEDIA_TYPE)
       return
     }
 
-    const body = mayOmitContentType ? undefined : await readBoundedBody(request)
-    if (!mayOmitContentType && body === undefined) {
+    const bodyResult = bodyBearing
+      ? await readBoundedBody(request)
+      : { tooLarge: false }
+    if (bodyResult.tooLarge) {
       sendJson(response, 413, PAYLOAD_TOO_LARGE)
       return
     }
@@ -136,7 +191,9 @@ export function createBoundedAuthHandler(
     const webRequest = new Request(new URL(path, options.baseURL), {
       method,
       headers,
-      ...(body ? { body: body.toString('utf8') } : {}),
+      ...(!isGetOrHead && bodyResult.body
+        ? { body: bodyResult.body.toString('utf8') }
+        : {}),
     })
     const webResponse = await options.auth.handler(webRequest)
     await sendWebResponse(response, webResponse)

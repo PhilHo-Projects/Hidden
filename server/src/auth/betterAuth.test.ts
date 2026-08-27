@@ -37,6 +37,17 @@ function createOptions(
   })
 }
 
+async function runBeforeHook(
+  path: string,
+  body: Record<string, unknown>,
+) {
+  const before = createOptions().hooks?.before
+  if (!before) {
+    throw new Error('Missing Hidden auth request policy hook.')
+  }
+  return before({ path, body } as never)
+}
+
 describe('Hidden Better Auth options', () => {
   it('maps every Better Auth model to migration 005', () => {
     const options = createOptions()
@@ -168,6 +179,68 @@ describe('Hidden Better Auth options', () => {
     })
   })
 
+  it.each([
+    ['both', {}],
+    ['display username', { username: 'player_one' }],
+    ['username', { displayUsername: 'Player_ONE' }],
+  ])(
+    'rejects email signup missing %s with a stable validation error',
+    async (_missing, body) => {
+      await expect(runBeforeHook('/sign-up/email', body)).rejects.toMatchObject({
+        statusCode: 400,
+        body: {
+          code: 'USERNAME_PAIR_REQUIRED',
+          message: 'Username and display username are required.',
+        },
+      })
+    },
+  )
+
+  it.each([
+    ['divergent values', 'different_player', 'Player_ONE'],
+    ['non-canonical casing', 'Player_ONE', 'Player_ONE'],
+  ])(
+    'rejects signup usernames with %s before persistence',
+    async (_case, username, displayUsername) => {
+      await expect(
+        runBeforeHook('/sign-up/email', { username, displayUsername }),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        body: {
+          code: 'USERNAME_PAIR_MISMATCH',
+          message: 'Username must match the lowercase display username.',
+        },
+      })
+    },
+  )
+
+  it('accepts a canonical username paired with a case-preserving display username', async () => {
+    const body = {
+      username: 'player_one',
+      displayUsername: 'Player_ONE',
+    }
+
+    await expect(runBeforeHook('/sign-up/email', body)).resolves.toBeUndefined()
+    expect(body).toEqual({
+      username: 'player_one',
+      displayUsername: 'Player_ONE',
+    })
+  })
+
+  it.each([
+    { username: 'new_player' },
+    { displayUsername: 'New_Player' },
+    { username: 'new_player', displayUsername: 'New_Player' },
+  ])('rejects username mutation through update-user: %j', async (body) => {
+    await expect(runBeforeHook('/update-user', body)).rejects.toMatchObject({
+      statusCode: 400,
+      body: {
+        code: 'USERNAME_IS_IMMUTABLE',
+        message: 'Username cannot be updated.',
+      },
+    })
+  })
+
   it('uses the real Argon2id hooks and the deliberate 8-128 policy', async () => {
     const emailAndPassword = createOptions().emailAndPassword
     expect(emailAndPassword).toMatchObject({
@@ -258,6 +331,9 @@ describe('Hidden Better Auth options', () => {
       autoSignInAfterVerification: true,
       expiresIn: 3_600,
     })
+    expect(options.trustedOrigins).toEqual([
+      'https://hidden.philippeho.dev',
+    ])
     expect(options.user?.changeEmail).toMatchObject({
       enabled: true,
       updateEmailWithoutVerification: false,
@@ -308,6 +384,47 @@ describe('Hidden Better Auth options', () => {
       allowedHostnames: ['hidden.philippeho.dev'],
       siteVerifyURLOverride: 'https://turnstile.invalid/siteverify',
     })
+  })
+
+  it('requires Turnstile only on configured endpoints without contacting the provider', async () => {
+    const captchaPlugin = createOptions(undefined, {
+      turnstileVerifyURL: 'https://turnstile.invalid/siteverify',
+    }).plugins?.find((plugin) => plugin.id === 'captcha')
+    const context = {
+      options: {
+        basePath: '/api/auth',
+        advanced: { ipAddress: { disableIpTracking: true } },
+      },
+      logger: { error() {} },
+    }
+
+    const protectedResult = await captchaPlugin?.onRequest?.(
+      new Request('https://hidden.example/api/auth/sign-up/email'),
+      context as never,
+    )
+    expect(protectedResult).toHaveProperty('response')
+    const protectedResponse =
+      protectedResult && 'response' in protectedResult
+        ? protectedResult.response
+        : undefined
+    expect(protectedResponse?.status).toBe(400)
+    await expect(protectedResponse?.json()).resolves.toEqual({
+      code: 'MISSING_RESPONSE',
+      message: 'Missing CAPTCHA response',
+    })
+
+    await expect(
+      captchaPlugin?.onRequest?.(
+        new Request('https://hidden.example/api/auth/sign-in/email'),
+        context as never,
+      ),
+    ).resolves.toBeUndefined()
+    await expect(
+      captchaPlugin?.onRequest?.(
+        new Request('https://hidden.example/api/auth/sign-in/username'),
+        context as never,
+      ),
+    ).resolves.toBeUndefined()
   })
 
   it('creates the exact host-only production session cookie without a second prefix', () => {
