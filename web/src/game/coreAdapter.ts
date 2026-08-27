@@ -146,6 +146,10 @@ function presentEvent(
       return event.seat === localSeat
         ? [{ type: 'announcement', message: 'Piece shielded!' }]
         : []
+    // Silent. The snapshot closing is the announcement, and a line of text
+    // arriving as it goes would only compete with it.
+    case 'reveal-ended':
+      return []
     case 'extra-turn-started':
       return event.seat === localSeat
         ? [{ type: 'announcement', message: 'Extra turn!' }]
@@ -346,6 +350,18 @@ export function applyOfflinePowerup(
   return presentResultFromCore(
     state,
     applyCommand(canonicalState, localSeat, { type: 'activate-powerup', powerup }),
+  )
+}
+
+/**
+ * Closes the reveal snapshot offline. The client is the authority in offline
+ * play, so it owns the window here exactly as `MatchCoordinator` does online.
+ */
+export function applyOfflineRevealEnd(state: GameState): EngineResult {
+  const { canonicalState, localSeat } = requireCanonical(state)
+  return presentResultFromCore(
+    state,
+    applyCommand(canonicalState, localSeat, { type: 'end-reveal' }),
   )
 }
 

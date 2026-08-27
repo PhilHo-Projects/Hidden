@@ -31,6 +31,7 @@ function matchRecord(overrides: {
       streak: 3,
       rounds: 1,
       turnSeconds: 10,
+      revealSeconds: 1.5,
       blindMode: false,
       powerupsEnabled: true,
       powerups: { shield: true, reveal: true, extraTurn: true },

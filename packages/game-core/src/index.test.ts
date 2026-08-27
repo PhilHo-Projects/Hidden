@@ -10,6 +10,8 @@ import {
   decodeGameConfig,
   DEFAULT_GAME_CONFIG,
   MAX_TURN_SECONDS,
+  MAX_REVEAL_SECONDS,
+  MIN_REVEAL_SECONDS,
   MIN_TURN_SECONDS,
   ONLINE_MIN_TURN_SECONDS,
   type GameConfig,
@@ -475,6 +477,7 @@ describe('game config', () => {
       streak: 3,
       rounds: 6,
       turnSeconds: 10,
+      revealSeconds: 1.5,
       blindMode: true,
       powerupsEnabled: true,
       powerups: { shield: true, reveal: true, extraTurn: true },
@@ -759,5 +762,96 @@ describe('config-driven engine', () => {
       return JSON.stringify(state)
     }
     assert.equal(run(), run())
+  })
+})
+
+/*
+ * Reveal is a timed snapshot rather than a panel that stays up until the next
+ * placement. The core has no clock, so the window is closed by a command the
+ * authority issues when its timer fires; see
+ * docs/superpowers/specs/2026-08-14-reveal-snapshot-design.md.
+ */
+describe('reveal snapshot window', () => {
+  // Reveal unlocks off a paper placement under the default power-up mapping,
+  // so this walks a match to the point where seat 0 holds it.
+  function withRevealArmed() {
+    let state = createGame(baseSpec({ config: { ...DEFAULT_GAME_CONFIG, rounds: 10 } }))
+    state = play(state, 0, 0, 'paper').state
+    state = play(state, 1, 3, 'rock').state
+    state = play(state, 0, 1, 'paper').state
+    state = play(state, 1, 4, 'rock').state
+    state = play(state, 0, 2, 'paper').state
+    state = play(state, 1, 5, 'rock').state
+    assert.equal(state.powerups[0].unlocked.reveal, true, 'reveal should be unlocked by now')
+    return accepted(state, 0, { type: 'activate-powerup', powerup: 'reveal' }).state
+  }
+
+  it('lowers the reveal when the window closes', () => {
+    const armed = withRevealArmed()
+    assert.equal(armed.powerups[0].revealActive, true)
+
+    const ended = accepted(armed, 0, { type: 'end-reveal' })
+    assert.equal(ended.state.powerups[0].revealActive, false)
+  })
+
+  it('leaves the rest of the turn alone when the window closes', () => {
+    // Closing a snapshot is not a move: it must not consume the turn, flip the
+    // active seat, or spend the power-up's used flag a second time.
+    const armed = withRevealArmed()
+    const ended = accepted(armed, 0, { type: 'end-reveal' })
+
+    assert.equal(ended.state.activeSeat, armed.activeSeat)
+    assert.equal(ended.state.turnCount, armed.turnCount)
+    assert.equal(ended.state.powerups[0].used.reveal, true)
+  })
+
+  it('accepts a second close without complaint', () => {
+    // The player may close early while the authority's own timer is still
+    // pending, so the two race by design and the loser has to be inert.
+    const armed = withRevealArmed()
+    const once = accepted(armed, 0, { type: 'end-reveal' })
+    const twice = accepted(once.state, 0, { type: 'end-reveal' })
+
+    assert.equal(twice.state.powerups[0].revealActive, false)
+  })
+
+  it('accepts a close from a seat whose turn has since passed', () => {
+    /*
+     * The turn clock keeps running underneath the snapshot, so a turn can time
+     * out while the window is still open and the authority's expiry then lands
+     * on the other seat's turn. Rejecting it as out-of-turn would strand
+     * `revealActive` true until the player's next placement -- exactly the
+     * open-ended reveal this change exists to remove.
+     */
+    const armed = withRevealArmed()
+    const passed = applyTimeout(armed)
+    assert.equal(passed.accepted, true)
+    assert.equal(passed.state.activeSeat, 1, 'the turn has moved on')
+
+    // Accepted, not `not-active-seat`. The authority fires its timer on wall
+    // time and cannot know the turn moved on first, so a rejection here would
+    // be a logged failure for a command that did its job.
+    const late = applyCommand(passed.state, 0, { type: 'end-reveal' })
+    assert.equal(late.accepted, true)
+    assert.equal(late.state.powerups[0].revealActive, false)
+  })
+
+  it('still clears the reveal on placement without waiting for the window', () => {
+    const armed = withRevealArmed()
+    const placed = play(armed, 0, 6, 'rock')
+
+    assert.equal(placed.state.powerups[0].revealActive, false)
+  })
+
+  it('carries a reveal window length on the config', () => {
+    assert.equal(DEFAULT_GAME_CONFIG.revealSeconds, 1.5)
+    assert.equal(clampGameConfig({ revealSeconds: 0 }).revealSeconds, MIN_REVEAL_SECONDS)
+    assert.equal(clampGameConfig({ revealSeconds: 999 }).revealSeconds, MAX_REVEAL_SECONDS)
+    assert.equal(clampGameConfig({ revealSeconds: 2.25 }).revealSeconds, 2.3)
+    assert.equal(
+      clampGameConfig({}).revealSeconds,
+      DEFAULT_GAME_CONFIG.revealSeconds,
+      'an absent value falls back rather than becoming NaN',
+    )
   })
 })

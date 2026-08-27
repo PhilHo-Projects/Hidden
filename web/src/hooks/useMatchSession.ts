@@ -14,6 +14,7 @@ import {
   applyOnlinePresentation,
   applyOfflineLocalMove,
   applyOfflinePowerup,
+  applyOfflineRevealEnd,
   applyOfflineShieldSelection,
   createOfflineState,
   createOnlinePresentedState,
@@ -135,6 +136,7 @@ export interface MatchSession {
   selectSymbol: (symbol: ClassicSymbol) => void
   selectCell: (index: number) => void
   activatePowerup: (powerup: PowerupKey) => void
+  endReveal: () => void
 }
 
 export function useMatchSession({
@@ -824,6 +826,32 @@ export function useMatchSession({
     }
   }, [applyEngineResult, sendOnlineCommand])
 
+  const endReveal = useCallback(() => {
+    if (!matchRef.current?.playerPowerups.revealActive) return
+    if (matchRef.current.config.isOnline) {
+      sendOnlineCommand({ type: 'end-reveal' })
+    } else {
+      applyEngineResult(applyOfflineRevealEnd(matchRef.current))
+    }
+  }, [applyEngineResult, sendOnlineCommand])
+
+  /*
+   * The offline window. Online, `MatchCoordinator` owns this and the client
+   * only ever asks to close early; offline the client *is* the authority, so it
+   * arms the same window itself. Keyed on the flag rather than on the
+   * activation, so a reveal cleared by placing tears the timer down with it.
+   */
+  useEffect(() => {
+    if (!match?.playerPowerups.revealActive || match.config.isOnline) return
+    const id = window.setTimeout(endReveal, match.config.revealSeconds * 1000)
+    return () => window.clearTimeout(id)
+  }, [
+    match?.playerPowerups.revealActive,
+    match?.config.isOnline,
+    match?.config.revealSeconds,
+    endReveal,
+  ])
+
   return {
     onlineRules,
     match,
@@ -850,5 +878,6 @@ export function useMatchSession({
     selectSymbol: selectMatchSymbol,
     selectCell,
     activatePowerup,
+    endReveal,
   }
 }

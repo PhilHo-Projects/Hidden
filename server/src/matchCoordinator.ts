@@ -259,6 +259,13 @@ export class MatchCoordinator {
   private readonly roomByConnectionId = new Map<number, MatchRoom>()
   private readonly roomsById = new Map<string, MatchRoom>()
   private readonly timerByRoomId = new Map<string, unknown>()
+  /*
+   * Separate from `timerByRoomId` because the reveal window and the turn
+   * deadline run at the same time: the turn clock keeps counting underneath the
+   * snapshot, which is what makes reveal cost the player something. Keyed by
+   * seat as well as room so the two seats can never clear each other's window.
+   */
+  private readonly revealTimerByKey = new Map<string, unknown>()
   private readonly deliverySubscribers = new Set<
     (deliveries: readonly GameUpdateDelivery[]) => void
   >()
@@ -721,6 +728,14 @@ export class MatchCoordinator {
       this.resetPlacementWindow(room, run)
     }
 
+    if (command.type === 'activate-powerup' && command.powerup === 'reveal') {
+      this.armRevealWindow(room, run, actorSeat)
+    } else if (!state.powerups[actorSeat].revealActive) {
+      // The reveal came down on its own -- placed, or closed early. Drop the
+      // armed window rather than leaving a timer to wake up and find nothing.
+      this.clearRevealTimer(room.id, actorSeat)
+    }
+
     const actorUpdate = this.acceptedUpdate(
       run,
       commandId,
@@ -1008,6 +1023,97 @@ export class MatchCoordinator {
     return { descriptor, firstConnectionId, room, run }
   }
 
+  private revealKey(roomId: string, seat: Seat) {
+    return `${roomId}:${seat}`
+  }
+
+  private armRevealWindow(room: MatchRoom, run: MatchRun, seat: Seat) {
+    this.clearRevealTimer(room.id, seat)
+    const key = this.revealKey(room.id, seat)
+    let handle: unknown
+    handle = this.dependencies.scheduleTimeout(() => {
+      if (
+        this.roomsById.get(room.id) !== room ||
+        room.currentRun !== run ||
+        run.phase !== 'active' ||
+        this.revealTimerByKey.get(key) !== handle
+      ) {
+        return
+      }
+      this.revealTimerByKey.delete(key)
+      const deliveries = this.closeRevealWindow(room, run, seat)
+      if (deliveries.length === 0) {
+        return
+      }
+      this.dependencies.deliverySink(deliveries)
+      for (const subscriber of this.deliverySubscribers) {
+        subscriber(deliveries)
+      }
+    }, room.config.revealSeconds * 1_000)
+    this.revealTimerByKey.set(key, handle)
+  }
+
+  /**
+   * Applies the expiry. Returns nothing at all when the reveal is already down —
+   * a placement or an early close got there first — so a window that outlives
+   * what it was watching costs no revision and sends no packet.
+   */
+  private closeRevealWindow(room: MatchRoom, run: MatchRun, seat: Seat) {
+    if (
+      room.phase !== 'active' ||
+      run.phase !== 'active' ||
+      !run.state.powerups[seat].revealActive
+    ) {
+      return []
+    }
+
+    const command = { type: 'end-reveal' } as const
+    const fromRevision = run.revision
+    const result = applyCommand(run.state, seat, command)
+    if (!result.accepted) {
+      return []
+    }
+    run.state = result.state
+    run.revision += 1
+
+    const update = this.acceptedUpdate(
+      run,
+      null,
+      fromRevision,
+      run.revision,
+      seat,
+      [command],
+      [...result.events],
+    )
+    const actorDelivery: GameUpdateDelivery = {
+      connectionId: room.participants[seat].connectionId,
+      update,
+    }
+
+    // An extra turn holds the opponent's view back so the pair arrives as one
+    // batch. Folding the close into that buffer keeps their revisions
+    // contiguous instead of interleaving an out-of-band update.
+    if (run.bufferedOpponentUpdate) {
+      const buffered = run.bufferedOpponentUpdate
+      buffered.commands.push(command)
+      buffered.events.push(...result.events)
+      buffered.toRevision = run.revision
+      return [actorDelivery]
+    }
+
+    return [actorDelivery, this.opponentDelivery(room, seat, update)]
+  }
+
+  private clearRevealTimer(roomId: string, seat: Seat) {
+    const key = this.revealKey(roomId, seat)
+    const handle = this.revealTimerByKey.get(key)
+    if (handle === undefined) {
+      return
+    }
+    this.revealTimerByKey.delete(key)
+    this.dependencies.clearTimeout(handle)
+  }
+
   private resetPlacementWindow(room: MatchRoom, run: MatchRun) {
     this.clearRoomTimer(room)
     const duration = room.config.turnSeconds * 1_000
@@ -1041,6 +1147,12 @@ export class MatchCoordinator {
   }
 
   private clearRoomTimer(room: MatchRoom) {
+    // Every teardown path goes through here -- abandon, finish, and restart --
+    // so the reveal windows are dropped here too. Their own guards make a stale
+    // fire inert, but an uncleared handle is still a timer nobody will cancel.
+    this.clearRevealTimer(room.id, 0)
+    this.clearRevealTimer(room.id, 1)
+
     const handle = this.timerByRoomId.get(room.id)
     if (handle === undefined) {
       return

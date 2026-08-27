@@ -207,6 +207,12 @@ export function BoardGrid({
                 />
               ) : null}
 
+              {/* The result walk's lift. A layer rather than a `filter` on the
+                * cell, because the cell's outline and drop stack *are* its
+                * filter and a keyframe would replace the whole chain. Sits here
+                * so the markers below it keep painting on top. */}
+              {scoreCount ? <span className="score-count-flash" aria-hidden="true" /> : null}
+
               {/* The cell index is carried by `aria-label` above rather than
                 * printed. On the board it read as clutter; screen readers still
                 * need it to tell one cell from another. */}

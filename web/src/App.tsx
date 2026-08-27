@@ -12,6 +12,7 @@ import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { AdminPanel } from './components/AdminPanel'
 import { BoardGrid } from './components/BoardGrid'
+import { RevealSnapshot } from './components/RevealSnapshot'
 import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
 import { MatchHistoryScreen } from './components/MatchHistory'
 import { PowerupTray } from './components/PowerupTray'
@@ -50,7 +51,8 @@ import {
   getTurnStatusText,
   resolvePlayerName,
   shouldPromptMoveChoice,
-  shouldShowOpponentBoard,
+  isRevealSnapshotOpen,
+  shouldShowOpponentPanel,
   type Screen,
 } from './game/viewModel'
 
@@ -192,6 +194,7 @@ function App({ initialAuthIntent = null }: AppProps) {
     selectSymbol: onSelectSymbol,
     selectCell: onCellSelect,
     activatePowerup: onPowerup,
+    endReveal: onEndReveal,
   } = useMatchSession({
     screen,
     screenRef,
@@ -311,7 +314,8 @@ function App({ initialAuthIntent = null }: AppProps) {
    */
   const onlineConfig = clampOnlineGameConfig(config)
   const opponentName = getOpponentName(users, clientId, match)
-  const showOpponent = shouldShowOpponentBoard(match, screen)
+  const showOpponentPanel = shouldShowOpponentPanel(match)
+  const revealOpen = isRevealSnapshotOpen(match)
   const searchClock = `${Math.floor(searchSeconds / 60).toString().padStart(2, '0')}:${(searchSeconds % 60)
     .toString()
     .padStart(2, '0')}`
@@ -784,9 +788,11 @@ function App({ initialAuthIntent = null }: AppProps) {
                 destructionEffects={playerDestructionEffects}
                 onSelect={onCellSelect}
               />
-              {showOpponent ? (
-                <aside className="opponent-peek" aria-label={`${opponentName}'s revealed board`}>
-                  <p>REVEALED</p>
+              {/* The variant that never hid the board keeps its standing panel.
+                * Only the reveal power-up opens the timed snapshot below. */}
+              {showOpponentPanel ? (
+                <aside className="opponent-peek" aria-label={`${opponentName}'s board`}>
+                  <p>OPEN BOARD</p>
                   <BoardGrid
                     title="Opponent Board"
                     subtitle={opponentName}
@@ -795,6 +801,14 @@ function App({ initialAuthIntent = null }: AppProps) {
                   />
                 </aside>
               ) : null}
+
+              <RevealSnapshot
+                open={revealOpen}
+                opponentName={opponentName}
+                grid={match.opponentGrid}
+                seconds={match.config.revealSeconds}
+                onClose={onEndReveal}
+              />
             </div>
             <div className="battle-controls">
               {/* Hidden entirely when the variant has no power-ups, so a

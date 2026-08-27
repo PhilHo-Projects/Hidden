@@ -109,8 +109,21 @@ there binds a stranger; a host sets the rules of a game they own.
 
 ## Battle feedback
 
-- Reveal opens the opponent board as a compact temporary overlay; it must not
-  resize or replace the player's board.
+- Reveal is a timed snapshot, not a panel. It covers the whole match screen for
+  `revealSeconds`, takes the player's own board away while it is up, and names
+  whose board is being shown; the player places from memory afterwards. Covering
+  their board is the rule, not a layout compromise — a snapshot you can consult
+  while you place is the open-ended reveal this replaced, and a panel beside the
+  board has nowhere to go on a phone.
+- The reveal countdown lives on the frame, as bulbs going dark clockwise around
+  the border. No progress bar and no number: the player has about a second and a
+  half to read a board, and nothing else should compete for it.
+- The window belongs to the authority, never to a local timer. `game-core` has
+  no clock and both sides replay the same commands, so the expiry arrives as an
+  `end-reveal` command like any other state change; two independent clocks would
+  disagree and drop the match into sync-lost.
+- The variant that does not hide the opponent board at all keeps a standing side
+  panel. Nothing is being revealed there, so nothing times out.
 - Anything that lands on a cell grows from its middle, and anything that leaves
   shrinks back into it. Colour and desecration both read the shared
   `--cell-motion-*` tokens, so the two cannot drift into different motion for the

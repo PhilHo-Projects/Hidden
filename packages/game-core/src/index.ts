@@ -81,6 +81,11 @@ export interface GameConfig {
   readonly streak: number
   readonly rounds: number
   readonly turnSeconds: number
+  /**
+   * How long the reveal snapshot stays up. The core has no clock and never
+   * expires it itself; this is the length the authority arms its timer for.
+   */
+  readonly revealSeconds: number
   readonly blindMode: boolean
   readonly powerupsEnabled: boolean
   readonly powerups: Readonly<Record<PowerupKey, boolean>>
@@ -92,6 +97,7 @@ export const DEFAULT_GAME_CONFIG: Readonly<GameConfig> = deepFreeze({
   streak: 3,
   rounds: 6,
   turnSeconds: 10,
+  revealSeconds: 1.5,
   blindMode: true,
   powerupsEnabled: true,
   powerups: { shield: true, reveal: true, extraTurn: true },
@@ -111,6 +117,15 @@ export const MIN_TURN_SECONDS = 0.2
 export const ONLINE_MIN_TURN_SECONDS = 2
 export const MAX_TURN_SECONDS = 60
 
+/**
+ * The snapshot is meant to be memorised, not read at leisure, so the ceiling is
+ * low. The floor exists for the same reason `MIN_TURN_SECONDS` does: a test
+ * driving a match to its outcome should not spend real seconds waiting for a
+ * window to close.
+ */
+export const MIN_REVEAL_SECONDS = 0.1
+export const MAX_REVEAL_SECONDS = 10
+
 function clampInteger(value: unknown, min: number, max: number, fallback: number) {
   const numeric = finiteNumberOrDefault(value, fallback)
   return Math.min(max, Math.max(min, Math.trunc(numeric)))
@@ -118,10 +133,14 @@ function clampInteger(value: unknown, min: number, max: number, fallback: number
 
 // One decimal place. Anything finer is noise against render and network timing,
 // and keeping it coarse stops float drift from reaching the wire.
-function clampTurnSeconds(value: unknown, min: number) {
-  const numeric = finiteNumberOrDefault(value, DEFAULT_GAME_CONFIG.turnSeconds)
-  const bounded = Math.min(MAX_TURN_SECONDS, Math.max(min, numeric))
+function clampSeconds(value: unknown, min: number, max: number, fallback: number) {
+  const numeric = finiteNumberOrDefault(value, fallback)
+  const bounded = Math.min(max, Math.max(min, numeric))
   return Math.round(bounded * 10) / 10
+}
+
+function clampTurnSeconds(value: unknown, min: number) {
+  return clampSeconds(value, min, MAX_TURN_SECONDS, DEFAULT_GAME_CONFIG.turnSeconds)
 }
 
 function booleanOrDefault(value: unknown, fallback: boolean) {
@@ -185,6 +204,12 @@ export function clampGameConfig(value: unknown): GameConfig {
     streak: clampInteger(candidate.streak, 2, boardSize, boardSize),
     rounds: clampInteger(candidate.rounds, 1, 20, DEFAULT_GAME_CONFIG.rounds),
     turnSeconds: clampTurnSeconds(candidate.turnSeconds, MIN_TURN_SECONDS),
+    revealSeconds: clampSeconds(
+      candidate.revealSeconds,
+      MIN_REVEAL_SECONDS,
+      MAX_REVEAL_SECONDS,
+      DEFAULT_GAME_CONFIG.revealSeconds,
+    ),
     blindMode: booleanOrDefault(candidate.blindMode, DEFAULT_GAME_CONFIG.blindMode),
     powerupsEnabled: booleanOrDefault(
       candidate.powerupsEnabled,
@@ -253,6 +278,12 @@ export type GameCommand =
   | { readonly type: 'place'; readonly locationId: LocationId; readonly symbol: ClassicSymbol }
   | { readonly type: 'activate-powerup'; readonly powerup: PowerupKey }
   | { readonly type: 'select-shield-target'; readonly locationId: LocationId }
+  /**
+   * Closes the reveal snapshot. Issued by the authority when the window it
+   * armed expires, and by the player closing it early; the two race, so this
+   * has to be inert when the reveal is already down.
+   */
+  | { readonly type: 'end-reveal' }
   | { readonly type: 'timeout' }
 
 export interface Placement {
@@ -309,6 +340,7 @@ export type DomainEvent =
   | { readonly type: 'powerup-unlocked'; readonly seat: Seat; readonly powerup: PowerupKey }
   | { readonly type: 'powerup-activated'; readonly seat: Seat; readonly powerup: PowerupKey }
   | { readonly type: 'shield-selected'; readonly seat: Seat; readonly locationId: LocationId }
+  | { readonly type: 'reveal-ended'; readonly seat: Seat }
   | { readonly type: 'extra-turn-started'; readonly seat: Seat }
   | { readonly type: 'placements-committed'; readonly seat: Seat; readonly placements: readonly Placement[] }
   | { readonly type: 'turn-passed'; readonly seat: Seat }
@@ -454,6 +486,8 @@ function isGameCommand(value: unknown): value is GameCommand {
       return isPowerupKey(candidate.powerup)
     case 'select-shield-target':
       return isLocationId(candidate.locationId)
+    case 'end-reveal':
+      return true
     case 'timeout':
       return true
     default:
@@ -727,6 +761,18 @@ function selectShieldTarget(
   }
 }
 
+function endReveal(state: GameState, seat: Seat): ApplyResult {
+  // Already down: accept and return the same state. The early close and the
+  // armed window race by design, and a rejection would have the authority
+  // logging a failure for a command that did exactly what it was for.
+  if (!state.powerups[seat].revealActive) {
+    return { accepted: true, state, events: [] }
+  }
+  const next = cloneState(state)
+  ;(next.powerups[seat] as Mutable<PlayerPowerups>).revealActive = false
+  return { accepted: true, state: next, events: [{ type: 'reveal-ended', seat }] }
+}
+
 export function applyCommand(
   state: GameState,
   actor: Seat,
@@ -734,6 +780,16 @@ export function applyCommand(
 ): ApplyResult {
   if (!isSeat(actor) || !isGameCommand(command)) return reject(state, 'invalid-command')
   if (state.phase === 'finished') return reject(state, 'game-finished')
+  /*
+   * Closing a snapshot is exempt from the active-seat check, and deliberately.
+   * The turn clock runs underneath the window, so a turn can time out while the
+   * reveal is still up and the authority's expiry then arrives on the other
+   * seat's turn. Rejecting it would leave `revealActive` true until the player's
+   * next placement, which is the open-ended reveal this replaced. Lowering a
+   * seat's own flag can only ever take information away from that seat, so
+   * there is nothing here to abuse.
+   */
+  if (command.type === 'end-reveal') return endReveal(state, actor)
   if (actor !== state.activeSeat) return reject(state, 'not-active-seat')
   if (command.type === 'timeout') return applyTimeout(state)
   if (command.type === 'place') return place(state, actor, command)
