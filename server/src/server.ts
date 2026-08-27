@@ -13,7 +13,7 @@ import {
 } from './app.js'
 import { createDatabasePool } from './database.js'
 import { type LogLevel } from './logger.js'
-import { runMigrations } from './migrations.js'
+import { assertMigrationsCurrent } from './migrations.js'
 import { PostgresMatchHistoryRepository } from './matchHistory/repository.js'
 import { RuntimeLifecycle } from './runtimeLifecycle.js'
 import {
@@ -67,7 +67,7 @@ async function start(isStopping: () => boolean) {
         error: error.message,
       })
     })
-    await runMigrations(databasePool)
+    await assertMigrationsCurrent(databasePool)
     if (isStopping()) {
       return
     }

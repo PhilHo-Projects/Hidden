@@ -1,6 +1,5 @@
 import type { Pool } from 'pg'
 import { createDatabasePool } from '../database.js'
-import { runMigrations } from '../migrations.js'
 import { AdminRoleError, setAdminRole, type ManagedRole } from './role.js'
 
 const USAGE =
@@ -9,7 +8,6 @@ const USAGE =
 interface RoleCliDependencies {
   databaseUrl: string | undefined
   createPool(connectionString: string): Pool
-  migrate(pool: Pool): Promise<unknown>
   setRole: typeof setAdminRole
   write(value: string): void
 }
@@ -35,7 +33,6 @@ export async function runRoleCli(
   dependencies: RoleCliDependencies = {
     databaseUrl: process.env.DATABASE_URL,
     createPool: createDatabasePool,
-    migrate: runMigrations,
     setRole: setAdminRole,
     write: (value) => process.stdout.write(value),
   },
@@ -46,7 +43,6 @@ export async function runRoleCli(
   }
   const pool = dependencies.createPool(dependencies.databaseUrl)
   try {
-    await dependencies.migrate(pool)
     const result = await dependencies.setRole(pool, input)
     dependencies.write(
       `${JSON.stringify({ event: 'admin.role_updated', role: result.role })}\n`,

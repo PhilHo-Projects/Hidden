@@ -11,7 +11,6 @@ describe('admin role CLI', () => {
     await runRoleCli(['--user', 'Player_ONE', '--role', 'admin'], {
       databaseUrl: 'postgresql://test',
       createPool: () => pool,
-      migrate: vi.fn(),
       setRole,
       write,
     })
@@ -38,7 +37,6 @@ describe('admin role CLI', () => {
       runRoleCli(args, {
         databaseUrl: 'postgresql://test',
         createPool,
-        migrate: vi.fn(),
         setRole: vi.fn(),
         write: vi.fn(),
       }),

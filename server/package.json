@@ -8,6 +8,7 @@
     "prebuild": "npm run build --workspace=@hidden/game-core",
     "build": "tsc",
     "admin:role": "npm run build && node dist/admin/roleCli.js",
+    "db:migrate": "npm run build && node dist/migrateCli.js",
     "start": "node dist/server.js",
     "dev": "tsc --watch --preserveWatchOutput",
     "pretest": "npm run build --workspace=@hidden/game-core",

@@ -8,6 +8,43 @@ const DEFAULT_MIGRATIONS_DIRECTORY = fileURLToPath(
   new URL('../migrations/', import.meta.url),
 )
 
+async function migrationFiles(migrationsDirectory: string) {
+  return (await readdir(migrationsDirectory))
+    .map((file) => ({ file, match: MIGRATION_FILE_PATTERN.exec(file) }))
+    .filter(
+      (
+        entry,
+      ): entry is {
+        file: string
+        match: RegExpExecArray
+      } => Boolean(entry.match),
+    )
+    .sort((first, second) => first.file.localeCompare(second.file))
+}
+
+export async function assertMigrationsCurrent(
+  pool: Pool,
+  migrationsDirectory = DEFAULT_MIGRATIONS_DIRECTORY,
+) {
+  const required = await migrationFiles(migrationsDirectory)
+  let appliedResult: { rows: Array<{ version: string }> }
+  try {
+    appliedResult = await pool.query<{ version: string }>(
+      'SELECT version FROM schema_migrations',
+    )
+  } catch {
+    throw new Error(
+      'Database schema is out of date. Run the explicit database migration command before starting Hidden.',
+    )
+  }
+  const applied = new Set(appliedResult.rows.map(({ version }) => version))
+  if (required.some(({ match }) => !applied.has(match[1]!))) {
+    throw new Error(
+      'Database schema is out of date. Run the explicit database migration command before starting Hidden.',
+    )
+  }
+}
+
 export async function runMigrations(
   pool: Pool,
   migrationsDirectory = DEFAULT_MIGRATIONS_DIRECTORY,
@@ -28,17 +65,7 @@ export async function runMigrations(
       'SELECT version FROM schema_migrations',
     )
     const applied = new Set(appliedResult.rows.map(({ version }) => version))
-    const files = (await readdir(migrationsDirectory))
-      .map((file) => ({ file, match: MIGRATION_FILE_PATTERN.exec(file) }))
-      .filter(
-        (
-          entry,
-        ): entry is {
-          file: string
-          match: RegExpExecArray
-        } => Boolean(entry.match),
-      )
-      .sort((first, second) => first.file.localeCompare(second.file))
+    const files = await migrationFiles(migrationsDirectory)
 
     for (const { file, match } of files) {
       const version = match[1]!
