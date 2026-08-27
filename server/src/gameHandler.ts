@@ -1,6 +1,6 @@
 import WebSocket from 'ws'
 import type { AdminRuntimeStats } from './admin/repository.js'
-import { type UserRole } from './auth/service.js'
+import type { UserRole } from './auth/sessionResolver.js'
 import { type Logger } from './logger.js'
 import {
   MatchCoordinator,
@@ -94,6 +94,21 @@ export class GameHandler {
 
   get connectionCount() {
     return this.sessionsById.size
+  }
+
+  refreshAuthenticatedIdentity(socket: WebSocket, identity: ClientIdentity) {
+    const session = [...this.sessionsById.values()].find(
+      (candidate) => candidate.socket === socket,
+    )
+    if (
+      !session ||
+      session.accountId !== identity.accountId ||
+      session.username !== identity.username
+    ) {
+      return false
+    }
+    session.role = identity.role
+    return true
   }
 
   getRuntimeStats(): AdminRuntimeStats {

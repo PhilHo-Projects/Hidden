@@ -1,7 +1,10 @@
 import express from 'express'
 import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { AuthenticatedUser } from '../auth/service.js'
+import type {
+  PublicSessionIdentity,
+  PublicSessionResolver,
+} from '../auth/sessionResolver.js'
 import type { Logger } from '../logger.js'
 import type {
   ListMatchHistoryOptions,
@@ -14,7 +17,7 @@ const ACCOUNT_ID = '00000000-0000-4000-8000-000000000001'
 const MATCH_ID = '00000000-0000-4000-8000-000000000101'
 const SESSION_TOKEN = 'A'.repeat(43)
 
-const user: AuthenticatedUser = {
+const user: PublicSessionIdentity = {
   id: ACCOUNT_ID,
   role: 'player',
   username: 'Wooshylooshy',
@@ -91,18 +94,36 @@ afterEach(async () => {
 })
 
 async function startRouter(options: {
-  getSession?: (token: string | undefined) => Promise<AuthenticatedUser | undefined>
+  getSession?: (
+    token: string | undefined,
+  ) => Promise<PublicSessionIdentity | undefined>
   repository?: RepositoryDouble
   logger?: Logger
 }) {
   const app = express()
+  const getSession =
+    options.getSession ??
+    (async (token: string | undefined) =>
+      token === SESSION_TOKEN ? user : undefined)
+  const sessions: PublicSessionResolver = {
+    async resolve(headers) {
+      const cookie = headers instanceof Headers
+        ? headers.get('cookie')
+        : headers.cookie
+      const token = /(?:^|;\s*)hidden_session=([^;]+)/.exec(
+        Array.isArray(cookie) ? cookie.join('; ') : cookie ?? '',
+      )?.[1]
+      return getSession(token)
+    },
+    hasSessionCookie() {
+      return false
+    },
+  }
   app.use(
     '/api/history',
     createMatchHistoryRouter({
       allowedOrigins: ['http://localhost:5173'],
-      getSession:
-        options.getSession ??
-        (async (token) => (token === SESSION_TOKEN ? user : undefined)),
+      sessions,
       repository:
         options.repository ??
         {
@@ -117,7 +138,6 @@ async function startRouter(options: {
           },
         },
       logger: options.logger ?? (() => undefined),
-      secureCookie: false,
     }),
   )
   const server = createServer(app)

@@ -1,28 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  resolveAllowedOrigins,
-  resolveAdminUsernames,
-  resolveDatabaseUrl,
-} from './serverConfig.js'
-
-describe('resolveDatabaseUrl', () => {
-  it('allows explicit guest-only local development', () => {
-    expect(resolveDatabaseUrl('development', undefined)).toBeUndefined()
-    expect(resolveDatabaseUrl('test', '')).toBeUndefined()
-  })
-
-  it('requires PostgreSQL configuration in production', () => {
-    expect(() => resolveDatabaseUrl('production', undefined)).toThrow(
-      'DATABASE_URL is required in production.',
-    )
-    expect(
-      resolveDatabaseUrl(
-        'production',
-        'postgresql://hidden:secret@postgres/hidden',
-      ),
-    ).toBe('postgresql://hidden:secret@postgres/hidden')
-  })
-})
+import { resolveAllowedOrigins } from './serverConfig.js'
 
 describe('resolveAllowedOrigins', () => {
   it('defaults local development to the Vite origins', () => {
@@ -45,18 +22,5 @@ describe('resolveAllowedOrigins', () => {
       'https://hidden.philippeho.dev',
       'https://preview.example',
     ])
-  })
-})
-
-describe('resolveAdminUsernames', () => {
-  it('defaults absent or empty configuration to no administrators', () => {
-    expect(resolveAdminUsernames(undefined)).toEqual(new Set())
-    expect(resolveAdminUsernames('  , ')).toEqual(new Set())
-  })
-
-  it('normalizes configured usernames like credential login', () => {
-    expect(resolveAdminUsernames(' Ecco,PLAYER_two, ecco ')).toEqual(
-      new Set(['ecco', 'player_two']),
-    )
   })
 })

@@ -55,10 +55,7 @@ function record(
 describeDatabase('PostgreSQL admin repository', () => {
   const pool = createDatabasePool(databaseUrl!)
   const history = new PostgresMatchHistoryRepository(pool)
-  const repository = new PostgresAdminRepository(
-    pool,
-    new Set(['philadmin', 'vinceadmin']),
-  )
+  const repository = new PostgresAdminRepository(pool)
 
   beforeAll(async () => {
     await runMigrations(pool)
@@ -68,19 +65,20 @@ describeDatabase('PostgreSQL admin repository', () => {
     await pool.query('TRUNCATE TABLE match_history_records, users CASCADE')
     await pool.query(
       `INSERT INTO users (
-         id, username, username_key, password_hash, created_at, last_seen_at
+         id, name, email, email_verified, display_username, username, role,
+         created_at, last_seen_at
        ) VALUES
-         ($1, 'PhilAdmin', 'philadmin', 'hash-a', '2029-01-01T00:00:00Z', '2029-01-01T00:00:00Z'),
-         ($2, 'PlayerOne', 'playerone', 'hash-b', '2029-01-02T00:00:00Z', '2030-01-02T00:00:00Z')`,
+         ($1, 'PhilAdmin', 'admin@example.test', true, 'PhilAdmin', 'philadmin', 'admin', '2029-01-01T00:00:00Z', '2029-01-01T00:00:00Z'),
+         ($2, 'PlayerOne', 'player@example.test', true, 'PlayerOne', 'playerone', 'player', '2029-01-02T00:00:00Z', '2030-01-02T00:00:00Z')`,
       [ADMIN_ID, PLAYER_ID],
     )
     await pool.query(
-      `INSERT INTO sessions (
-         token_hash, user_id, created_at, last_seen_at, expires_at
+      `INSERT INTO auth_sessions (
+         id, token, user_id, created_at, updated_at, expires_at
        ) VALUES
-         ($1, $2, '2029-01-02T00:00:00Z', '2030-01-02T00:00:00Z', '2031-01-01T00:00:00Z'),
-         ($3, $2, '2025-01-02T00:00:00Z', '2025-01-03T00:00:00Z', '2025-02-01T00:00:00Z')`,
-      [Buffer.alloc(32, 1), PLAYER_ID, Buffer.alloc(32, 2)],
+         ('00000000-0000-4000-8000-000000000011', 'active-token', $1, '2029-01-02T00:00:00Z', '2030-01-02T00:00:00Z', '2031-01-01T00:00:00Z'),
+         ('00000000-0000-4000-8000-000000000012', 'expired-token', $1, '2025-01-02T00:00:00Z', '2025-01-03T00:00:00Z', '2025-02-01T00:00:00Z')`,
+      [PLAYER_ID],
     )
     await history.insert(
       record(MATCH_ONE, '2030-01-01T00:00:00Z', {
@@ -209,10 +207,13 @@ describeDatabase('PostgreSQL admin repository', () => {
     expect(JSON.stringify(filtered)).not.toMatch(/password|token|hash/i)
 
     await pool.query(
-      `INSERT INTO users (id, username, username_key, password_hash, created_at, last_seen_at)
+      `INSERT INTO users (
+         id, name, email, email_verified, display_username, username,
+         created_at, last_seen_at
+       )
        VALUES
-         ('00000000-0000-4000-8000-000000000003', 'Player_Two', 'player_two', 'hash-c', '2028-01-02T00:00:00Z', '2028-01-02T00:00:00Z'),
-         ('00000000-0000-4000-8000-000000000004', 'PlayerXTwo', 'playerxtwo', 'hash-d', '2028-01-01T00:00:00Z', '2028-01-01T00:00:00Z')`,
+         ('00000000-0000-4000-8000-000000000003', 'Player_Two', 'three@example.test', true, 'Player_Two', 'player_two', '2028-01-02T00:00:00Z', '2028-01-02T00:00:00Z'),
+         ('00000000-0000-4000-8000-000000000004', 'PlayerXTwo', 'four@example.test', true, 'PlayerXTwo', 'playerxtwo', '2028-01-01T00:00:00Z', '2028-01-01T00:00:00Z')`,
     )
     const literalUnderscore = await repository.listAccounts({
       limit: 50,
@@ -222,7 +223,7 @@ describeDatabase('PostgreSQL admin repository', () => {
       'Player_Two',
     ])
 
-    await pool.query('DELETE FROM sessions WHERE user_id = $1', [PLAYER_ID])
+    await pool.query('DELETE FROM auth_sessions WHERE user_id = $1', [PLAYER_ID])
     const afterSessionCleanup = await repository.listAccounts({
       limit: 50,
       query: 'playerone',

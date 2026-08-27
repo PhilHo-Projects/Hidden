@@ -1,6 +1,5 @@
 import express, { type Response } from 'express'
-import type { AuthenticatedUser } from '../auth/service.js'
-import { readSessionToken } from '../auth/sessionToken.js'
+import type { PublicSessionResolver } from '../auth/sessionResolver.js'
 import type { Logger } from '../logger.js'
 import type {
   AdminAccountCursor,
@@ -27,13 +26,10 @@ type AdminErrorCode =
   | 'admin_unavailable'
 
 interface AdminRouterOptions {
-  readonly getSession: (
-    token: string | undefined,
-  ) => Promise<AuthenticatedUser | undefined>
+  readonly sessions: PublicSessionResolver
   readonly repository: AdminRepository
   readonly runtimeStats: AdminRuntimeStatsProvider
   readonly logger: Logger
-  readonly secureCookie: boolean
   readonly now?: () => Date
 }
 
@@ -181,18 +177,8 @@ export function createAdminRouter(options: AdminRouterOptions) {
   })
 
   router.use(async (request, response, next) => {
-    const token = readSessionToken(request.get('cookie'), options.secureCookie)
-    if (!token) {
-      sendError(
-        response,
-        401,
-        'account_required',
-        'Sign in with an administrator account.',
-      )
-      return
-    }
     try {
-      const user = await options.getSession(token)
+      const user = await options.sessions.resolve(request.headers)
       if (!user) {
         sendError(
           response,

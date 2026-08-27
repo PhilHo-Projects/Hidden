@@ -80,12 +80,13 @@ describeDatabase('PostgreSQL match history repository', () => {
     await pool.query('TRUNCATE TABLE match_history_records, users CASCADE')
     await pool.query(
       `INSERT INTO users (
-         id, username, username_key, password_hash, created_at, last_seen_at
+         id, name, email, email_verified, display_username, username,
+         created_at, last_seen_at
        )
        VALUES
-         ($1, 'Wooshylooshy', 'wooshylooshy', 'hash', now(), now()),
-         ($2, 'Friend', 'friend', 'hash', now(), now()),
-         ($3, 'Observer', 'observer', 'hash', now(), now())`,
+         ($1, 'Wooshylooshy', 'one@example.test', true, 'Wooshylooshy', 'wooshylooshy', now(), now()),
+         ($2, 'Friend', 'two@example.test', true, 'Friend', 'friend', now(), now()),
+         ($3, 'Observer', 'three@example.test', true, 'Observer', 'observer', now(), now())`,
       [ACCOUNT_ONE, ACCOUNT_TWO, ACCOUNT_THREE],
     )
   })

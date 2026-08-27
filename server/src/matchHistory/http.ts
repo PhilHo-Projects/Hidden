@@ -1,6 +1,8 @@
 import express, { type NextFunction, type Request, type Response } from 'express'
-import type { AuthenticatedUser } from '../auth/service.js'
-import { readSessionToken } from '../auth/sessionToken.js'
+import type {
+  PublicSessionIdentity,
+  PublicSessionResolver,
+} from '../auth/sessionResolver.js'
 import type { Logger } from '../logger.js'
 import type {
   MatchHistoryCursor,
@@ -20,15 +22,12 @@ type HistoryErrorCode =
 
 interface MatchHistoryRouterOptions {
   readonly allowedOrigins: readonly string[]
-  readonly getSession: (
-    token: string | undefined,
-  ) => Promise<AuthenticatedUser | undefined>
+  readonly sessions: PublicSessionResolver
   readonly repository: Pick<
     MatchHistoryRepository,
     'listForAccount' | 'getForAccount' | 'setBookmarked'
   >
   readonly logger: Logger
-  readonly secureCookie: boolean
 }
 
 function sendError(
@@ -93,7 +92,7 @@ function detailResponse(detail: MatchHistoryDetail) {
 }
 
 function currentUser(response: Response) {
-  return response.locals.historyUser as AuthenticatedUser
+  return response.locals.historyUser as PublicSessionIdentity
 }
 
 export function createMatchHistoryRouter(options: MatchHistoryRouterOptions) {
@@ -106,16 +105,8 @@ export function createMatchHistoryRouter(options: MatchHistoryRouterOptions) {
   })
 
   router.use(async (request, response, next) => {
-    const token = readSessionToken(
-      request.get('cookie'),
-      options.secureCookie,
-    )
-    if (!token) {
-      sendError(response, 401, 'account_required', 'Sign in to view match history.')
-      return
-    }
     try {
-      const user = await options.getSession(token)
+      const user = await options.sessions.resolve(request.headers)
       if (!user) {
         sendError(
           response,
