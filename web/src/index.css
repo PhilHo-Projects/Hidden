@@ -2184,7 +2184,9 @@ summary:focus-visible {
 }
 
 .account-recovery-note,
-.account-form-error {
+.account-form-error,
+.account-form-notice,
+.turnstile-status {
   margin: 0;
   font-size: 0.7rem;
   line-height: 1.45;
@@ -2198,6 +2200,29 @@ summary:focus-visible {
   padding-left: 0.65rem;
   border-left: 3px solid var(--hidden-red);
   color: #ff8d93;
+}
+
+.account-form-notice {
+  padding-left: 0.65rem;
+  border-left: 3px solid var(--hidden-green);
+  color: #b8f397;
+}
+
+.turnstile-wrap {
+  display: grid;
+  min-height: 4.1rem;
+  place-items: center;
+}
+
+.turnstile-status {
+  color: #ffb0b4;
+  text-align: center;
+}
+
+.account-recovery-note strong,
+.account-private-value {
+  color: #fff;
+  overflow-wrap: anywhere;
 }
 
 .account-submit {
@@ -2227,6 +2252,142 @@ summary:focus-visible {
 .account-mode-switch:disabled {
   cursor: wait;
   opacity: 0.58;
+}
+
+.account-settings {
+  width: min(46rem, 94vw);
+  max-height: min(73vh, 48rem);
+  overflow-y: auto;
+  align-content: start;
+  scrollbar-color: var(--hidden-yellow) #111;
+}
+
+.account-settings-section {
+  display: grid;
+  gap: 0.7rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.account-settings-section h3,
+.account-private-value {
+  margin: 0;
+}
+
+.account-settings-section h3 {
+  color: var(--hidden-yellow);
+  font-size: 0.72rem;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.account-settings-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.account-fields-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.account-inline-action,
+.account-text-action,
+.account-device-list button {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(215, 175, 19, 0.72);
+  background: rgba(215, 175, 19, 0.08);
+  color: var(--hidden-yellow);
+  cursor: pointer;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+}
+
+.account-text-action {
+  min-height: 2.3rem;
+  border-color: rgba(255, 255, 255, 0.24);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.account-inline-action:hover:not(:disabled),
+.account-text-action:hover:not(:disabled),
+.account-device-list button:hover:not(:disabled) {
+  border-color: var(--hidden-yellow);
+  background: rgba(215, 175, 19, 0.16);
+  color: #fff;
+}
+
+.account-inline-action:disabled,
+.account-text-action:disabled,
+.account-device-list button:disabled {
+  cursor: wait;
+  opacity: 0.52;
+}
+
+.account-settings-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.account-device-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 0.45rem;
+  list-style: none;
+}
+
+.account-device-list li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.account-device-list li > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.account-device-list strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-device-list small {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.6rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 720px) {
+  .account-settings {
+    max-height: none;
+  }
+
+  .account-settings-form,
+  .account-fields-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .account-settings-title-row,
+  .account-device-list li {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .guest-identity {

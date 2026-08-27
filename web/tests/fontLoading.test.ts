@@ -20,6 +20,10 @@ const BUILD_TIMEOUT_MS = 180_000
 beforeAll(() => {
   execSync('npm run build', {
     cwd: webRoot,
+    env: {
+      ...process.env,
+      VITE_TURNSTILE_SITE_KEY: 'test-site-key',
+    },
     stdio: 'pipe',
   })
 }, BUILD_TIMEOUT_MS)

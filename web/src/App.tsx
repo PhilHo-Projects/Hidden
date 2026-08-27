@@ -6,6 +6,8 @@ import rockIcon from './assets/icons/battle/move-rock.png'
 import scissorsIcon from './assets/icons/battle/move-scissors.png'
 import exitDoorIcon from './assets/icons/exit-door.png'
 import { createAuthClient } from './auth/authClient'
+import type { AuthRedirectIntent } from './auth/authRedirect'
+import { resolveTurnstileSiteKey } from './auth/turnstileConfig'
 import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { AdminPanel } from './components/AdminPanel'
@@ -63,6 +65,10 @@ const pieces: ReadonlyArray<{
 ]
 
 const accountClient = createAuthClient()
+const turnstileSiteKey = resolveTurnstileSiteKey(
+  import.meta.env.VITE_TURNSTILE_SITE_KEY,
+  import.meta.env.PROD,
+)
 const adminClient = createAdminClient()
 const matchHistoryClient = createMatchHistoryClient()
 
@@ -79,8 +85,16 @@ function BrushButton({ children, className = '', tone = 'yellow', type = 'button
   )
 }
 
-function App() {
-  const [screen, setScreen] = useState<Screen>('intro')
+interface AppProps {
+  initialAuthIntent?: AuthRedirectIntent | null
+}
+
+function App({ initialAuthIntent = null }: AppProps) {
+  const [screen, setScreen] = useState<Screen>(
+    initialAuthIntent?.view === 'reset' || initialAuthIntent?.error
+      ? 'account'
+      : 'intro',
+  )
   const [howToPlayOpen, setHowToPlayOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminLockActive, setAdminLockActive] = useState(false)
@@ -120,14 +134,28 @@ function App() {
     authMode,
     authBusy,
     authError,
+    authNotice,
+    accountEmail,
+    verificationEmail,
+    captchaResetKey,
+    deviceSessions,
     prepareAccount,
-    submitAccount: submitAccountCredentials,
+    registerAccount,
+    loginAccount,
+    requestRecovery,
+    resendVerification,
+    resetAccountPassword,
+    requestEmailChange,
+    changeAccountPassword,
+    revokeDevice,
+    signOutOtherDevices,
     logoutAccount,
     invalidateSession,
   } = useAccountSession({
     client: accountClient,
     guestUsername,
     onStatusChange: setStatus,
+    initialIntent: initialAuthIntent,
   })
   const {
     playerDestructionEffects,
@@ -190,16 +218,16 @@ function App() {
 
   const openAccount = useCallback((mode: AccountMode) => {
     resetForAccountChange()
-    prepareAccount(mode)
+    void prepareAccount(mode)
     setScreen('account')
   }, [prepareAccount, resetForAccountChange])
 
-  const submitAccount = useCallback(
-    async (submittedUsername: string, password: string) => {
-      await submitAccountCredentials(submittedUsername, password)
+  const submitLogin = useCallback(
+    async (identifier: string, password: string) => {
+      await loginAccount(identifier, password)
       setScreen('mode-select')
     },
-    [submitAccountCredentials],
+    [loginAccount],
   )
 
   const logout = useCallback(async () => {
@@ -363,6 +391,7 @@ function App() {
                 disabled={accountChangeLocked || screen === 'account'}
                 onOpenAdmin={() => setAdminOpen(true)}
                 onOpenHistory={openHistory}
+                onOpenSettings={() => openAccount('settings')}
                 onSignOut={() => void logout()}
               />
             ) : (
@@ -445,8 +474,22 @@ function App() {
             mode={authMode}
             busy={authBusy}
             error={authError}
-            onModeChange={openAccount}
-            onSubmit={submitAccount}
+            notice={authNotice}
+            accountEmail={accountEmail}
+            verificationEmail={verificationEmail}
+            captchaResetKey={captchaResetKey}
+            deviceSessions={deviceSessions}
+            turnstileSiteKey={turnstileSiteKey}
+            onModeChange={prepareAccount}
+            onRegister={registerAccount}
+            onLogin={submitLogin}
+            onRequestRecovery={requestRecovery}
+            onResendVerification={resendVerification}
+            onResetPassword={resetAccountPassword}
+            onChangeEmail={requestEmailChange}
+            onChangePassword={changeAccountPassword}
+            onRevokeDevice={revokeDevice}
+            onSignOutOtherDevices={signOutOtherDevices}
           />
         </section>
       ) : null}

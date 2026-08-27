@@ -9,6 +9,8 @@ COPY packages/game-core/package.json ./packages/game-core/package.json
 RUN npm ci
 
 FROM dependencies AS build
+ARG VITE_TURNSTILE_SITE_KEY
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 COPY web/ ./web/
 COPY server/ ./server/
 COPY packages/game-core/ ./packages/game-core/
