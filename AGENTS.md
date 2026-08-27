@@ -46,6 +46,30 @@ throwaway snippet meant to be looked at once.
   shutdown covered by tests.
 - Do not log raw packet bodies at the default `info` level.
 
+## Authentication contracts
+
+- Pinned `better-auth@1.7.1` is the sole account authority. Do not add a
+  fallback login/session path or allow the Better Auth schema to drift without
+  a reviewed numbered migration.
+- Accounts remain optional and guest gameplay must stay immediate. Public game,
+  history, WebSocket, and admin identity is limited to `{ id, username, role }`;
+  email and verification state are private to the signed-in account UI.
+- Never mutate the database schema during application startup. Run
+  `npm run db:migrate --workspace=hidden-server` explicitly. Migration 005
+  intentionally resets old accounts/bookmarks and requires a backup plus the
+  prior image for production rollback.
+- Passwords are deliberately 8-128 characters with Argon2id and breached-password
+  screening. Changing the minimum does not upgrade existing credentials; follow
+  `docs/AUTH_IMPLEMENTATION.md` for the credential-policy/reset procedure.
+- Production auth uses the host-only `__Host-hidden_session` cookie, JSON-only
+  4 KiB auth bodies, exact trusted origins, database rate limits, and Turnstile
+  on signup/recovery/verification resend. Authenticated WebSockets must
+  revalidate in at most five minutes.
+- Roles come only from PostgreSQL. Use `npm run admin:role` for verified accounts;
+  do not reintroduce `ADMIN_USERNAMES` or password provisioning.
+- Tests use injected email/external-service fakes. Never log or commit email
+  addresses, passwords, cookies, tokens, provider secrets, or complete auth URLs.
+
 ## Change discipline
 
 - Preserve online matchmaking, lobby, ready/start, moves, power-ups,
