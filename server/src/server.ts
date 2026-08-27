@@ -106,10 +106,10 @@ async function start(isStopping: () => boolean) {
     ...(auth ? { auth } : {}),
     ...(authCleanup ? { authCleanup } : {}),
     ...(matchHistoryRepository ? { matchHistoryRepository } : {}),
-    authRevalidationIntervalMs: parsePositiveInteger(
-      process.env.AUTH_REVALIDATION_INTERVAL_MS,
-      300_000,
-    ),
+    // Authenticated sockets must observe revocation and role changes within the
+    // promised five-minute ceiling. Tests can inject a shorter interval through
+    // createHiddenServer, but production cannot stretch this with configuration.
+    authRevalidationIntervalMs: 300_000,
     heartbeatIntervalMs: parsePositiveInteger(
       process.env.HEARTBEAT_INTERVAL_MS,
       30_000,

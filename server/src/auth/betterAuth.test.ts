@@ -30,7 +30,11 @@ function createOptions(
   overrides: HiddenAuthFactoryOverrides = {},
 ) {
   return createHiddenAuthOptions({
-    pool: {} as Pool,
+    pool: {
+      async query() {
+        return { rowCount: 1, rows: [] }
+      },
+    } as unknown as Pool,
     config: CONFIG,
     emails,
     overrides,
@@ -68,12 +72,14 @@ describe('Hidden Better Auth options', () => {
           fieldName: 'role',
           input: false,
           required: true,
+          defaultValue: 'player',
         },
         lastSeenAt: {
           type: 'date',
           fieldName: 'last_seen_at',
           input: false,
           required: true,
+          defaultValue: expect.any(Function),
         },
       },
     })

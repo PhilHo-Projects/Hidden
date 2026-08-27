@@ -23,6 +23,7 @@ ALTER TABLE users
 
 ALTER TABLE users
   ALTER COLUMN last_seen_at SET DEFAULT now(),
+  ALTER COLUMN id SET DEFAULT gen_random_uuid(),
   ADD CONSTRAINT users_email_unique UNIQUE (email),
   ADD CONSTRAINT users_username_unique UNIQUE (username),
   ADD CONSTRAINT users_username_format
@@ -40,7 +41,7 @@ CREATE INDEX users_username_prefix_idx
   ON users (username varchar_pattern_ops);
 
 CREATE TABLE auth_accounts (
-  id uuid PRIMARY KEY,
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   issuer text NOT NULL,
   account_id text NOT NULL,
   provider_id text NOT NULL,
@@ -62,7 +63,7 @@ CREATE INDEX auth_accounts_user_id_idx
   ON auth_accounts (user_id);
 
 CREATE TABLE auth_sessions (
-  id uuid PRIMARY KEY,
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   expires_at timestamptz NOT NULL,
   token text NOT NULL UNIQUE,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -79,7 +80,7 @@ CREATE INDEX auth_sessions_expires_at_idx
   ON auth_sessions (expires_at);
 
 CREATE TABLE auth_verifications (
-  id uuid PRIMARY KEY,
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   identifier text NOT NULL,
   value text NOT NULL,
   expires_at timestamptz NOT NULL,
