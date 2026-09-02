@@ -2,6 +2,16 @@
   "name": "hidden",
   "private": true,
   "version": "0.0.0",
+  "engines": {
+    "node": ">=24.7.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=24.7.0",
+      "onFail": "error"
+    }
+  },
   "workspaces": [
     "web",
     "server",
