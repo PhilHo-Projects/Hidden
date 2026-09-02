@@ -13,6 +13,7 @@ this index does not.
 | Admin access, data boundaries, and workbench UX | [specs/2026-08-10-admin-workbench-design.md](superpowers/specs/2026-08-10-admin-workbench-design.md) | ~90 lines |
 | Why reveal is a timed snapshot and who owns its clock | [specs/2026-08-14-reveal-snapshot-design.md](superpowers/specs/2026-08-14-reveal-snapshot-design.md) | ~120 lines |
 | Auth architecture, migration, rollout, and reusable checklist | [AUTH_IMPLEMENTATION.md](AUTH_IMPLEMENTATION.md) | ~300 lines |
+| Current Better Auth provider/deployment handoff | [AUTH_ROLLOUT_HANDOFF.md](AUTH_ROLLOUT_HANDOFF.md) | ~190 lines |
 
 `ROADMAP.md` alone is enough to pick up work. Everything else is background.
 
