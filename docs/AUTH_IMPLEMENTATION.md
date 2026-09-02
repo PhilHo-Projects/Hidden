@@ -300,3 +300,31 @@ The Docker verification used fake production credentials and disposable data;
 it did not contact Resend, Turnstile, or the production database. One real
 Resend/Turnstile staging registration and recovery flow remains a required
 external pre-cutover check, not a locally simulated success.
+
+## Re-verification after merging `main` (2026-09-02)
+
+The branch was refreshed onto `origin/main` at `3698a21`, which added the
+dependency maintenance baseline (#17) and the reveal-snapshot work (#16). The
+only merge conflict was the `nanoid` entry in `package-lock.json`: this branch
+marks it `devOptional` because the auth dependencies reach it at runtime, while
+`main` marked it `dev`. `devOptional` is the correct superset and was kept. The
+merge also took `engines.node >=24.7.0` and `ws@8.21.3` from `main`;
+`better-auth` remains pinned at exactly `1.7.1`.
+
+| Check | Result on 2026-09-02 |
+| --- | --- |
+| Lockfile platform guard | Passed: Linux musl and Windows Rolldown bindings present |
+| Instruction file sync | Passed: `CLAUDE.md` and `AGENTS.md` in sync |
+| Core tests | Passed: 47 tests |
+| Web tests | Passed: 35 files, 221 tests |
+| Server unit/type suite | Passed: 20 files, 214 tests; 23 DB-gated tests skipped in the no-DB run |
+| Root lint | Passed |
+| Root production build with injected public test key | Passed |
+| Web build without site key | Failed as intended |
+| Dependency audit | Passed with zero known vulnerabilities |
+
+Counts rose against 2026-08-27 because `main` added tests, not because auth
+behavior changed. The DB-gated PostgreSQL suite was not re-run in this pass:
+`TEST_DATABASE_URL` was unset, so those 23 tests skipped rather than passed.
+The production Docker build and container smoke test were likewise not repeated
+after the merge. Both remain required before cutover.
