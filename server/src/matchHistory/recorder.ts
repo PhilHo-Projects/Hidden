@@ -1,5 +1,5 @@
-import type { Logger } from '../logger'
-import type { MatchHistoryRecordV1 } from './types'
+import type { Logger } from '../logger.js'
+import type { MatchHistoryRecordV1 } from './types.js'
 
 export interface MatchHistoryRecordStore {
   insert(record: MatchHistoryRecordV1): Promise<void>

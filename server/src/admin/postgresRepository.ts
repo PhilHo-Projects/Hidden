@@ -1,6 +1,6 @@
 import type { Pool } from 'pg'
 import type { Seat } from '@hidden/game-core'
-import type { MatchHistoryBoard } from '../matchHistory/types'
+import type { MatchHistoryBoard } from '../matchHistory/types.js'
 import type {
   AdminAccountPage,
   AdminAccountSummary,
@@ -11,7 +11,7 @@ import type {
   AdminRepository,
   ListAdminAccountsOptions,
   ListAdminMatchesOptions,
-} from './repository'
+} from './repository.js'
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -41,6 +41,7 @@ interface AccountRow {
   last_seen_at: Date | null
   active_session_count: string
   match_count: string
+  role: 'player' | 'admin'
 }
 
 function participants(row: MatchRow) {
@@ -75,10 +76,7 @@ function escapeLikePrefix(value: string | null) {
 }
 
 export class PostgresAdminRepository implements AdminRepository {
-  constructor(
-    private readonly pool: Pool,
-    private readonly adminUsernames: ReadonlySet<string>,
-  ) {}
+  constructor(private readonly pool: Pool) {}
 
   async getStorageStats(now: Date) {
     const result = await this.pool.query<{
@@ -88,7 +86,7 @@ export class PostgresAdminRepository implements AdminRepository {
     }>(
       `SELECT
          (SELECT count(*) FROM users)::text AS accounts,
-         (SELECT count(*) FROM sessions WHERE expires_at > $1)::text
+         (SELECT count(*) FROM auth_sessions WHERE expires_at > $1)::text
            AS active_sessions,
          (SELECT count(*) FROM match_history_records)::text AS matches`,
       [now],
@@ -229,7 +227,8 @@ export class PostgresAdminRepository implements AdminRepository {
     const result = await this.pool.query<AccountRow>(
       `SELECT
          u.id,
-         u.username,
+         u.display_username AS username,
+         u.role,
          u.created_at,
          to_char(
            u.created_at AT TIME ZONE 'UTC',
@@ -238,7 +237,7 @@ export class PostgresAdminRepository implements AdminRepository {
          u.last_seen_at,
          (
            SELECT count(*)
-           FROM sessions session
+           FROM auth_sessions session
            WHERE session.user_id = u.id AND session.expires_at > now()
          )::text AS active_session_count,
          (
@@ -247,7 +246,7 @@ export class PostgresAdminRepository implements AdminRepository {
            WHERE participant.account_id = u.id
          )::text AS match_count
        FROM users u
-       WHERE ($1::text IS NULL OR u.username_key LIKE $1::text || '%' ESCAPE '\\')
+       WHERE ($1::text IS NULL OR u.username LIKE $1::text || '%' ESCAPE '\\')
          AND (
            $2::timestamptz IS NULL OR
            (u.created_at, u.id) < ($2::timestamptz, $3::uuid)
@@ -267,9 +266,7 @@ export class PostgresAdminRepository implements AdminRepository {
       (row): AdminAccountSummary => ({
         id: row.id,
         username: row.username,
-        role: this.adminUsernames.has(row.username.trim().toLowerCase())
-          ? 'admin'
-          : 'player',
+        role: row.role,
         createdAtMs: row.created_at.getTime(),
         lastSeenAtMs: row.last_seen_at?.getTime() ?? null,
         activeSessionCount: Number(row.active_session_count),

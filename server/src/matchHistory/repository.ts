@@ -3,7 +3,7 @@ import type { Seat } from '@hidden/game-core'
 import type {
   MatchHistoryBoard,
   MatchHistoryRecordV1,
-} from './types'
+} from './types.js'
 
 export type MatchHistoryOutcome = 'win' | 'loss' | 'tie'
 

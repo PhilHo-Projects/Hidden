@@ -5,7 +5,7 @@ import type {
   RejectionReason,
   Seat,
 } from '@hidden/game-core'
-import { decodeGameConfig, type GameConfig } from './matchRules'
+import { decodeGameConfig, type GameConfig } from './matchRules.js'
 
 export enum PacketType {
   ID_ASSIGN = 2,

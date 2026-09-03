@@ -1,4 +1,10 @@
-export type AccountMode = 'register' | 'login'
+export type AccountMode =
+  | 'register'
+  | 'login'
+  | 'verify'
+  | 'forgot'
+  | 'reset'
+  | 'settings'
 
 /**
  * Mirrors the server bounds in `server/src/auth/password.ts`. The form's own
@@ -13,7 +19,7 @@ export function validateAccountSubmission(
   password: string,
   confirmation: string,
 ) {
-  if (mode === 'register' && password !== confirmation) {
+  if ((mode === 'register' || mode === 'reset') && password !== confirmation) {
     return 'Passwords do not match.'
   }
   return null

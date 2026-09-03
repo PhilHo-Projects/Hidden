@@ -14,7 +14,7 @@ import {
   type GameUpdateDelivery,
   type MatchCoordinatorDependencies,
   type RoomFactoryInput,
-} from './matchCoordinator'
+} from './matchCoordinator.js'
 
 const firstParticipant = {
   accountId: 'account-uuid-one',

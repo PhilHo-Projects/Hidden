@@ -4,7 +4,7 @@ import {
   hashPassword,
   parseCredentials,
   verifyPassword,
-} from './password'
+} from './password.js'
 
 describe('account credentials', () => {
   it('normalizes a valid public username without changing the password', () => {

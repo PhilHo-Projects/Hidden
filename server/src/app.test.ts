@@ -4,19 +4,21 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
-import type { AuthServiceLike } from './auth/http'
-import type { AuthenticatedUser } from './auth/service'
-import type { AdminRepository } from './admin/repository'
-import { createHiddenServer, type HiddenServer } from './app'
-import { DEFAULT_GAME_CONFIG } from './matchRules'
-import { PacketType } from './protocol'
-import { MatchCoordinator } from './matchCoordinator'
+import type {
+  PublicSessionIdentity,
+  PublicSessionResolver,
+} from './auth/sessionResolver.js'
+import type { AdminRepository } from './admin/repository.js'
+import { createHiddenServer, type HiddenServer } from './app.js'
+import { DEFAULT_GAME_CONFIG } from './matchRules.js'
+import { PacketType } from './protocol.js'
+import { MatchCoordinator } from './matchCoordinator.js'
 import type {
   MatchHistoryDetail,
   MatchHistoryPage,
   MatchHistoryRepository,
-} from './matchHistory/repository'
-import type { MatchHistoryRecordV1 } from './matchHistory/types'
+} from './matchHistory/repository.js'
+import type { MatchHistoryRecordV1 } from './matchHistory/types.js'
 import {
   applyCommand,
   applyTimeout,
@@ -135,24 +137,51 @@ async function expectUpgradeStatus(
   })
 }
 
-function authServiceForSessions(
-  sessions: ReadonlyMap<string, AuthenticatedUser>,
-): AuthServiceLike {
+type TestAuth = NonNullable<Parameters<typeof createHiddenServer>[0]['auth']>
+
+function testAuth(
+  resolveToken: (token: string | undefined) =>
+    Promise<PublicSessionIdentity | undefined>,
+): TestAuth {
   return {
-    async getSession(rawToken) {
-      return rawToken ? sessions.get(rawToken) : undefined
+    async handler(_request, response) {
+      response.statusCode = 404
+      response.end()
     },
-    async cleanupExpiredSessions() {
-      return 0
-    },
-    async logout() {},
-    async login(): Promise<never> {
-      throw new Error('Not used by this test.')
-    },
-    async register(): Promise<never> {
-      throw new Error('Not used by this test.')
-    },
+    sessions: {
+      async resolve(headers) {
+        const cookie = headers instanceof Headers
+          ? headers.get('cookie')
+          : headers.cookie
+        const token = /(?:^|;\s*)hidden_session=([^;]+)/.exec(
+          Array.isArray(cookie) ? cookie.join('; ') : cookie ?? '',
+        )?.[1]
+        return resolveToken(token)
+      },
+      hasSessionCookie(headers) {
+        const cookie = headers instanceof Headers
+          ? headers.get('cookie')
+          : headers.cookie
+        return /(?:^|;\s*)hidden_session=/.test(
+          Array.isArray(cookie) ? cookie.join('; ') : cookie ?? '',
+        )
+      },
+    } satisfies PublicSessionResolver,
   }
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 1_000) {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for condition.')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
+function authForSessions(
+  sessions: ReadonlyMap<string, PublicSessionIdentity>,
+) {
+  return testAuth(async (token) => token ? sessions.get(token) : undefined)
 }
 
 async function queueProbe(
@@ -234,7 +263,7 @@ describe.sequential('Hidden server', () => {
         return { items: [], nextCursor: null }
       },
     }
-    const authService = authServiceForSessions(
+    const auth = authForSessions(
       new Map([
         [
           ADMIN_SESSION_TOKEN,
@@ -246,7 +275,7 @@ describe.sequential('Hidden server', () => {
         ],
       ]),
     )
-    const { port } = await startServer({ authService, adminRepository })
+    const { port } = await startServer({ auth, adminRepository })
     const admin = await connectProbe(
       port,
       ORIGIN,
@@ -300,6 +329,81 @@ describe.sequential('Hidden server', () => {
     await expectUpgradeStatus(port, 403, 'https://evil.example')
   })
 
+  it('mounts the sole auth handler before body parsing and preserves trusted request IP', async () => {
+    let body = ''
+    let originalUrl: string | undefined
+    let resolvedIp: string | undefined
+    const auth = testAuth(async () => undefined)
+    auth.handler = async (request, response) => {
+      originalUrl = (request as typeof request & { originalUrl?: string }).originalUrl
+      resolvedIp = (request as typeof request & { ip?: string }).ip
+      for await (const chunk of request) body += chunk.toString()
+      response.statusCode = 204
+      response.end()
+    }
+    const { port } = await startServer({ auth, trustProxy: 1 })
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/auth/sign-in/email`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-forwarded-for': '203.0.113.9',
+        },
+        body: JSON.stringify({ email: 'private@example.test' }),
+      },
+    )
+
+    expect(response.status).toBe(204)
+    expect(body).toBe('{"email":"private@example.test"}')
+    expect(originalUrl).toBe('/api/auth/sign-in/email')
+    expect(resolvedIp).toBe('203.0.113.9')
+  })
+
+  it('keeps database-free development guest-only and reports auth unavailable', async () => {
+    const { port } = await startServer()
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/session`)
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'account_service_unavailable',
+        message: 'Account service is unavailable.',
+      },
+    })
+
+    const guest = await connectProbe(port)
+    await expect(guest.waitFor(PacketType.ID_ASSIGN)).resolves.toBeDefined()
+    guest.close()
+  })
+
+  it('continues serving when periodic auth cleanup fails and logs no sensitive message', async () => {
+    const logs: Array<{ event: string; fields?: Record<string, unknown> }> = []
+    let attempted = false
+    const { port } = await startServer({
+      authCleanupIntervalMs: 5,
+      authCleanup: {
+        async deleteExpiredAuthState() {
+          attempted = true
+          throw new Error('secret token and private@example.test')
+        },
+      },
+      logger(_level, event, fields) {
+        logs.push({ event, ...(fields ? { fields } : {}) })
+      },
+    })
+
+    await waitUntil(() => attempted)
+    const health = await fetch(`http://127.0.0.1:${port}/healthz`)
+    expect(health.status).toBe(200)
+    const failure = logs.find(({ event }) => event === 'auth.cleanup_failed')
+    expect(failure).toEqual({
+      event: 'auth.cleanup_failed',
+      fields: { errorClass: 'Error' },
+    })
+    expect(JSON.stringify(logs)).not.toMatch(/secret token|private@example/i)
+  })
+
   it('mounts personal history, records completed account matches, and drains writes on close', async () => {
     const records: MatchHistoryRecordV1[] = []
     let releaseInsert: (() => void) | undefined
@@ -326,7 +430,7 @@ describe.sequential('Hidden server', () => {
         return false
       },
     }
-    const authService = authServiceForSessions(
+    const auth = authForSessions(
       new Map([
         [
           ADMIN_SESSION_TOKEN,
@@ -343,7 +447,7 @@ describe.sequential('Hidden server', () => {
       ]),
     )
     const { port } = await startServer({
-      authService,
+      auth,
       matchHistoryRepository: repository,
     })
 
@@ -842,7 +946,7 @@ describe.sequential('Hidden server', () => {
   })
 
   it('ignores a non-admin rules proposal and sends defaults to both players', async () => {
-    const authService = authServiceForSessions(
+    const auth = authForSessions(
       new Map([
         [
           PLAYER_SESSION_TOKEN,
@@ -855,8 +959,7 @@ describe.sequential('Hidden server', () => {
       ]),
     )
     const { port } = await startServer({
-      authService,
-      sessionCookieSecure: false,
+      auth,
     })
     const player = await queueProbe(port, {
       cookie: `hidden_session=${PLAYER_SESSION_TOKEN}`,
@@ -876,7 +979,7 @@ describe.sequential('Hidden server', () => {
   })
 
   it('applies and clamps an admin proposal identically for both players', async () => {
-    const authService = authServiceForSessions(
+    const auth = authForSessions(
       new Map([
         [
           ADMIN_SESSION_TOKEN,
@@ -889,8 +992,7 @@ describe.sequential('Hidden server', () => {
       ]),
     )
     const { port } = await startServer({
-      authService,
-      sessionCookieSecure: false,
+      auth,
     })
     const admin = await queueProbe(port, {
       cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
@@ -911,7 +1013,7 @@ describe.sequential('Hidden server', () => {
   })
 
   it('defaults only the malformed fields of an admin proposal without closing the socket', async () => {
-    const authService = authServiceForSessions(
+    const auth = authForSessions(
       new Map([
         [
           ADMIN_SESSION_TOKEN,
@@ -924,8 +1026,7 @@ describe.sequential('Hidden server', () => {
       ]),
     )
     const { port } = await startServer({
-      authService,
-      sessionCookieSecure: false,
+      auth,
     })
     const admin = await queueProbe(port, {
       cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
@@ -954,7 +1055,7 @@ describe.sequential('Hidden server', () => {
   })
 
   it('uses the earlier queue entry when two admins propose different rules', async () => {
-    const authService = authServiceForSessions(
+    const auth = authForSessions(
       new Map([
         [
           ADMIN_SESSION_TOKEN,
@@ -975,8 +1076,7 @@ describe.sequential('Hidden server', () => {
       ]),
     )
     const { port } = await startServer({
-      authService,
-      sessionCookieSecure: false,
+      auth,
     })
     const first = await queueProbe(port, {
       cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
@@ -1000,7 +1100,7 @@ describe.sequential('Hidden server', () => {
   })
 
   it('clears an admin proposal when matchmaking is cancelled', async () => {
-    const authService = authServiceForSessions(
+    const auth = authForSessions(
       new Map([
         [
           ADMIN_SESSION_TOKEN,
@@ -1013,8 +1113,7 @@ describe.sequential('Hidden server', () => {
       ]),
     )
     const { port } = await startServer({
-      authService,
-      sessionCookieSecure: false,
+      auth,
     })
     const admin = await queueProbe(port, {
       cookie: `hidden_session=${ADMIN_SESSION_TOKEN}`,
@@ -1084,30 +1183,17 @@ describe.sequential('Hidden server', () => {
       role: 'player' as const,
       username: 'Account_Player',
     }
-    const authService = {
-      async getSession() {
+    const auth = testAuth(async () => {
         lookupCount += 1
         if (lookupCount === 1) {
           markLookupStarted?.()
           await firstLookupBlocked
         }
         return user
-      },
-      async cleanupExpiredSessions() {
-        return 0
-      },
-      async logout() {},
-      async login(): Promise<never> {
-        throw new Error('Not used by this test.')
-      },
-      async register(): Promise<never> {
-        throw new Error('Not used by this test.')
-      },
-    } satisfies AuthServiceLike
+    })
     const { port } = await startServer({
-      authService,
+      auth,
       maxConnections: 1,
-      sessionCookieSecure: false,
     })
     const firstSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
       origin: ORIGIN,
@@ -1162,26 +1248,13 @@ describe.sequential('Hidden server', () => {
     const blockedLookup = new Promise<void>((resolve) => {
       releaseLookup = resolve
     })
-    const authService = {
-      async getSession() {
+    const auth = testAuth(async () => {
         markLookupStarted?.()
         await blockedLookup
         return undefined
-      },
-      async cleanupExpiredSessions() {
-        return 0
-      },
-      async logout() {},
-      async login(): Promise<never> {
-        throw new Error('Not used by this test.')
-      },
-      async register(): Promise<never> {
-        throw new Error('Not used by this test.')
-      },
-    } satisfies AuthServiceLike
+    })
     const { port } = await startServer({
-      authService,
-      sessionCookieSecure: false,
+      auth,
       shutdownGraceMs: 25,
     })
     const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
@@ -1233,8 +1306,7 @@ describe.sequential('Hidden server', () => {
   })
 
   it('binds an authenticated socket to the account username instead of client input', async () => {
-    const authService = {
-      async getSession(rawToken: string | undefined) {
+    const auth = testAuth(async (rawToken) => {
         return rawToken === VALID_SESSION_TOKEN
           ? {
               id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
@@ -1242,21 +1314,9 @@ describe.sequential('Hidden server', () => {
               username: 'Account_Player',
             }
           : undefined
-      },
-      async cleanupExpiredSessions() {
-        return 0
-      },
-      async logout() {},
-      async login(): Promise<never> {
-        throw new Error('Not used by this test.')
-      },
-      async register(): Promise<never> {
-        throw new Error('Not used by this test.')
-      },
-    } satisfies AuthServiceLike
+    })
     const { port } = await startServer({
-      authService,
-      sessionCookieSecure: false,
+      auth,
     })
     const account = await connectProbe(
       port,
@@ -1290,24 +1350,11 @@ describe.sequential('Hidden server', () => {
   })
 
   it('rejects cookie-bearing upgrades when session validation fails but still admits cookie-less guests', async () => {
-    const authService = {
-      async getSession() {
+    const auth = testAuth(async () => {
         throw new Error('database unavailable')
-      },
-      async cleanupExpiredSessions() {
-        return 0
-      },
-      async logout() {},
-      async login(): Promise<never> {
-        throw new Error('Not used by this test.')
-      },
-      async register(): Promise<never> {
-        throw new Error('Not used by this test.')
-      },
-    } satisfies AuthServiceLike
+    })
     const { port } = await startServer({
-      authService,
-      sessionCookieSecure: false,
+      auth,
     })
 
     await expectUpgradeStatus(
@@ -1320,6 +1367,179 @@ describe.sequential('Hidden server', () => {
     const guest = await connectProbe(port)
     await expect(guest.waitFor(PacketType.ID_ASSIGN)).resolves.toBeDefined()
     guest.close()
+  })
+
+  it('rejects revoked credentials during upgrade instead of downgrading to guest', async () => {
+    const auth = testAuth(async () => undefined)
+    const { port } = await startServer({ auth })
+    await expectUpgradeStatus(
+      port,
+      401,
+      ORIGIN,
+      '/ws',
+      `hidden_session=${VALID_SESSION_TOKEN}`,
+    )
+  })
+
+  it('revalidates authenticated sockets, closes revocations, and leaves guests alone', async () => {
+    let identity: PublicSessionIdentity | undefined = {
+      id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+      role: 'player',
+      username: 'Account_Player',
+    }
+    let resolutionCount = 0
+    const auth = testAuth(async () => {
+      resolutionCount += 1
+      return identity
+    })
+    const { port } = await startServer({
+      auth,
+      authRevalidationIntervalMs: 10,
+    })
+    const account = await connectProbe(
+      port,
+      ORIGIN,
+      '/ws',
+      `hidden_session=${VALID_SESSION_TOKEN}`,
+    )
+    await account.waitFor(PacketType.ID_ASSIGN)
+    const guest = await connectProbe(port)
+    await guest.waitFor(PacketType.ID_ASSIGN)
+    identity = undefined
+
+    const closeCode = await new Promise<number>((resolve) =>
+      account.socket.once('close', resolve),
+    )
+    expect(closeCode).toBe(4001)
+    expect(resolutionCount).toBeGreaterThanOrEqual(2)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(guest.socket.readyState).toBe(WebSocket.OPEN)
+    guest.close()
+  })
+
+  it('refreshes a changed role for later authorization without rebinding identity', async () => {
+    let identity: PublicSessionIdentity = {
+      id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+      role: 'player',
+      username: 'Account_Player',
+    }
+    let resolutionCount = 0
+    const auth = testAuth(async () => {
+      resolutionCount += 1
+      return identity
+    })
+    const { port } = await startServer({
+      auth,
+      authRevalidationIntervalMs: 10,
+    })
+    const proposedConfig = {
+      ...DEFAULT_GAME_CONFIG,
+      rounds: 4,
+      turnSeconds: 20,
+    }
+    const account = await connectProbe(
+      port,
+      ORIGIN,
+      '/ws',
+      `hidden_session=${VALID_SESSION_TOKEN}`,
+    )
+    await account.waitFor(PacketType.ID_ASSIGN)
+    identity = { ...identity, role: 'admin' }
+    await waitUntil(() => resolutionCount >= 2)
+    account.send([0, PacketType.ROOM_JOIN, 'lobby'])
+    await account.waitFor(PacketType.SERVER_RESPONSE)
+    account.send([0, PacketType.MATCHMAKING_REQUEST, true, proposedConfig])
+    const guest = await queueProbe(port, { guestUsername: 'Guest#4321' })
+    const [accountMatch, guestMatch] = await Promise.all([
+      account.waitFor(PacketType.MATCH_FOUND),
+      guest.waitFor(PacketType.MATCH_FOUND),
+    ])
+    expect(accountMatch[3]).toEqual(proposedConfig)
+    expect(guestMatch[3]).toEqual(proposedConfig)
+    account.close()
+    guest.close()
+  })
+
+  it.each([
+    ['identity change', 4002, false],
+    ['resolver failure', 1011, true],
+  ] as const)(
+    'fails closed on websocket revalidation %s',
+    async (_label, expectedCode, throwFailure) => {
+      let resolutionCount = 0
+      const original: PublicSessionIdentity = {
+        id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+        role: 'player',
+        username: 'Account_Player',
+      }
+      const auth = testAuth(async () => {
+        resolutionCount += 1
+        if (resolutionCount === 1) return original
+        if (throwFailure) throw new Error('database unavailable')
+        return { ...original, username: 'Other_Player' }
+      })
+      const { port } = await startServer({
+        auth,
+        authRevalidationIntervalMs: 10,
+      })
+      const account = await connectProbe(
+        port,
+        ORIGIN,
+        '/ws',
+        `hidden_session=${VALID_SESSION_TOKEN}`,
+      )
+      await account.waitFor(PacketType.ID_ASSIGN)
+      const closeCode = await new Promise<number>((resolve) =>
+        account.socket.once('close', resolve),
+      )
+      expect(closeCode).toBe(expectedCode)
+    },
+  )
+
+  it('does not overlap websocket revalidation and stops its timer during shutdown', async () => {
+    let concurrent = 0
+    let maxConcurrent = 0
+    let calls = 0
+    let release: (() => void) | undefined
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const identity: PublicSessionIdentity = {
+      id: '51314c8f-2d1f-4be5-a3e3-33f5b29d8c84',
+      role: 'player',
+      username: 'Account_Player',
+    }
+    const auth = testAuth(async () => {
+      calls += 1
+      if (calls === 1) return identity
+      concurrent += 1
+      maxConcurrent = Math.max(maxConcurrent, concurrent)
+      await blocked
+      concurrent -= 1
+      return identity
+    })
+    const { port } = await startServer({
+      auth,
+      authRevalidationIntervalMs: 5,
+      shutdownGraceMs: 25,
+    })
+    const account = await connectProbe(
+      port,
+      ORIGIN,
+      '/ws',
+      `hidden_session=${VALID_SESSION_TOKEN}`,
+    )
+    await account.waitFor(PacketType.ID_ASSIGN)
+    await waitUntil(() => calls >= 2)
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect(maxConcurrent).toBe(1)
+    const callsAtShutdown = calls
+    const close = server!.close()
+    release?.()
+    await close
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls).toBe(callsAtShutdown)
+    account.socket.terminate()
   })
 })
 

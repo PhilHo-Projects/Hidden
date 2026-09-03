@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Logger } from '../logger'
-import type { MatchHistoryRecordV1 } from './types'
-import { MatchHistoryRecorder } from './recorder'
+import type { Logger } from '../logger.js'
+import type { MatchHistoryRecordV1 } from './types.js'
+import { MatchHistoryRecorder } from './recorder.js'
 
 const record: MatchHistoryRecordV1 = {
   schemaVersion: 1,

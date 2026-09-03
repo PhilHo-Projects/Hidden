@@ -12,6 +12,7 @@ const render = (overrides: Partial<Parameters<typeof ProfileMenu>[0]> = {}) =>
       disabled: false,
       onSignOut: () => undefined,
       onOpenHistory: () => undefined,
+      onOpenSettings: () => undefined,
       ...overrides,
     }),
   )
@@ -54,12 +55,14 @@ describe('ProfileMenu', () => {
         username: 'Ecco',
         role: 'player',
         onOpenHistory: () => undefined,
+        onOpenSettings: () => undefined,
         onSignOut: () => undefined,
       }),
     )
 
     expect(markup).toContain('Match history')
     expect(markup).toContain('Open match history')
+    expect(markup).toContain('Account settings')
     expect(markup).toContain('Stats')
     expect(markup).toContain('Preferences')
     expect(markup.match(/disabled=""/g)).toHaveLength(2)
@@ -73,6 +76,7 @@ describe('ProfileMenu', () => {
         role: 'player',
         onOpenAdmin: () => undefined,
         onOpenHistory: () => undefined,
+        onOpenSettings: () => undefined,
         onSignOut: () => undefined,
       }),
     )
@@ -82,6 +86,7 @@ describe('ProfileMenu', () => {
         role: 'admin',
         onOpenAdmin: () => undefined,
         onOpenHistory: () => undefined,
+        onOpenSettings: () => undefined,
         onSignOut: () => undefined,
       }),
     )

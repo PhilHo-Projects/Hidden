@@ -7,6 +7,7 @@ interface ProfileMenuProps {
   disabled: boolean
   onOpenAdmin?: () => void
   onOpenHistory: () => void
+  onOpenSettings: () => void
   onSignOut: () => void
 }
 
@@ -25,6 +26,7 @@ interface ProfileMenuPanelProps {
   role: 'player' | 'admin'
   onOpenAdmin?: () => void
   onOpenHistory: () => void
+  onOpenSettings: () => void
   onSignOut: () => void
 }
 
@@ -33,6 +35,7 @@ export function ProfileMenuPanel({
   role,
   onOpenAdmin,
   onOpenHistory,
+  onOpenSettings,
   onSignOut,
 }: ProfileMenuPanelProps) {
   return (
@@ -69,6 +72,20 @@ export function ProfileMenuPanel({
             <span className="profile-menu-item-label">Match history</span>
             <span className="profile-menu-item-detail">
               Past matches and how they ended
+            </span>
+          </button>
+        </li>
+
+        <li>
+          <button
+            type="button"
+            className="profile-menu-item"
+            aria-label="Open account settings"
+            onClick={onOpenSettings}
+          >
+            <span className="profile-menu-item-label">Account settings</span>
+            <span className="profile-menu-item-detail">
+              Email, password, and signed-in devices
             </span>
           </button>
         </li>
@@ -112,6 +129,7 @@ export function ProfileMenu({
   disabled,
   onOpenAdmin,
   onOpenHistory,
+  onOpenSettings,
   onSignOut,
 }: ProfileMenuProps) {
   const [open, setOpen] = useState(false)
@@ -182,6 +200,10 @@ export function ProfileMenu({
             onOpenHistory={() => {
               setOpen(false)
               onOpenHistory()
+            }}
+            onOpenSettings={() => {
+              setOpen(false)
+              onOpenSettings()
             }}
             onSignOut={() => {
               setOpen(false)

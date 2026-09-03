@@ -2,17 +2,19 @@
   "name": "hidden-server",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "main": "dist/server.js",
   "scripts": {
     "prebuild": "npm run build --workspace=@hidden/game-core",
     "build": "tsc",
-    "admin:provision": "npm run build && node dist/admin/provisionCli.js",
+    "admin:role": "npm run build && node dist/admin/roleCli.js",
+    "db:migrate": "npm run build && node dist/migrateCli.js",
     "start": "node dist/server.js",
     "dev": "tsc --watch --preserveWatchOutput",
     "pretest": "npm run build --workspace=@hidden/game-core",
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "npm run typecheck && vitest run",
-    "test:integration": "vitest run src/auth/repository.integration.test.ts && vitest run src/matchHistory/repository.integration.test.ts && vitest run src/admin/repository.integration.test.ts && vitest run src/admin/provision.integration.test.ts",
+    "test:integration": "vitest run src/migrations.integration.test.ts && vitest run src/auth/flows.integration.test.ts && vitest run src/auth/sessionResolver.integration.test.ts && vitest run src/auth/cleanup.integration.test.ts && vitest run src/matchHistory/repository.integration.test.ts && vitest run src/admin/repository.integration.test.ts && vitest run src/admin/role.integration.test.ts",
     "test:watch": "vitest"
   },
   "keywords": [],
@@ -22,6 +24,7 @@
   "dependencies": {
     "@hidden/game-core": "0.0.0",
     "@msgpack/msgpack": "^3.1.3",
+    "better-auth": "1.7.1",
     "express": "^5.2.1",
     "pg": "^8.22.0",
     "ws": "^8.21.3"

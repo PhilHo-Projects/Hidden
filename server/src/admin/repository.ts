@@ -1,5 +1,5 @@
 import type { Seat } from '@hidden/game-core'
-import type { MatchHistoryBoard } from '../matchHistory/types'
+import type { MatchHistoryBoard } from '../matchHistory/types.js'
 
 export interface AdminRuntimeStats {
   readonly connections: number

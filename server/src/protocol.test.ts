@@ -5,7 +5,7 @@ import {
   decodeClientPacket,
   PacketType,
   ProtocolError,
-} from './protocol'
+} from './protocol.js'
 
 describe('decodeClientPacket', () => {
   it('pins every supported packet id and appends authoritative gameplay without renumbering', () => {

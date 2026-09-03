@@ -1,24 +1,27 @@
 import express from 'express'
 import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { AuthenticatedUser } from '../auth/service'
-import type { Logger } from '../logger'
-import { createAdminRouter } from './http'
+import type {
+  PublicSessionIdentity,
+  PublicSessionResolver,
+} from '../auth/sessionResolver.js'
+import type { Logger } from '../logger.js'
+import { createAdminRouter } from './http.js'
 import type {
   AdminAccountPage,
   AdminMatchDetail,
   AdminMatchPage,
   AdminRepository,
   AdminRuntimeStatsProvider,
-} from './repository'
+} from './repository.js'
 
 const SESSION_TOKEN = 'A'.repeat(43)
-const ADMIN: AuthenticatedUser = {
+const ADMIN: PublicSessionIdentity = {
   id: '00000000-0000-4000-8000-000000000001',
   role: 'admin',
   username: 'PhilAdmin',
 }
-const PLAYER: AuthenticatedUser = {
+const PLAYER: PublicSessionIdentity = {
   id: '00000000-0000-4000-8000-000000000002',
   role: 'player',
   username: 'PlayerOne',
@@ -118,21 +121,36 @@ afterEach(async () => {
 async function startRouter(options: {
   getSession?: (
     token: string | undefined,
-  ) => Promise<AuthenticatedUser | undefined>
+  ) => Promise<PublicSessionIdentity | undefined>
   repository?: AdminRepository
   logger?: Logger
 }) {
   const app = express()
+  const getSession =
+    options.getSession ??
+    (async (token: string | undefined) =>
+      token === SESSION_TOKEN ? ADMIN : undefined)
+  const sessions: PublicSessionResolver = {
+    async resolve(headers) {
+      const cookie = headers instanceof Headers
+        ? headers.get('cookie')
+        : headers.cookie
+      const token = /(?:^|;\s*)hidden_session=([^;]+)/.exec(
+        Array.isArray(cookie) ? cookie.join('; ') : cookie ?? '',
+      )?.[1]
+      return getSession(token)
+    },
+    hasSessionCookie() {
+      return false
+    },
+  }
   app.use(
     '/api/admin',
     createAdminRouter({
-      getSession:
-        options.getSession ??
-        (async (token) => (token === SESSION_TOKEN ? ADMIN : undefined)),
+      sessions,
       repository: options.repository ?? repositoryDouble(),
       runtimeStats,
       logger: options.logger ?? (() => undefined),
-      secureCookie: false,
     }),
   )
   const server = createServer(app)

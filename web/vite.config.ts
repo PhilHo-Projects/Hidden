@@ -2,8 +2,10 @@ import { rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vitest/config'
+import { loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { resolveTurnstileSiteKey } from './src/auth/turnstileConfig'
 
 const CORE_DIST = fileURLToPath(
   new URL('../packages/game-core/dist/index.js', import.meta.url),
@@ -70,7 +72,15 @@ function revalidateOptimizedDeps(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command, mode }) => {
+  if (command === 'build') {
+    const environment = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), '')
+    resolveTurnstileSiteKey(
+      process.env.VITE_TURNSTILE_SITE_KEY ?? environment.VITE_TURNSTILE_SITE_KEY,
+      true,
+    )
+  }
+  return {
   // Both halves are needed: one makes Vite rebuild the bundle, the other stops
   // the browser serving its immutable copy of the previous one.
   plugins: [react(), tailwindcss(), reoptimiseLinkedCore(), revalidateOptimizedDeps()],
@@ -98,4 +108,5 @@ export default defineConfig({
     globals: true,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
   },
+  }
 })

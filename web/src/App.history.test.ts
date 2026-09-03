@@ -22,12 +22,26 @@ describe('App match history navigation', () => {
       true
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
-      if (url === '/api/auth/session') {
+      if (url.endsWith('/api/auth/get-session')) {
         return jsonResponse({
           user: {
             id: '00000000-0000-4000-8000-000000000001',
-            username: 'HistoryPlayer',
+            name: 'HistoryPlayer',
+            username: 'historyplayer',
+            displayUsername: 'HistoryPlayer',
             role: 'player',
+            email: 'private@example.test',
+            emailVerified: true,
+            createdAt: '2030-01-01T00:00:00.000Z',
+            updatedAt: '2030-01-01T00:00:00.000Z',
+          },
+          session: {
+            id: '00000000-0000-4000-8000-000000000011',
+            token: 'private-token',
+            userId: '00000000-0000-4000-8000-000000000001',
+            createdAt: '2030-01-01T00:00:00.000Z',
+            updatedAt: '2030-01-01T00:00:00.000Z',
+            expiresAt: '2030-02-01T00:00:00.000Z',
           },
         })
       }
