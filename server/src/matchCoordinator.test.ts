@@ -5,6 +5,7 @@ import {
   createGame,
   type GameCommand,
   type GameConfig,
+  type GameVariant,
   type Seat,
 } from '@hidden/game-core'
 import { describe, expect, it, vi } from 'vitest'
@@ -329,6 +330,7 @@ function authoritativeFixture(
     seed?: number
     turnSeconds?: number
     uuids?: string[]
+    variant?: GameVariant
   } = {},
 ) {
   const clock = { now: options.now ?? 1_000 }
@@ -363,8 +365,13 @@ function authoritativeFixture(
     rounds: options.rounds ?? 20,
     turnSeconds: options.turnSeconds ?? 10,
     blindMode: false,
+    ...(options.variant ? { variant: options.variant } : {}),
   })
-  const room = coordinator.enqueueQuickMatch(secondParticipant)!
+  // Both seats must propose the same variant or the queue will not pair them.
+  const room = coordinator.enqueueQuickMatch(
+    secondParticipant,
+    options.variant ? { variant: options.variant } : undefined,
+  )!
   coordinator.setReady(11, true)
   const start = coordinator.setReady(22, true).start!
   const nextCommandId: [number, number] = [1, 1]
@@ -1098,6 +1105,27 @@ describe('MatchCoordinator finish, rematch, and legacy lifecycle', () => {
     )
     expect(exactFinishingRetry).toEqual([finishing[0]])
     expect(completed).toHaveLength(1)
+  })
+
+  it('records nothing when a prototype run completes', () => {
+    const completed: unknown[] = []
+    const fixture = authoritativeFixture({
+      firstSeat: 0,
+      now: 8_000,
+      onMatchCompleted: (record) => completed.push(record),
+      rounds: 1,
+      uuids: ['stable-room', 'finished-run'],
+      variant: 'prototype',
+    })
+
+    fixture.issue(0, { type: 'place', locationId: 0, symbol: 'rock' })
+    fixture.issue(1, { type: 'place', locationId: 1, symbol: 'paper' })
+
+    // The run still finishes and still scores; it is simply never written.
+    // History is the research notebook for `main`, and a variant with no win
+    // condition has no result worth notebooking.
+    expect(fixture.run.state.phase).toBe('finished')
+    expect(completed).toEqual([])
   })
 
   it('emits one final snapshot when deadline timeouts complete the run', () => {

@@ -978,6 +978,14 @@ export class MatchCoordinator {
     this.clearRoomTimer(room)
     run.phase = 'finished'
     room.phase = 'finished'
+    /*
+     * Only `main` is recorded. The v1 record is the research notebook for the
+     * shipped game: it stores a board as `columns` plus a flat cell list, which
+     * a cube would misreport, and a variant with no win condition has no result
+     * worth keeping. Written as "not main" rather than "is prototype" so a
+     * future variant stays excluded until someone decides otherwise.
+     */
+    if (run.state.config.variant !== 'main') return
     this.dependencies.onMatchCompleted?.(
       createMatchHistoryRecord({
         matchId: run.id,
