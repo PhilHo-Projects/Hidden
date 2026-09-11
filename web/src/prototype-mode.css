@@ -17,6 +17,10 @@
   --mode-accent-fill: #171308;
   display: flex;
   width: 100%;
+  /* Matches `.online-action-grid` so the picker sits in the same column as the
+   * buttons it governs. Inside the narrower practice card, 100% wins instead. */
+  max-width: min(50rem, 92vw);
+  margin-inline: auto;
   flex-direction: column;
   gap: 0.55rem;
 }
@@ -155,18 +159,28 @@
   outline-offset: 2px;
 }
 
-/* A running match cannot change variant, so this never animates in mid-play. */
-.prototype-banner {
-  margin: 0.35rem 0 0;
-  border: 2px solid var(--hidden-red);
+/*
+ * A running match cannot change variant, so this never appears or disappears
+ * mid-play. Scoped under `.battle-header` because that selector styles its own
+ * `p` elements at higher specificity than a bare class -- without the parent
+ * here, the header's type scale wins and the banner shouts over the round
+ * counter it is supposed to sit beneath.
+ */
+.battle-header .prototype-banner {
+  margin: 0.35rem auto 0;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--hidden-red);
   background: #1a0b0b;
   color: #e0a3a3;
-  font-size: 0.6rem;
+  font-family: var(--font-block);
+  font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.5;
-  padding: 0.3rem 0.6rem;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  padding: 0.25rem 0.55rem;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .results-tbd {

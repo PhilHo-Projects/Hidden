@@ -29,14 +29,17 @@ import {
   StatusStrip,
   type UiStatus,
 } from './components/PregameUi'
+import { ModeSelect } from './components/ModeSelect'
 import { COLOR_BY_SYMBOL } from './game/constants'
 import { createMatchHistoryClient } from './history/historyClient'
 import {
   clampGameConfig,
   clampOnlineGameConfig,
+  defaultConfigForVariant,
   DEFAULT_GAME_CONFIG,
   type ClassicSymbol,
   type GameConfig,
+  type GameVariant,
 } from '@hidden/game-core'
 import { useAccountSession } from './hooks/useAccountSession'
 import { useBoardSideVar } from './hooks/useBoardSideVar'
@@ -47,8 +50,11 @@ import {
   createGuestName,
   getBackTarget,
   getOpponentName,
+  getResultHeadline,
   getScoreCountLabels,
   getTurnStatusText,
+  isPrototypeMatch,
+  quickMatchConfig,
   resolvePlayerName,
   shouldPromptMoveChoice,
   isRevealSnapshotOpen,
@@ -125,6 +131,11 @@ function App({ initialAuthIntent = null }: AppProps) {
     // Clamping here means the UI cannot produce an invalid config, so the
     // server clamp becomes a defence rather than the only guard.
     setConfig((current) => clampGameConfig({ ...current, ...patch }))
+  // A whole replacement rather than a patch: each variant has its own starting
+  // rules, and carrying a 5x5 board into a mode that forbids it would only
+  // produce a config the clamp silently rewrites.
+  const applyVariant = (variant: GameVariant) =>
+    setConfig(defaultConfigForVariant(variant))
   const [status, setStatus] = useState<UiStatus>({
     tone: 'neutral',
     label: 'GUEST',
@@ -332,9 +343,17 @@ function App({ initialAuthIntent = null }: AppProps) {
         }
       : screen === 'results' && match?.result
       ? {
-          tone: match.result.outcome === 'loss' ? 'error' : 'success',
-          label: 'MATCH COMPLETE',
-          detail: `${username} ${match.result.playerScore} · ${opponentName} ${match.result.opponentScore}`,
+          // Without this branch the strip would announce a winner the headline
+          // deliberately refuses to name.
+          tone: isPrototypeMatch(match)
+            ? 'neutral'
+            : match.result.outcome === 'loss'
+              ? 'error'
+              : 'success',
+          label: isPrototypeMatch(match) ? 'PROTOTYPE COMPLETE' : 'MATCH COMPLETE',
+          detail: isPrototypeMatch(match)
+            ? 'No winner is declared in this mode yet.'
+            : `${username} ${match.result.playerScore} · ${opponentName} ${match.result.opponentScore}`,
         }
       : screen === 'battle' && match
         ? {
@@ -547,6 +566,7 @@ function App({ initialAuthIntent = null }: AppProps) {
           <GameMasthead compact />
           <GuestIdentity name={username} />
           <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
+          <ModeSelect value={config.variant} onChange={applyVariant} />
           <div className="action-grid online-action-grid">
             <ActionChoice
               label="QUICK MATCH"
@@ -554,7 +574,8 @@ function App({ initialAuthIntent = null }: AppProps) {
               onClick={() => void startOnline(
                 username,
                 // Quick Match rules are admin-only because they bind a stranger.
-                authUser?.role === 'admin' ? config : undefined,
+                // The variant is exempt: it decides which queue you join.
+                quickMatchConfig(config, authUser?.role === 'admin'),
               )}
             />
             <ActionChoice
@@ -709,6 +730,7 @@ function App({ initialAuthIntent = null }: AppProps) {
             <p className="panel-description">
               Learn the board or tune the rules before going online.
             </p>
+            <ModeSelect value={config.variant} onChange={applyVariant} />
             <BrushButton
               className="big-action"
               onClick={() => void startOffline(config)}
@@ -762,6 +784,16 @@ function App({ initialAuthIntent = null }: AppProps) {
         <section className="battle-screen">
           <header className="battle-header">
             <h1>Current Round: {match.currentRound}</h1>
+            {/* A running match cannot change variant, so this never appears or
+              * disappears mid-play and cannot reflow the header. */}
+            {/* The full warning is shown when the mode is picked and again on
+              * the result screen. In-match it only has to keep saying which
+              * mode this is, so it stays one short line that cannot wrap. */}
+            {isPrototypeMatch(match) ? (
+              <p className="prototype-banner" role="note">
+                Prototype · under development
+              </p>
+            ) : null}
             <p>{statusText}</p>
             {/* Always mounted. The strip is a fixed slot in the header, so a
               * message arriving or expiring never resizes the header and shoves
@@ -855,12 +887,27 @@ function App({ initialAuthIntent = null }: AppProps) {
         <section className="results-screen">
           <div className="results-copy">
             <p className="brush-subtitle">GAME OVER</p>
-            <h1>{match.result.outcome === 'win' ? 'YOU WIN!' : match.result.outcome === 'loss' ? 'YOU LOSE!' : "IT'S A TIE!"}</h1>
-            <p className="results-score">
-              Your Score: <b>{match.result.playerScore}</b>
-              <br />
-              Opponent Score: <b>{match.result.opponentScore}</b>
-            </p>
+            <h1 className={isPrototypeMatch(match) ? 'results-tbd' : undefined}>
+              {getResultHeadline(match)}
+            </h1>
+            {isPrototypeMatch(match) ? (
+              <>
+                <p className="results-note">This mode has no win condition yet.</p>
+                {/* Cell counts, not a score. Useful while playtesting; not a
+                  * claim about who won. */}
+                <p className="results-debug">
+                  Cells held (debug) — {username.trim() || 'Player'}:{' '}
+                  <b>{match.result.playerScore}</b> · {opponentName}:{' '}
+                  <b>{match.result.opponentScore}</b>
+                </p>
+              </>
+            ) : (
+              <p className="results-score">
+                Your Score: <b>{match.result.playerScore}</b>
+                <br />
+                Opponent Score: <b>{match.result.opponentScore}</b>
+              </p>
+            )}
             <div className="results-actions">
               <BrushButton className="results-action" onClick={onAgain}>
                 AGAIN?
