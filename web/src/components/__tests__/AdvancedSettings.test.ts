@@ -207,3 +207,27 @@ describe('advanced rules panel', () => {
     expect(markup).toContain('Experimental')
   })
 })
+
+describe('board size under the prototype variant', () => {
+  const boardSizeField = flatten(RULE_SECTIONS).find(
+    (field) => field.id === 'boardSize',
+  )
+
+  it('offers every size under main', () => {
+    if (boardSizeField?.kind !== 'choice') throw new Error('Expected a choice field.')
+    const options = boardSizeField.options(DEFAULT_GAME_CONFIG)
+    expect(options.every((option) => !option.disabled)).toBe(true)
+  })
+
+  it('leaves only 3x3 selectable under prototype', () => {
+    if (boardSizeField?.kind !== 'choice') throw new Error('Expected a choice field.')
+    const config = clampGameConfig({ ...DEFAULT_GAME_CONFIG, variant: 'prototype' })
+    const options = boardSizeField.options(config)
+
+    expect(options.find((option) => option.value === 3)?.disabled).toBeFalsy()
+    expect(options.find((option) => option.value === 4)?.disabled).toBe(true)
+    expect(options.find((option) => option.value === 5)?.disabled).toBe(true)
+    // Still rendered, not removed: the constraint stays visible.
+    expect(options).toHaveLength(3)
+  })
+})
