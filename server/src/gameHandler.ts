@@ -7,7 +7,7 @@ import {
   type GameUpdateDelivery,
   type MatchRoom,
 } from './matchCoordinator.js'
-import { type GameConfig } from './matchRules.js'
+import { defaultConfigForVariant, type GameConfig } from './matchRules.js'
 import {
   decodeClientPacket,
   encodePacket,
@@ -388,6 +388,14 @@ export class GameHandler {
       if (session.role === 'admin') {
         trustedConfig = proposedConfig
       } else {
+        /*
+         * The rules stay admin-only, because Quick Match binds a stranger to
+         * whatever the proposer asked for. The variant is the exception: it is
+         * not a rule, it is which queue the player is standing in, and dropping
+         * it would put someone who chose one game into another with no way to
+         * tell what went wrong. Honour it on that variant's own defaults.
+         */
+        trustedConfig = defaultConfigForVariant(proposedConfig.variant)
         this.options.logger('debug', 'matchmaking.config_ignored', {
           clientId: session.id,
         })
