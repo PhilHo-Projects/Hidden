@@ -1476,3 +1476,68 @@ describe('reveal window', () => {
     expect(fixture.run.revision).toBe(before)
   })
 })
+
+describe('quick match variant segregation', () => {
+  const prototypeConfig: GameConfig = {
+    ...DEFAULT_GAME_CONFIG,
+    variant: 'prototype',
+  }
+
+  it('does not pair players who asked for different variants', () => {
+    const { dependencies } = deterministicDependencies()
+    const coordinator = new MatchCoordinator(dependencies)
+
+    expect(coordinator.enqueueQuickMatch(firstParticipant)).toBeUndefined()
+    expect(
+      coordinator.enqueueQuickMatch(secondParticipant, prototypeConfig),
+    ).toBeUndefined()
+    expect(coordinator.getRuntimeStats().queuedPlayers).toBe(2)
+  })
+
+  it('pairs two players who asked for the same variant', () => {
+    const { dependencies } = deterministicDependencies()
+    const coordinator = new MatchCoordinator(dependencies)
+
+    expect(
+      coordinator.enqueueQuickMatch(firstParticipant, prototypeConfig),
+    ).toBeUndefined()
+    const room = coordinator.enqueueQuickMatch(secondParticipant, prototypeConfig)
+
+    expect(room).toBeDefined()
+    expect(room?.config.variant).toBe('prototype')
+  })
+
+  it('treats a player who proposed no config as wanting main', () => {
+    const { dependencies } = deterministicDependencies({
+      uuids: ['room-uuid', 'run-uuid', 'spare-uuid'],
+    })
+    const coordinator = new MatchCoordinator(dependencies)
+
+    coordinator.enqueueQuickMatch(firstParticipant, prototypeConfig)
+    expect(coordinator.enqueueQuickMatch(secondParticipant)).toBeUndefined()
+
+    const third = { connectionId: 33, username: 'Guest#0033' }
+    const room = coordinator.enqueueQuickMatch(third)
+    expect(room?.config.variant).toBe('main')
+  })
+
+  it('pairs a later compatible arrival past an incompatible one', () => {
+    const { dependencies } = deterministicDependencies({
+      uuids: ['room-uuid', 'run-uuid', 'spare-uuid'],
+    })
+    const coordinator = new MatchCoordinator(dependencies)
+
+    coordinator.enqueueQuickMatch(firstParticipant, prototypeConfig)
+    coordinator.enqueueQuickMatch(secondParticipant)
+
+    const third = { connectionId: 33, username: 'Guest#0033' }
+    const room = coordinator.enqueueQuickMatch(third, prototypeConfig)
+
+    expect(room).toBeDefined()
+    expect(room?.config.variant).toBe('prototype')
+    const ids = room?.participants.map((participant) => participant.connectionId)
+    expect(ids).toContain(firstParticipant.connectionId)
+    expect(ids).toContain(33)
+    expect(coordinator.getRuntimeStats().queuedPlayers).toBe(1)
+  })
+})

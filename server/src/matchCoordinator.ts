@@ -11,6 +11,7 @@ import {
   type GameCommand,
   type GameConfig,
   type GameState,
+  type GameVariant,
   type ResolvedGameSpec,
   type Seat,
 } from '@hidden/game-core'
@@ -154,6 +155,14 @@ export interface MatchCoordinatorDependencies {
 interface QuickMatchEntry {
   readonly participant: QuickMatchParticipant
   readonly proposedConfig: GameConfig | undefined
+}
+
+/**
+ * A queued player with no proposed config is a non-admin quick-matcher, who
+ * gets the server's defaults. Those are `main`, so they queue as `main`.
+ */
+function entryVariant(entry: QuickMatchEntry): GameVariant {
+  return entry.proposedConfig?.variant ?? DEFAULT_GAME_CONFIG.variant
 }
 
 export interface PendingGame {
@@ -321,7 +330,11 @@ export class MatchCoordinator {
             !isSameAuthenticatedAccount(
               first.participant,
               candidate.participant,
-            ),
+            ) &&
+            // Two variants are two different games. Pairing across them would
+            // hand one player the other's rules, which the `first ?? second`
+            // resolution below would then do silently.
+            entryVariant(first) === entryVariant(candidate),
         )
       if (second) {
         compatiblePair = [first, second]
