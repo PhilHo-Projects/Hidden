@@ -111,7 +111,7 @@ and cheap to get wrong by accident:
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 0 | Mode plumbing: config variant, mode selection on the online and practice screens, matchmaking segregation, history gate, `TBD` result, UNDER DEVELOPMENT labelling. Still a single 3x3 face. | Not started |
+| 0 | Mode plumbing: config variant, mode selection on the online and practice screens, matchmaking segregation, history gate, `TBD` result, UNDER DEVELOPMENT labelling. Still a single 3x3 face. | Done 2026-09-11 |
 | 1 | The open cube: split `game-core` into modules, 54-location topology, face adjacency, unfolded cross map, arrow/WASD navigation, explicit `BoardGrid` layout, 12 rounds. All six faces open from turn 1; the locked arrow treatment is previewable on a client-side debug toggle that changes presentation only. | Not started |
 | 2 | The expansion mechanic: start locked to `home`, matching corner pair on an edge unlocks the face across it, shared and permanent. Deletes the Phase 1 debug button. | Not started |
 | 3 | Fork to a race/cooldown or refined turn-based model. Decided by playing 1 and 2, not in advance. | Not started |

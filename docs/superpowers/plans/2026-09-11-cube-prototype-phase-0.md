@@ -1343,6 +1343,34 @@ Open the PR against `PhilHo-Projects/hidden`. Rebase on `main` first — other s
 
 ---
 
+## What the plan got wrong, found during execution
+
+Recorded because the same shapes will recur in later phases.
+
+**The queue segregation in Task 2 was dead code on the real path.**
+`gameHandler.updateMatchmaking` discarded the entire proposed config for
+non-admins, so the variant never reached `enqueueQuickMatch` and a guest who
+picked the prototype was silently queued for `main`. Task 2's tests passed
+because they called `enqueueQuickMatch` directly, past the handler — a unit test
+proving a function works says nothing about whether anything calls it with real
+input. The fix mirrors `quickMatchConfig` on the server: rules stay admin-only,
+the variant is honoured for everyone. It is covered by a test that drives the
+actual WebSocket in `app.test.ts`, and it was caught only by two browser tabs.
+
+**`packages/game-core` runs `node:test`, not Vitest.** It is the only package
+that does. Its tests use `assert.equal` / `assert.deepEqual` and import from
+`./index.ts` with the extension.
+
+**A required config field breaks test fixtures, not runtime code.** All runtime
+paths build configs through `clampGameConfig`; four object literals in tests did
+not. They surface via `npm test`, never `npm run build`, because the build
+excludes test files.
+
+**CSS specificity beat a bare class.** `.battle-header p` (0,1,1) overrode
+`.prototype-banner` (0,1,0), so the in-match banner rendered at the header's
+type scale and shouted over the round counter. Component chrome dropped into a
+screen that styles its own elements needs the parent in the selector.
+
 ## What Phase 0 deliberately does not do
 
 Do not start any of these. They are Phase 1, and folding them in would defeat the point of Phase 0 shipping separately.
