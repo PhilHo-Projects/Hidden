@@ -78,71 +78,80 @@ The discriminant every later task keys off. Everything else in this plan depends
   - `export const PROTOTYPE_ROUNDS: 12`
   - `export function defaultConfigForVariant(variant: GameVariant): GameConfig`
 
+> **Test dialect:** this package alone runs on `node:test` with
+> `node:assert/strict` (`node --no-warnings --test src/index.test.ts`), and
+> imports from `./index.ts` with the extension. `server/` and `web/` use Vitest;
+> do not carry `expect(...)` into this file.
+
 - [ ] **Step 1: Write the failing tests**
 
-Append to `packages/game-core/src/index.test.ts`:
+Append to `packages/game-core/src/index.test.ts`, and add `defaultConfigForVariant` to its existing import block:
 
 ```ts
 describe('game variant', () => {
   it('defaults to main when the field is absent', () => {
-    expect(clampGameConfig({}).variant).toBe('main')
-    expect(DEFAULT_GAME_CONFIG.variant).toBe('main')
+    assert.equal(clampGameConfig({}).variant, 'main')
+    assert.equal(DEFAULT_GAME_CONFIG.variant, 'main')
   })
 
   it('falls back to main for an unrecognised variant', () => {
-    expect(clampGameConfig({ variant: 'cube' }).variant).toBe('main')
-    expect(clampGameConfig({ variant: 7 }).variant).toBe('main')
-    expect(clampGameConfig({ variant: null }).variant).toBe('main')
+    assert.equal(clampGameConfig({ variant: 'cube' }).variant, 'main')
+    assert.equal(clampGameConfig({ variant: 7 }).variant, 'main')
+    assert.equal(clampGameConfig({ variant: null }).variant, 'main')
   })
 
   it('keeps a recognised variant', () => {
-    expect(clampGameConfig({ variant: 'prototype' }).variant).toBe('prototype')
+    assert.equal(clampGameConfig({ variant: 'prototype' }).variant, 'prototype')
   })
 
   it('forces a 3x3 board under prototype, whatever was asked for', () => {
     const config = clampGameConfig({ variant: 'prototype', boardSize: 5, streak: 5 })
-    expect(config.boardSize).toBe(3)
-    expect(config.streak).toBe(3)
+    assert.equal(config.boardSize, 3, 'the cube is six 3x3 faces')
+    assert.equal(config.streak, 3, 'the streak rides the board size')
   })
 
   it('leaves board size alone under main', () => {
-    expect(clampGameConfig({ variant: 'main', boardSize: 5, streak: 5 }).boardSize).toBe(5)
+    const config = clampGameConfig({ variant: 'main', boardSize: 5, streak: 5 })
+    assert.equal(config.boardSize, 5)
   })
 
   it('gives each variant its own starting config', () => {
-    expect(defaultConfigForVariant('main')).toEqual(DEFAULT_GAME_CONFIG)
+    assert.deepEqual(defaultConfigForVariant('main'), DEFAULT_GAME_CONFIG)
 
     const prototype = defaultConfigForVariant('prototype')
-    expect(prototype.variant).toBe('prototype')
-    expect(prototype.boardSize).toBe(3)
-    expect(prototype.rounds).toBe(12)
-    expect(prototype.rounds).toBe(DEFAULT_GAME_CONFIG.rounds * 2)
+    assert.equal(prototype.variant, 'prototype')
+    assert.equal(prototype.boardSize, 3)
+    assert.equal(
+      prototype.rounds,
+      DEFAULT_GAME_CONFIG.rounds * 2,
+      'double the main default, because a cube has more board to cover',
+    )
   })
 
   it('produces a config the clamp accepts unchanged', () => {
     for (const variant of ['main', 'prototype'] as const) {
       const config = defaultConfigForVariant(variant)
-      expect(clampGameConfig(config)).toEqual(config)
+      assert.deepEqual(
+        clampGameConfig(config),
+        config,
+        `${variant} round-trips through the clamp`,
+      )
     }
   })
 
   it('does not change how a main match resolves', () => {
     // The whole "no ENGINE_REVISION bump" argument rests on this.
-    expect(ENGINE_REVISION).toBe(2)
-    const spec = {
-      engine: { id: ENGINE_ID, revision: ENGINE_REVISION },
-      config: clampGameConfig({ variant: 'main' }),
-      seed: 7,
-      firstSeat: 0 as const,
-    }
-    const state = createGame(spec)
-    expect(state.mode.topology.locationIds).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
-    expect(state.mode.topology.winningPatterns.length).toBe(8)
+    assert.equal(
+      ENGINE_REVISION,
+      2,
+      'a cube topology is a config change, not an engine change',
+    )
+    const state = createGame(baseSpec({ config: clampGameConfig({ variant: 'main' }) }))
+    assert.deepEqual(state.mode.topology.locationIds, [0, 1, 2, 3, 4, 5, 6, 7, 8])
+    assert.equal(state.mode.topology.winningPatterns.length, 8)
   })
 })
 ```
-
-Add `defaultConfigForVariant` to the file's existing import from `./index.js` (and `ENGINE_ID`, `ENGINE_REVISION`, `createGame` if they are not already imported there).
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -281,7 +290,24 @@ The `switch` with a return in every arm and no `default` is what gives the exhau
 npm test --workspace=@hidden/game-core
 ```
 
-Expected: PASS, including every pre-existing test. If an existing test fails on an unexpected `variant` key in a deep-equality assertion, update that test to include `variant: 'main'` — the field genuinely is part of the config now.
+Expected: PASS, including every pre-existing test.
+
+One pre-existing test fails first: *"defaults to the game as it plays today"* spells out the whole default config as a literal. Add `variant: 'main'` to it — the field genuinely is part of the config now.
+
+- [ ] **Step 6a: Fix the downstream config literals**
+
+`variant` is required, so every `GameConfig` object literal in the repo stops compiling. Runtime code all goes through `clampGameConfig`, so only test fixtures are affected — three of them, all in `server/`, all needing `variant: 'main'` added as the first field:
+
+- `server/src/matchHistory/repository.integration.test.ts` (~line 29)
+- `server/src/admin/repository.integration.test.ts` (~line 28)
+- `server/src/matchHistory/recorder.test.ts` (~line 11)
+
+They surface through `npm test --workspace=hidden-server`, not through `npm run build` — the build uses `tsconfig.json`, which excludes tests; the test script typechecks `tsconfig.test.json` first.
+
+> **Environment note:** if `better-auth` modules cannot be resolved, dependencies are not installed — run `npm install` at the repo root. And `npm run build --workspace=hidden-web` requires `VITE_TURNSTILE_SITE_KEY` for production builds only; pass Cloudflare's documented always-passes test key inline for local verification:
+> ```bash
+> VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA npm run build --workspace=hidden-web
+> ```
 
 - [ ] **Step 7: Build the package**
 

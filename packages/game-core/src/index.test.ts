@@ -8,6 +8,7 @@ import {
   clampGameConfig,
   clampOnlineGameConfig,
   decodeGameConfig,
+  defaultConfigForVariant,
   DEFAULT_GAME_CONFIG,
   MAX_TURN_SECONDS,
   MAX_REVEAL_SECONDS,
@@ -473,6 +474,7 @@ describe('topology generation', () => {
 describe('game config', () => {
   it('defaults to the game as it plays today', () => {
     assert.deepEqual(DEFAULT_GAME_CONFIG, {
+      variant: 'main',
       boardSize: 3,
       streak: 3,
       rounds: 6,
@@ -853,5 +855,69 @@ describe('reveal snapshot window', () => {
       DEFAULT_GAME_CONFIG.revealSeconds,
       'an absent value falls back rather than becoming NaN',
     )
+  })
+})
+
+describe('game variant', () => {
+  it('defaults to main when the field is absent', () => {
+    assert.equal(clampGameConfig({}).variant, 'main')
+    assert.equal(DEFAULT_GAME_CONFIG.variant, 'main')
+  })
+
+  it('falls back to main for an unrecognised variant', () => {
+    assert.equal(clampGameConfig({ variant: 'cube' }).variant, 'main')
+    assert.equal(clampGameConfig({ variant: 7 }).variant, 'main')
+    assert.equal(clampGameConfig({ variant: null }).variant, 'main')
+  })
+
+  it('keeps a recognised variant', () => {
+    assert.equal(clampGameConfig({ variant: 'prototype' }).variant, 'prototype')
+  })
+
+  it('forces a 3x3 board under prototype, whatever was asked for', () => {
+    const config = clampGameConfig({ variant: 'prototype', boardSize: 5, streak: 5 })
+    assert.equal(config.boardSize, 3, 'the cube is six 3x3 faces')
+    assert.equal(config.streak, 3, 'the streak rides the board size')
+  })
+
+  it('leaves board size alone under main', () => {
+    const config = clampGameConfig({ variant: 'main', boardSize: 5, streak: 5 })
+    assert.equal(config.boardSize, 5)
+  })
+
+  it('gives each variant its own starting config', () => {
+    assert.deepEqual(defaultConfigForVariant('main'), DEFAULT_GAME_CONFIG)
+
+    const prototype = defaultConfigForVariant('prototype')
+    assert.equal(prototype.variant, 'prototype')
+    assert.equal(prototype.boardSize, 3)
+    assert.equal(
+      prototype.rounds,
+      DEFAULT_GAME_CONFIG.rounds * 2,
+      'double the main default, because a cube has more board to cover',
+    )
+  })
+
+  it('produces a config the clamp accepts unchanged', () => {
+    for (const variant of ['main', 'prototype'] as const) {
+      const config = defaultConfigForVariant(variant)
+      assert.deepEqual(
+        clampGameConfig(config),
+        config,
+        `${variant} round-trips through the clamp`,
+      )
+    }
+  })
+
+  it('does not change how a main match resolves', () => {
+    // The whole "no ENGINE_REVISION bump" argument rests on this.
+    assert.equal(
+      ENGINE_REVISION,
+      2,
+      'a cube topology is a config change, not an engine change',
+    )
+    const state = createGame(baseSpec({ config: clampGameConfig({ variant: 'main' }) }))
+    assert.deepEqual(state.mode.topology.locationIds, [0, 1, 2, 3, 4, 5, 6, 7, 8])
+    assert.equal(state.mode.topology.winningPatterns.length, 8)
   })
 })
