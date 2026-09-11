@@ -1,0 +1,203 @@
+/*
+ * Chrome for the prototype game variant.
+ *
+ * Kept in its own file rather than added to index.css so that when the mode
+ * graduates or dies, its styling is a file deletion instead of an archaeology
+ * exercise. Every colour here is an existing token or a tint derived from one;
+ * nothing new enters the palette.
+ *
+ * The one deliberate break from the system: a selected control is yellow
+ * everywhere else in Hidden, meaning "chosen, and fine". The prototype is not
+ * fine, so selecting it turns the control red. The warning is the state of the
+ * control rather than a badge beside it.
+ */
+
+.mode-select {
+  --mode-accent: var(--hidden-yellow);
+  --mode-accent-fill: #171308;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.mode-select-hazard {
+  --mode-accent: var(--hidden-red);
+  --mode-accent-fill: #1a0b0b;
+}
+
+.mode-select-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Matches .rule-chip's box so the picker reads as part of the same control set. */
+.mode-select-option {
+  position: relative;
+  display: inline-flex;
+  min-height: 3rem;
+  flex: 1 1 9rem;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.85rem;
+  border: 2px solid #3a3a3a;
+  background: #111;
+  color: #c9c9c9;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.mode-select-option:hover {
+  border-color: #565656;
+  background: #1c1c1c;
+  color: #fff;
+}
+
+.mode-select-option-active {
+  border-color: var(--mode-accent);
+  background: var(--mode-accent-fill);
+  color: var(--hidden-white);
+}
+
+/*
+ * Visually hidden rather than display:none. The label is the visible control,
+ * but the input is what a keyboard actually drives, so it has to stay in the
+ * accessibility tree and stay focusable.
+ */
+.mode-select-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* State is carried by fill as well as colour, so it survives without hue. */
+.mode-select-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  background: transparent;
+}
+
+.mode-select-option-active .mode-select-dot {
+  border-color: var(--mode-accent);
+  background: var(--mode-accent);
+}
+
+.mode-select-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.mode-select-label {
+  font-family: var(--font-block);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mode-select-description {
+  color: var(--hidden-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.mode-select-option-active .mode-select-description {
+  color: #b9b9b9;
+}
+
+/*
+ * Belongs to the option, not to the selection: a player has to be able to read
+ * what they are about to pick. Square and flat -- a rotated sticker would be
+ * decoration, and the red is already doing the work.
+ */
+.mode-select-tag {
+  margin-left: auto;
+  padding: 0.2rem 0.4rem;
+  background: var(--hidden-red);
+  color: #fff;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  line-height: 1.25;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.mode-select-warning {
+  margin: 0;
+  border-left: 3px solid var(--hidden-red);
+  padding-left: 0.6rem;
+  color: #e0a3a3;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+
+/* Focus stays yellow throughout: it reports where you are, not what mode does. */
+.mode-select-option:focus-within {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+/* A running match cannot change variant, so this never animates in mid-play. */
+.prototype-banner {
+  margin: 0.35rem 0 0;
+  border: 2px solid var(--hidden-red);
+  background: #1a0b0b;
+  color: #e0a3a3;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+  padding: 0.3rem 0.6rem;
+  text-transform: uppercase;
+}
+
+.results-tbd {
+  color: var(--hidden-muted);
+}
+
+.results-note {
+  color: #e0a3a3;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/*
+ * Cell counts, not a score. Muted and labelled so it cannot be mistaken for a
+ * result the mode is not yet able to declare.
+ */
+.results-debug {
+  color: var(--hidden-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.match-rules-variant {
+  border: 1px solid var(--hidden-red);
+  color: #e0a3a3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-select-option {
+    transition: none;
+  }
+}
