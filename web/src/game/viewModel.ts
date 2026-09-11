@@ -1,3 +1,4 @@
+import { defaultConfigForVariant, type GameConfig } from '@hidden/game-core'
 import type { CellState, GameState } from './types'
 import type { UserEntry } from './protocol'
 
@@ -133,4 +134,36 @@ export function shouldPromptMoveChoice(match: GameState | null, screen: Screen) 
     !match.shieldSelectionMode &&
     !match.selectedSymbol
   )
+}
+
+/**
+ * What Quick Match proposes to the server.
+ *
+ * The rules stay admin-only, because Quick Match binds a stranger to whatever
+ * the proposer asked for. The variant is exempt: it is not a rule, it is which
+ * queue you are standing in, and a player who picked the prototype and landed
+ * in a main match would have no way to tell what went wrong.
+ */
+export function quickMatchConfig(config: GameConfig, isAdmin: boolean): GameConfig {
+  return isAdmin ? config : defaultConfigForVariant(config.variant)
+}
+
+export function isPrototypeMatch(match: GameState | null) {
+  return match?.config.variant === 'prototype'
+}
+
+/**
+ * The result headline.
+ *
+ * The prototype has no win condition, so it reports none. The engine still
+ * counts cells and that count is shown beneath as debug output, but calling one
+ * player the winner of a game whose rules are undecided would be a claim the
+ * mode cannot back.
+ */
+export function getResultHeadline(match: GameState) {
+  if (isPrototypeMatch(match)) return 'TBD'
+  if (!match.result) return 'GAME OVER'
+  if (match.result.outcome === 'win') return 'YOU WIN!'
+  if (match.result.outcome === 'loss') return 'YOU LOSE!'
+  return "IT'S A TIE!"
 }

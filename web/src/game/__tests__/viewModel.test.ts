@@ -1,12 +1,19 @@
-import { DEFAULT_GAME_CONFIG } from '@hidden/game-core'
+import {
+  clampGameConfig,
+  defaultConfigForVariant,
+  DEFAULT_GAME_CONFIG,
+} from '@hidden/game-core'
 import { describe, expect, it } from 'vitest'
 import {
   createGuestName,
   getBackTarget,
   getOpponentName,
+  getResultHeadline,
   getScoreCountLabels,
   getScreenLabel,
   getTurnStatusText,
+  isPrototypeMatch,
+  quickMatchConfig,
   resolvePlayerName,
   shouldPromptMoveChoice,
   isRevealSnapshotOpen,
@@ -171,5 +178,57 @@ describe('view model helpers', () => {
     }))
 
     expect(getScoreCountLabels(cells)).toEqual({ 1: 1, 4: 2, 8: 3 })
+  })
+})
+
+describe('quickMatchConfig', () => {
+  it('sends an admin their full config', () => {
+    const config = clampGameConfig({ ...DEFAULT_GAME_CONFIG, boardSize: 5, streak: 5 })
+    expect(quickMatchConfig(config, true)).toEqual(config)
+  })
+
+  it('sends a non-admin only their variant, on default rules', () => {
+    const config = clampGameConfig({
+      ...DEFAULT_GAME_CONFIG,
+      variant: 'prototype',
+      turnSeconds: 45,
+    })
+    const sent = quickMatchConfig(config, false)
+
+    // The variant decides which queue you join, so it travels. The rest would
+    // bind a stranger to rules they never saw, so it does not.
+    expect(sent.variant).toBe('prototype')
+    expect(sent.turnSeconds).toBe(DEFAULT_GAME_CONFIG.turnSeconds)
+    expect(sent).toEqual(defaultConfigForVariant('prototype'))
+  })
+
+  it('is the plain default for a non-admin on main', () => {
+    expect(quickMatchConfig(DEFAULT_GAME_CONFIG, false)).toEqual(DEFAULT_GAME_CONFIG)
+  })
+})
+
+describe('prototype result presentation', () => {
+  const finished = (variant: 'main' | 'prototype', outcome: 'win' | 'loss' | 'tie') =>
+    makeMatch({
+      config: { ...defaultConfigForVariant(variant), isOnline: false, hasAI: true },
+      phase: 'results',
+      result: { playerScore: 5, opponentScore: 4, outcome },
+    })
+
+  it('declares an outcome for main', () => {
+    expect(getResultHeadline(finished('main', 'win'))).toBe('YOU WIN!')
+    expect(getResultHeadline(finished('main', 'loss'))).toBe('YOU LOSE!')
+    expect(getResultHeadline(finished('main', 'tie'))).toBe("IT'S A TIE!")
+  })
+
+  it('declares nothing for the prototype, whatever the scores say', () => {
+    expect(getResultHeadline(finished('prototype', 'win'))).toBe('TBD')
+    expect(getResultHeadline(finished('prototype', 'loss'))).toBe('TBD')
+  })
+
+  it('identifies a prototype match', () => {
+    expect(isPrototypeMatch(finished('prototype', 'win'))).toBe(true)
+    expect(isPrototypeMatch(finished('main', 'win'))).toBe(false)
+    expect(isPrototypeMatch(null)).toBe(false)
   })
 })
