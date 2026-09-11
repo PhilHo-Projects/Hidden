@@ -2,7 +2,8 @@ import { clampGameConfig, DEFAULT_GAME_CONFIG, MIN_TURN_SECONDS, ONLINE_MIN_TURN
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { AdvancedSettings } from '../PregameUi'
+import { AdvancedSettings, MatchRulesSummary } from '../PregameUi'
+import { VARIANT_LABELS } from '../../game/constants'
 import {
   ONLINE_RULE_SECTIONS,
   RULE_SECTIONS,
@@ -229,5 +230,21 @@ describe('board size under the prototype variant', () => {
     expect(options.find((option) => option.value === 5)?.disabled).toBe(true)
     // Still rendered, not removed: the constraint stays visible.
     expect(options).toHaveLength(3)
+  })
+})
+
+describe('MatchRulesSummary variant chip', () => {
+  const summary = (config: GameConfig) =>
+    renderToStaticMarkup(createElement(MatchRulesSummary, { config }))
+
+  it('says nothing about the variant for main', () => {
+    // The default game needs no badge; a badge on everything is not a badge.
+    expect(summary(DEFAULT_GAME_CONFIG)).not.toContain(VARIANT_LABELS.prototype)
+    expect(summary(DEFAULT_GAME_CONFIG)).not.toContain(VARIANT_LABELS.main)
+  })
+
+  it('badges a prototype listing', () => {
+    const config = clampGameConfig({ ...DEFAULT_GAME_CONFIG, variant: 'prototype' })
+    expect(summary(config)).toContain(VARIANT_LABELS.prototype)
   })
 })

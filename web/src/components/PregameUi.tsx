@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes } from 'react'
 import type { GameConfig } from '@hidden/game-core'
 import type { AuthUser } from '../auth/authClient'
+import { VARIANT_LABELS } from '../game/constants'
 import { RuleFlag, RuleSegments, RuleStepper } from './RuleControls'
 import {
   RULE_SECTIONS,
@@ -192,6 +193,11 @@ export function OnlineAdminSettings({
 export function MatchRulesSummary({ config }: { config: GameConfig }) {
   return (
     <div className="match-rules-summary" aria-label="Match rules">
+      {/* Only the non-default variant is badged. Marking every listing would
+        * make the badge furniture rather than a warning. */}
+      {config.variant !== 'main' ? (
+        <span className="match-rules-variant">{VARIANT_LABELS[config.variant]}</span>
+      ) : null}
       <span>
         {config.boardSize}x{config.boardSize}
       </span>
