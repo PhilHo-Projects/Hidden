@@ -91,6 +91,19 @@ onto adjacent faces.
 
 - Design: [`superpowers/specs/2026-09-11-cube-prototype-mode-design.md`](superpowers/specs/2026-09-11-cube-prototype-mode-design.md)
 - Phase 0 plan: [`superpowers/plans/2026-09-11-cube-prototype-phase-0.md`](superpowers/plans/2026-09-11-cube-prototype-phase-0.md)
+- Phase 1 plan: [`superpowers/plans/2026-09-12-cube-prototype-phase-1.md`](superpowers/plans/2026-09-12-cube-prototype-phase-1.md)
+
+The cube is open and navigable. All six faces are playable from turn 1, the
+board shows one face at a time, and four brace arrows plus arrow keys, WASD, and
+an unfolded cross map move between them. A padlock switches navigation off so
+the locked treatment can be looked at before Phase 2 makes it a rule.
+
+**The padlock is a camera control, not a rule.** Which face you are looking at
+and whether you can leave it are per-player client state: they never enter
+`GameState`, never cross the wire, and gate no placement. Two players can stand
+on different faces with different padlock settings in the same match, which is
+verified by playing one. Phase 2 promotes lock state from presentation to rule
+and deletes the debug button; it has nothing to dismantle first.
 
 It is an experiment with **no win condition** — the result screen says `TBD` —
 and it is labelled UNDER DEVELOPMENT wherever it is reachable. It deploys to
@@ -112,9 +125,21 @@ and cheap to get wrong by accident:
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Mode plumbing: config variant, mode selection on the online and practice screens, matchmaking segregation, history gate, `TBD` result, UNDER DEVELOPMENT labelling. Still a single 3x3 face. | Done 2026-09-11 |
-| 1 | The open cube: split `game-core` into modules, 54-location topology, face adjacency, unfolded cross map, arrow/WASD navigation, explicit `BoardGrid` layout, 12 rounds. All six faces open from turn 1; the locked arrow treatment is previewable on a client-side debug toggle that changes presentation only. | Not started |
+| 1 | The open cube: split `game-core` into modules, 54-location topology, face adjacency, unfolded cross map, arrow/WASD navigation, explicit `BoardGrid` layout, 12 rounds. All six faces open from turn 1; the locked treatment is previewable on a client-side padlock. | Done 2026-09-12 |
 | 2 | The expansion mechanic: start locked to `home`, matching corner pair on an edge unlocks the face across it, shared and permanent. Deletes the Phase 1 debug button. | Not started |
 | 3 | Fork to a race/cooldown or refined turn-based model. Decided by playing 1 and 2, not in advance. | Not started |
+
+Three things Phase 1 left open, none of them blocking Phase 2:
+
+- **Reveal now shows one face out of six.** Fifty-four cells is not memorisable
+  in a second and a half, and the snapshot card is sized for one board, so the
+  reveal shows whichever face the revealing player is standing on. That makes
+  the power-up much weaker in this variant. Decide in Phase 2 or 3 whether it
+  should show the whole net, the face the *opponent* is on, or stay as it is.
+- **Navigation is free, so expansion is free.** Fine for "does it feel like
+  anything", certainly wrong for balance.
+- **12 rounds across 54 cells is a starting guess.** If a match runs long, lower
+  `turnSeconds` for the variant rather than raising `rounds`.
 
 Cooldown / real-time play is deliberately **not** in any of these phases. It
 deletes `activeSeat` and most of the turn machinery in both the engine and the
@@ -202,10 +227,13 @@ opaque payload. Never reuse another project's bucket or credentials.
 Hex, Tetris-shaped, and Catan-like topologies. The config shape leaves room for
 them: `createTopology` is the only thing that assumes a square board.
 
-The cube prototype under "Active work" is the first claim on this. It is still a
-square board per face, so it does not settle whether irregular topologies are
-worth building — the reading of `createTopology` as the single seam held up
-exactly as this section predicted.
+The cube prototype under "Active work" is the first claim on this, and it
+settled the seam question: building a 54-location board took a sibling builder
+next to `createTopology` plus one line in `buildMode`, and no reducer function
+changed. It is still a square board per face, so it does not settle whether
+*irregular* topologies are worth building. `createTopology` and its cube sibling
+now live in `packages/game-core/src/topology.ts`, which is the only module in
+the package that knows a board has a shape.
 
 ## Codebase debt
 
@@ -299,6 +327,13 @@ Both layers have to be handled: `hidden:reoptimise-linked-core` drops the dep
 cache and restarts when `packages/game-core/dist/index.js` is rewritten, and
 `hidden:revalidate-optimized-deps` downgrades the header so the browser cannot
 serve a stale copy of the bundle Vite just replaced.
+
+Both plugins only fire for a rebuild that happens **while the dev server is
+running**. Rebuild `game-core` first and *then* start `npm run dev` — which is
+what `npm test` in `web/` does for you via `pretest` — and neither ever sees a
+change, so Vite reuses yesterday's optimized bundle. The fix is
+`rm -rf web/node_modules/.vite` before starting the dev server; there is no
+warning, and the failure looks like the one below.
 
 Fixing only one of the two looks like it works and does not. **The symptom is a
 fresh app running a stale engine**: source files and `index.html` are never

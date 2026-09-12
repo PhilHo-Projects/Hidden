@@ -4,6 +4,51 @@ Newest first. One entry per stretch of work. Keep entries short — the git log
 holds the detail, and this file exists so nobody has to read a 1,600-line plan
 to learn what happened.
 
+## 2026-09-12 — Cube prototype mode, phase 1
+
+The cube is open. Six 3x3 faces, 54 locations, all playable from turn 1. The
+board shows one face at a time; four brace arrows, arrow keys, WASD, and an
+unfolded cross map move between them, and a padlock switches navigation off so
+the locked treatment can be looked at before Phase 2 makes it a rule.
+
+- `packages/game-core/src/index.ts` split into `config.ts`, `topology.ts`, and
+  the reducer, as its own commit before any cube logic. The public export
+  surface is unchanged and now pinned by a test that lists it — which earned its
+  keep immediately by failing the moment the cube exports were added.
+- `ENGINE_REVISION` stays at 2. `locationId = faceIndex * 9 + cellIndex` with
+  `home` at index 0, and patterns emitted face by face, so a `main` match is
+  byte-identical. Adjacency is a static 24-entry table in each face's local
+  frame; the net draws only 5 of the cube's 12 edges, so navigation reads the
+  table rather than the picture.
+- Building a 54-location board took a sibling builder next to `createTopology`
+  plus one line in `buildMode`. No reducer function changed.
+- Which face you are looking at and whether you can leave it are camera state:
+  client-only, never in `GameState`, never on the wire. Verified by playing one
+  match in two tabs standing on different faces with different padlock settings.
+
+Three things worth knowing next time.
+
+**`node --test` will not resolve an extensionless relative import** in this
+package — `./config` fails with `ERR_MODULE_NOT_FOUND`. Sources import each
+other as `./config.ts`, which needs `allowImportingTsExtensions` plus
+`rewriteRelativeImportExtensions` so the emitted CommonJS still says
+`require("./config.js")`.
+
+**`useCellInk` treats a prop change as ink arriving and a mount as ink already
+down**, so the played board is keyed on the active face. Without the key,
+walking onto a face with pieces on it replays every fill at once.
+
+**The battle stage is `minmax(0, 1fr) auto`.** The controls column keeps its
+content height and the board is paid whatever is left, so anything added to that
+column comes straight out of the board — the map went there first and shrank the
+board to nothing. It floats in the arena beside the board instead, on the anchor
+`.opponent-peek` already uses. The arrows had the mirror-image problem: the arena
+is far wider than the board, so grid tracks pinned them to the screen edges. Both
+are anchored to `--board-side` now, and `useBoardSideVar`'s selector had to lose
+its direct-child chain because the arrow frame sits in it. The peek and the
+reveal snapshot are siblings of the played board rather than descendants, which
+is what made loosening it safe.
+
 ## 2026-09-12 — Cube prototype mode, phase 0
 
 A second game variant is selectable and playable end to end. It is still a
