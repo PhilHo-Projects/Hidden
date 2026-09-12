@@ -588,3 +588,45 @@
     display: none;
   }
 }
+
+/*
+ * The finished cube, unfolded. Same cross as the in-match map, because a second
+ * arrangement would be a second thing to learn for no gain.
+ */
+.cube-net {
+  --net-face: clamp(3.4rem, 17vw, 5.25rem);
+  display: grid;
+  grid-template-columns: repeat(3, var(--net-face));
+  gap: 0.45rem;
+  justify-content: center;
+}
+
+.cube-net-blank {
+  display: block;
+}
+
+/* The face name is the only label a net tile needs, and six brush-set player
+ * names stacked down a column would be six copies of the same word. */
+.cube-net .hidden-board {
+  gap: 0.2rem;
+}
+
+.cube-net .hidden-board-header {
+  min-height: 0;
+}
+
+.cube-net .hidden-board-header h3 {
+  color: var(--hidden-muted);
+  font-family: var(--font-block);
+  font-size: 0.45rem;
+  letter-spacing: 0.1em;
+  text-shadow: none;
+}
+
+/* Two nets do not fit side by side on a phone, and being able to read the audit
+ * is worth more than being able to compare the two at a glance. */
+@media (max-width: 900px) {
+  .final-boards-net {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

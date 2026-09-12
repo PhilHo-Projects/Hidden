@@ -13,6 +13,7 @@ import { AccountForm } from './components/AccountForm'
 import { AdminPanel } from './components/AdminPanel'
 import { BoardGrid } from './components/BoardGrid'
 import { CubeMap } from './components/CubeMap'
+import { CubeNet } from './components/CubeNet'
 import { FaceArrows } from './components/FaceArrows'
 import { RevealSnapshot } from './components/RevealSnapshot'
 import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
@@ -965,24 +966,42 @@ function App({ initialAuthIntent = null }: AppProps) {
           </div>
           {/* The final boards are a score audit. Desecration constrains the next
             * move, and there is no next move, so it would only be noise here. */}
-          <div className="final-boards">
-            <BoardGrid
-              title=""
-              subtitle={username.trim() || 'Player'}
-              grid={match.playerGrid}
-              columns={match.config.boardSize}
-              showDesecration={false}
-              destructionEffects={playerDestructionEffects}
-              scoreCountLabels={playerScoreCountLabels}
-            />
-            <BoardGrid
-              title=""
-              subtitle={opponentName}
-              grid={match.opponentGrid}
-              columns={match.config.boardSize}
-              showDesecration={false}
-              scoreCountLabels={opponentScoreCountLabels}
-            />
+          <div className={`final-boards ${isCubeMatch ? 'final-boards-net' : ''}`}>
+            {isCubeMatch ? (
+              <>
+                <CubeNet
+                  subtitle={username.trim() || 'Player'}
+                  grid={match.playerGrid}
+                  scoreCountLabels={playerScoreCountLabels}
+                  destructionEffects={playerDestructionEffects}
+                />
+                <CubeNet
+                  subtitle={opponentName}
+                  grid={match.opponentGrid}
+                  scoreCountLabels={opponentScoreCountLabels}
+                />
+              </>
+            ) : (
+              <>
+                <BoardGrid
+                  title=""
+                  subtitle={username.trim() || 'Player'}
+                  grid={match.playerGrid}
+                  columns={match.config.boardSize}
+                  showDesecration={false}
+                  destructionEffects={playerDestructionEffects}
+                  scoreCountLabels={playerScoreCountLabels}
+                />
+                <BoardGrid
+                  title=""
+                  subtitle={opponentName}
+                  grid={match.opponentGrid}
+                  columns={match.config.boardSize}
+                  showDesecration={false}
+                  scoreCountLabels={opponentScoreCountLabels}
+                />
+              </>
+            )}
           </div>
         </section>
       ) : null}
