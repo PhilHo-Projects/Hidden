@@ -320,3 +320,163 @@
     translate: none;
   }
 }
+
+/*
+ * The unfolded cube, sitting above the power-up tray.
+ *
+ * Flat on purpose. The braces already carry this mode's one visual idea, and a
+ * second hand-cut surface next to the board would compete with the board.
+ */
+.cube-map {
+  --map-tile: clamp(2.2rem, 8vw, 2.9rem);
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.cube-map-header {
+  display: flex;
+  width: calc(var(--map-tile) * 3 + 0.6rem);
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cube-map-header p {
+  margin: 0;
+  color: var(--hidden-muted);
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+}
+
+.cube-map-grid {
+  display: grid;
+  grid-template-columns: repeat(3, var(--map-tile));
+  gap: 0.3rem;
+}
+
+.cube-map-blank {
+  display: block;
+}
+
+.cube-map-face {
+  display: grid;
+  aspect-ratio: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 0.1rem;
+  padding: 0;
+  border: 1px solid #3a3a3a;
+  background: #0d0d0d;
+  color: #8a8a8a;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.cube-map-face:hover:not(:disabled) {
+  border-color: #565656;
+  background: #1c1c1c;
+  color: var(--hidden-white);
+}
+
+.cube-map-face:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+/* Yellow, not red. Where you are standing is a selection, and selection is
+ * yellow everywhere in Hidden; the red in this mode means "not finished". */
+.cube-map-face-current {
+  border-color: var(--hidden-yellow);
+  background: #171308;
+  color: var(--hidden-white);
+}
+
+.cube-map-label {
+  font-size: 0.45rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.cube-map-count {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.cube-map-locked .cube-map-face {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.cube-map-note {
+  margin: 0;
+  max-width: calc(var(--map-tile) * 3 + 0.6rem);
+  color: var(--hidden-muted);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/*
+ * The one piece of colour in the whole frame. It has to survive without hue as
+ * well: the body fills when locked, and the word says which it is.
+ */
+.padlock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid currentColor;
+  background: none;
+  color: var(--hidden-green);
+  cursor: pointer;
+  font-family: var(--font-block);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.padlock svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.padlock-shackle,
+.padlock-body {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.padlock-locked {
+  color: var(--hidden-red);
+}
+
+.padlock-locked .padlock-body {
+  fill: currentColor;
+}
+
+.padlock:hover {
+  background: #1c1c1c;
+}
+
+.padlock:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cube-map-face,
+  .padlock {
+    transition: none;
+  }
+}
