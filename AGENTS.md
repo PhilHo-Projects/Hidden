@@ -77,5 +77,9 @@ throwaway snippet meant to be looked at once.
   gameplay.
 - Add or update tests before changing runtime behavior.
 - Verify both packages and the production container before deployment.
-- Do not add automated deployment workflows. Production delivery is managed by
-  the hosting platform's repository webhook.
+- Do not add automated deployment workflows. Merging to `main` does **not**
+  deploy: the repository's push webhook answers 200 but queues nothing, because
+  the hosting platform's application has no bound Git source. Production
+  delivery is an explicit manual release. Never infer that a deploy happened
+  from that 200 or from `/healthz` — compare the served `/assets/index-*.js`
+  hash before and after, and expect ~30-60s of 503 while the container swaps.
