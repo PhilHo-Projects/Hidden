@@ -930,6 +930,10 @@ describe('public surface', () => {
     // name here is a deliberate act: everything in this list is something a
     // stored match, the server, or the client may already depend on.
     assert.deepEqual(Object.keys(surface).sort(), [
+      'CUBE_ADJACENCY',
+      'CUBE_FACES',
+      'CUBE_FACE_CELLS',
+      'CUBE_LOCATION_COUNT',
       'DEFAULT_GAME_CONFIG',
       'ENGINE_ID',
       'ENGINE_REVISION',
@@ -943,12 +947,47 @@ describe('public surface', () => {
       'PROTOTYPE_ROUNDS',
       'applyCommand',
       'applyTimeout',
+      'cellOf',
       'clampGameConfig',
       'clampOnlineGameConfig',
+      'createCubeTopology',
       'createGame',
       'createTopology',
       'decodeGameConfig',
       'defaultConfigForVariant',
+      'faceIndex',
+      'faceOf',
+      'firstLocationOfFace',
+      'neighbourFace',
+      'topologyForConfig',
     ])
+  })
+})
+
+describe('a prototype match runs on a cube', () => {
+  it('gives each seat 54 locations', () => {
+    const state = createGame(baseSpec({ config: defaultConfigForVariant('prototype') }))
+
+    assert.equal(state.boards[0].locations.length, 54)
+    assert.equal(state.boards[1].locations.length, 54)
+    assert.equal(state.boards[0].locations[53].locationId, 53)
+  })
+
+  it('accepts a placement on the far face', () => {
+    const state = createGame(baseSpec({ config: defaultConfigForVariant('prototype') }))
+    const result = applyCommand(state, state.activeSeat, {
+      type: 'place',
+      locationId: 53,
+      symbol: 'rock',
+    })
+
+    assert.equal(result.accepted, true)
+    assert.equal(result.state.boards[state.activeSeat].locations[53].symbol, 'rock')
+  })
+
+  it('leaves a main match on nine', () => {
+    const state = createGame(baseSpec())
+
+    assert.equal(state.boards[0].locations.length, 9)
   })
 })

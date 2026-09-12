@@ -13,7 +13,7 @@ import {
   type PowerupKey,
   type Seat,
 } from './config.ts'
-import { createTopology, type ClassicTopology } from './topology.ts'
+import { topologyForConfig, type ClassicTopology } from './topology.ts'
 
 // Set on a cell when its piece is destroyed, and decremented at the start of
 // each of the owner's turns. Two rather than one because the destruction lands
@@ -161,7 +161,9 @@ function buildMode(config: GameConfig): ClassicMode {
     id: ENGINE_ID,
     revision: ENGINE_REVISION,
     randomAlgorithm: 'mulberry32-v1',
-    topology: createTopology(config.boardSize, config.streak),
+    // The only line in the reducer that knows a board has a shape. Everything
+    // below here is opaque IDs and `winningPatterns`, both of which are data.
+    topology: topologyForConfig(config),
     defeats: { rock: 'scissors', paper: 'rock', scissors: 'paper' },
     powerupBySymbol: config.powerupBySymbol,
   }) as ClassicMode
@@ -658,5 +660,18 @@ export type {
   PowerupKey,
   Seat,
 } from './config.ts'
-export { createTopology } from './topology.ts'
-export type { ClassicTopology } from './topology.ts'
+export {
+  CUBE_ADJACENCY,
+  CUBE_FACES,
+  CUBE_FACE_CELLS,
+  CUBE_LOCATION_COUNT,
+  cellOf,
+  createCubeTopology,
+  createTopology,
+  faceIndex,
+  faceOf,
+  firstLocationOfFace,
+  neighbourFace,
+  topologyForConfig,
+} from './topology.ts'
+export type { ClassicTopology, CubeFace, FaceDirection, FaceNeighbours } from './topology.ts'

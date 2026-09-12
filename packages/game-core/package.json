@@ -10,6 +10,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json",
-    "test": "npm run typecheck && node --no-warnings --test src/index.test.ts"
+    "test": "npm run typecheck && node --no-warnings --test src/index.test.ts src/topology.test.ts"
   }
 }
