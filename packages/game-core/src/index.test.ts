@@ -921,3 +921,34 @@ describe('game variant', () => {
     assert.equal(state.mode.topology.winningPatterns.length, 8)
   })
 })
+
+describe('public surface', () => {
+  it('exports exactly the documented runtime names', async () => {
+    const surface = await import('./index.ts')
+
+    // Sorted so the list reads as a set rather than as a file order. Adding a
+    // name here is a deliberate act: everything in this list is something a
+    // stored match, the server, or the client may already depend on.
+    assert.deepEqual(Object.keys(surface).sort(), [
+      'DEFAULT_GAME_CONFIG',
+      'ENGINE_ID',
+      'ENGINE_REVISION',
+      'GAME_CORE_VERSION',
+      'MAX_REVEAL_SECONDS',
+      'MAX_TURN_SECONDS',
+      'MIN_REVEAL_SECONDS',
+      'MIN_TURN_SECONDS',
+      'ONLINE_MIN_TURN_SECONDS',
+      'PROTOTYPE_BOARD_SIZE',
+      'PROTOTYPE_ROUNDS',
+      'applyCommand',
+      'applyTimeout',
+      'clampGameConfig',
+      'clampOnlineGameConfig',
+      'createGame',
+      'createTopology',
+      'decodeGameConfig',
+      'defaultConfigForVariant',
+    ])
+  })
+})
