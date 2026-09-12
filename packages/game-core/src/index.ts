@@ -23,6 +23,27 @@ const DESECRATION_TURNS = 2
 
 export type BoardSize = 3 | 4 | 5
 
+/**
+ * Which game this config describes. `main` is the shipped 3x3 game; `prototype`
+ * is the cube experiment, which is deliberately incomplete and declares no
+ * winner. Both names are placeholders.
+ *
+ * A union rather than a subclass hierarchy on purpose: `GameState` crosses
+ * MessagePack and is cloned on every command, so behaviour has to be a pure
+ * function of data rather than a method on it. The compiler's exhaustiveness
+ * check on a `switch` is also what stops a new variant from silently
+ * inheriting `main`'s behaviour.
+ */
+export type GameVariant = 'main' | 'prototype'
+
+const GAME_VARIANTS: readonly GameVariant[] = ['main', 'prototype']
+
+/** The cube is six 3x3 faces, so a prototype face is never any other size. */
+export const PROTOTYPE_BOARD_SIZE = 3 as const
+
+/** Double `main`'s default, because a cube match has more board to cover. */
+export const PROTOTYPE_ROUNDS = 12 as const
+
 export interface EngineRef {
   readonly id: typeof ENGINE_ID
   readonly revision: number
@@ -77,6 +98,7 @@ export function createTopology(
 }
 
 export interface GameConfig {
+  readonly variant: GameVariant
   readonly boardSize: BoardSize
   readonly streak: number
   readonly rounds: number
@@ -93,6 +115,7 @@ export interface GameConfig {
 }
 
 export const DEFAULT_GAME_CONFIG: Readonly<GameConfig> = deepFreeze({
+  variant: 'main',
   boardSize: 3,
   streak: 3,
   rounds: 6,
@@ -155,16 +178,29 @@ export function clampGameConfig(value: unknown): GameConfig {
       ? (value as Record<string, unknown>)
       : {}
 
+  const variant: GameVariant = GAME_VARIANTS.includes(
+    candidate.variant as GameVariant,
+  )
+    ? (candidate.variant as GameVariant)
+    : DEFAULT_GAME_CONFIG.variant
+
   const requestedSize = clampInteger(
     candidate.boardSize,
     3,
     5,
     DEFAULT_GAME_CONFIG.boardSize,
   )
+  /*
+   * A prototype face is always 3x3. This is a constraint rather than a default:
+   * a host who asks for 5x5 in this variant is asking for something that does
+   * not exist, so it is corrected rather than honoured.
+   */
   const boardSize = (
-    BOARD_SIZES.includes(requestedSize as BoardSize)
-      ? requestedSize
-      : DEFAULT_GAME_CONFIG.boardSize
+    variant === 'prototype'
+      ? PROTOTYPE_BOARD_SIZE
+      : BOARD_SIZES.includes(requestedSize as BoardSize)
+        ? requestedSize
+        : DEFAULT_GAME_CONFIG.boardSize
   ) as BoardSize
 
   const powerupsInput =
@@ -192,6 +228,7 @@ export function clampGameConfig(value: unknown): GameConfig {
   }
 
   return {
+    variant,
     boardSize,
     /*
      * Defaults to a full line for the board. `streak` is no longer a rule the
@@ -217,6 +254,33 @@ export function clampGameConfig(value: unknown): GameConfig {
     ),
     powerups,
     powerupBySymbol,
+  }
+}
+
+/**
+ * The starting rules for a variant, used when the player switches modes.
+ *
+ * Separate from `clampGameConfig` deliberately. The clamp is tolerant and
+ * cannot tell "the host chose 6 rounds" from "rounds were missing", so making
+ * it apply per-variant defaults would let it silently overwrite a deliberate
+ * choice. Defaults belong to the moment a mode is picked; the clamp only ever
+ * validates.
+ *
+ * The `switch` returns in every arm and has no `default`, which is what makes
+ * adding a third variant a compile error here until it is handled.
+ */
+export function defaultConfigForVariant(variant: GameVariant): GameConfig {
+  switch (variant) {
+    case 'main':
+      return DEFAULT_GAME_CONFIG
+    case 'prototype':
+      return clampGameConfig({
+        ...DEFAULT_GAME_CONFIG,
+        variant,
+        boardSize: PROTOTYPE_BOARD_SIZE,
+        streak: PROTOTYPE_BOARD_SIZE,
+        rounds: PROTOTYPE_ROUNDS,
+      })
   }
 }
 

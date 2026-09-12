@@ -1099,6 +1099,51 @@ describe.sequential('Hidden server', () => {
     second.close()
   })
 
+  it('honours a guest variant while still ignoring their other rules', async () => {
+    const { port } = await startServer()
+    // turnSeconds is deliberately non-default: it must be discarded while the
+    // variant survives. A guest may choose which game to queue for; they may
+    // not bind a stranger to rules that stranger never saw.
+    const prototypeProposal = {
+      ...DEFAULT_GAME_CONFIG,
+      variant: 'prototype',
+      turnSeconds: 45,
+    }
+
+    const prototypeGuest = await queueProbe(port, {
+      guestUsername: 'Guest#0001',
+      proposedConfig: prototypeProposal,
+    })
+    const mainGuest = await queueProbe(port, { guestUsername: 'Guest#0002' })
+
+    // Different queues, so neither finds a partner in the other.
+    await expect(
+      mainGuest.waitFor(PacketType.MATCH_FOUND, 300),
+    ).rejects.toThrow()
+
+    // A second prototype seeker pairs with the one already waiting, reaching
+    // past the main seeker who arrived before them.
+    const secondPrototypeGuest = await queueProbe(port, {
+      guestUsername: 'Guest#0003',
+      proposedConfig: prototypeProposal,
+    })
+    const [firstMatch, secondMatch] = await Promise.all([
+      prototypeGuest.waitFor(PacketType.MATCH_FOUND),
+      secondPrototypeGuest.waitFor(PacketType.MATCH_FOUND),
+    ])
+
+    expect(firstMatch[2]).toBe(secondMatch[2])
+    expect(firstMatch[3]).toEqual({
+      ...DEFAULT_GAME_CONFIG,
+      variant: 'prototype',
+      rounds: 12,
+    })
+
+    prototypeGuest.close()
+    mainGuest.close()
+    secondPrototypeGuest.close()
+  })
+
   it('clears an admin proposal when matchmaking is cancelled', async () => {
     const auth = authForSessions(
       new Map([

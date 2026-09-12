@@ -1,4 +1,4 @@
-import type { ClassicSymbol } from '@hidden/game-core'
+import type { ClassicSymbol, GameVariant } from '@hidden/game-core'
 
 export const COLOR_GREEN = '#6EDC3C' as const
 export const COLOR_BLUE = '#4C6EF5' as const
@@ -20,3 +20,17 @@ export const POWERUP_LABELS = {
   reveal: 'Reveal',
   extraTurn: 'Extra Turn',
 } as const
+
+/** Placeholders. Neither mode has earned a real name yet. */
+export const VARIANT_LABELS: Readonly<Record<GameVariant, string>> = {
+  main: 'MAIN',
+  prototype: 'PROTOTYPE',
+}
+
+export const VARIANT_DESCRIPTIONS: Readonly<Record<GameVariant, string>> = {
+  main: 'The 3x3 game.',
+  prototype: 'The cube experiment.',
+}
+
+export const PROTOTYPE_WARNING =
+  'Incomplete. Expect bugs, and no winner is declared at the end.'

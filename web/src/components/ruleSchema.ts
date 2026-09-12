@@ -2,6 +2,7 @@ import {
   MAX_TURN_SECONDS,
   MIN_TURN_SECONDS,
   ONLINE_MIN_TURN_SECONDS,
+  PROTOTYPE_BOARD_SIZE,
   type BoardSize,
   type GameConfig,
   type PowerupKey,
@@ -74,8 +75,16 @@ const boardSize: ChoiceField = {
   kind: 'choice',
   id: 'boardSize',
   label: 'Board',
-  options: () =>
-    BOARD_SIZES.map((size) => ({ value: size, label: `${size} × ${size}` })),
+  // The cube is six 3x3 faces, so the prototype has no other size to offer.
+  // Disabled rather than removed, so the rule stays visible instead of implied.
+  options: (config) =>
+    BOARD_SIZES.map((size) => ({
+      value: size,
+      label: `${size} × ${size}`,
+      ...(config.variant === 'prototype' && size !== PROTOTYPE_BOARD_SIZE
+        ? { disabled: true }
+        : {}),
+    })),
   value: (config) => config.boardSize,
   // The line length is no longer a rule the player sets, so it rides the board:
   // a full row, column, or diagonal, whatever the board size.

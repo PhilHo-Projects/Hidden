@@ -9,6 +9,7 @@ const record: MatchHistoryRecordV1 = {
   completedAtMs: Date.parse('2030-01-01T00:00:00.000Z'),
   engine: { id: 'classic', revision: 2 },
   config: {
+    variant: 'main',
     boardSize: 3,
     streak: 3,
     rounds: 1,

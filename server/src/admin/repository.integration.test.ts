@@ -26,6 +26,7 @@ function record(
     completedAtMs: Date.parse(completedAt),
     engine: { id: 'classic', revision: 1 },
     config: {
+      variant: 'main',
       boardSize: 3,
       streak: 3,
       rounds: 2,

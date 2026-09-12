@@ -2,7 +2,8 @@ import { clampGameConfig, DEFAULT_GAME_CONFIG, MIN_TURN_SECONDS, ONLINE_MIN_TURN
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { AdvancedSettings } from '../PregameUi'
+import { AdvancedSettings, MatchRulesSummary } from '../PregameUi'
+import { VARIANT_LABELS } from '../../game/constants'
 import {
   ONLINE_RULE_SECTIONS,
   RULE_SECTIONS,
@@ -205,5 +206,45 @@ describe('advanced rules panel', () => {
     expect(markup).toContain('data-rule="suddenDeath"')
     expect(markup).toContain('Sudden death')
     expect(markup).toContain('Experimental')
+  })
+})
+
+describe('board size under the prototype variant', () => {
+  const boardSizeField = flatten(RULE_SECTIONS).find(
+    (field) => field.id === 'boardSize',
+  )
+
+  it('offers every size under main', () => {
+    if (boardSizeField?.kind !== 'choice') throw new Error('Expected a choice field.')
+    const options = boardSizeField.options(DEFAULT_GAME_CONFIG)
+    expect(options.every((option) => !option.disabled)).toBe(true)
+  })
+
+  it('leaves only 3x3 selectable under prototype', () => {
+    if (boardSizeField?.kind !== 'choice') throw new Error('Expected a choice field.')
+    const config = clampGameConfig({ ...DEFAULT_GAME_CONFIG, variant: 'prototype' })
+    const options = boardSizeField.options(config)
+
+    expect(options.find((option) => option.value === 3)?.disabled).toBeFalsy()
+    expect(options.find((option) => option.value === 4)?.disabled).toBe(true)
+    expect(options.find((option) => option.value === 5)?.disabled).toBe(true)
+    // Still rendered, not removed: the constraint stays visible.
+    expect(options).toHaveLength(3)
+  })
+})
+
+describe('MatchRulesSummary variant chip', () => {
+  const summary = (config: GameConfig) =>
+    renderToStaticMarkup(createElement(MatchRulesSummary, { config }))
+
+  it('says nothing about the variant for main', () => {
+    // The default game needs no badge; a badge on everything is not a badge.
+    expect(summary(DEFAULT_GAME_CONFIG)).not.toContain(VARIANT_LABELS.prototype)
+    expect(summary(DEFAULT_GAME_CONFIG)).not.toContain(VARIANT_LABELS.main)
+  })
+
+  it('badges a prototype listing', () => {
+    const config = clampGameConfig({ ...DEFAULT_GAME_CONFIG, variant: 'prototype' })
+    expect(summary(config)).toContain(VARIANT_LABELS.prototype)
   })
 })

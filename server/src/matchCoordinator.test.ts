@@ -5,6 +5,7 @@ import {
   createGame,
   type GameCommand,
   type GameConfig,
+  type GameVariant,
   type Seat,
 } from '@hidden/game-core'
 import { describe, expect, it, vi } from 'vitest'
@@ -329,6 +330,7 @@ function authoritativeFixture(
     seed?: number
     turnSeconds?: number
     uuids?: string[]
+    variant?: GameVariant
   } = {},
 ) {
   const clock = { now: options.now ?? 1_000 }
@@ -363,8 +365,13 @@ function authoritativeFixture(
     rounds: options.rounds ?? 20,
     turnSeconds: options.turnSeconds ?? 10,
     blindMode: false,
+    ...(options.variant ? { variant: options.variant } : {}),
   })
-  const room = coordinator.enqueueQuickMatch(secondParticipant)!
+  // Both seats must propose the same variant or the queue will not pair them.
+  const room = coordinator.enqueueQuickMatch(
+    secondParticipant,
+    options.variant ? { variant: options.variant } : undefined,
+  )!
   coordinator.setReady(11, true)
   const start = coordinator.setReady(22, true).start!
   const nextCommandId: [number, number] = [1, 1]
@@ -1100,6 +1107,27 @@ describe('MatchCoordinator finish, rematch, and legacy lifecycle', () => {
     expect(completed).toHaveLength(1)
   })
 
+  it('records nothing when a prototype run completes', () => {
+    const completed: unknown[] = []
+    const fixture = authoritativeFixture({
+      firstSeat: 0,
+      now: 8_000,
+      onMatchCompleted: (record) => completed.push(record),
+      rounds: 1,
+      uuids: ['stable-room', 'finished-run'],
+      variant: 'prototype',
+    })
+
+    fixture.issue(0, { type: 'place', locationId: 0, symbol: 'rock' })
+    fixture.issue(1, { type: 'place', locationId: 1, symbol: 'paper' })
+
+    // The run still finishes and still scores; it is simply never written.
+    // History is the research notebook for `main`, and a variant with no win
+    // condition has no result worth notebooking.
+    expect(fixture.run.state.phase).toBe('finished')
+    expect(completed).toEqual([])
+  })
+
   it('emits one final snapshot when deadline timeouts complete the run', () => {
     const completed: unknown[] = []
     const fixture = authoritativeFixture({
@@ -1474,5 +1502,70 @@ describe('reveal window', () => {
     const before = fixture.run.revision
     window.callback()
     expect(fixture.run.revision).toBe(before)
+  })
+})
+
+describe('quick match variant segregation', () => {
+  const prototypeConfig: GameConfig = {
+    ...DEFAULT_GAME_CONFIG,
+    variant: 'prototype',
+  }
+
+  it('does not pair players who asked for different variants', () => {
+    const { dependencies } = deterministicDependencies()
+    const coordinator = new MatchCoordinator(dependencies)
+
+    expect(coordinator.enqueueQuickMatch(firstParticipant)).toBeUndefined()
+    expect(
+      coordinator.enqueueQuickMatch(secondParticipant, prototypeConfig),
+    ).toBeUndefined()
+    expect(coordinator.getRuntimeStats().queuedPlayers).toBe(2)
+  })
+
+  it('pairs two players who asked for the same variant', () => {
+    const { dependencies } = deterministicDependencies()
+    const coordinator = new MatchCoordinator(dependencies)
+
+    expect(
+      coordinator.enqueueQuickMatch(firstParticipant, prototypeConfig),
+    ).toBeUndefined()
+    const room = coordinator.enqueueQuickMatch(secondParticipant, prototypeConfig)
+
+    expect(room).toBeDefined()
+    expect(room?.config.variant).toBe('prototype')
+  })
+
+  it('treats a player who proposed no config as wanting main', () => {
+    const { dependencies } = deterministicDependencies({
+      uuids: ['room-uuid', 'run-uuid', 'spare-uuid'],
+    })
+    const coordinator = new MatchCoordinator(dependencies)
+
+    coordinator.enqueueQuickMatch(firstParticipant, prototypeConfig)
+    expect(coordinator.enqueueQuickMatch(secondParticipant)).toBeUndefined()
+
+    const third = { connectionId: 33, username: 'Guest#0033' }
+    const room = coordinator.enqueueQuickMatch(third)
+    expect(room?.config.variant).toBe('main')
+  })
+
+  it('pairs a later compatible arrival past an incompatible one', () => {
+    const { dependencies } = deterministicDependencies({
+      uuids: ['room-uuid', 'run-uuid', 'spare-uuid'],
+    })
+    const coordinator = new MatchCoordinator(dependencies)
+
+    coordinator.enqueueQuickMatch(firstParticipant, prototypeConfig)
+    coordinator.enqueueQuickMatch(secondParticipant)
+
+    const third = { connectionId: 33, username: 'Guest#0033' }
+    const room = coordinator.enqueueQuickMatch(third, prototypeConfig)
+
+    expect(room).toBeDefined()
+    expect(room?.config.variant).toBe('prototype')
+    const ids = room?.participants.map((participant) => participant.connectionId)
+    expect(ids).toContain(firstParticipant.connectionId)
+    expect(ids).toContain(33)
+    expect(coordinator.getRuntimeStats().queuedPlayers).toBe(1)
   })
 })

@@ -1,6 +1,6 @@
 # Hidden roadmap
 
-Last reviewed: 2026-08-10.
+Last reviewed: 2026-09-11.
 
 Read this file to know where the project stands and what to do next. History
 lives in [JOURNAL.md](JOURNAL.md); finished plans are in
@@ -84,6 +84,44 @@ This deliberately change-resistant snapshot is the research notebook for the
 mechanics-discovery phase: a result remains readable even when the engine,
 power-ups, or balance rules change later.
 
+## Active work — cube prototype mode
+
+A second variant in which the 3x3 board is one face of a cube and players expand
+onto adjacent faces.
+
+- Design: [`superpowers/specs/2026-09-11-cube-prototype-mode-design.md`](superpowers/specs/2026-09-11-cube-prototype-mode-design.md)
+- Phase 0 plan: [`superpowers/plans/2026-09-11-cube-prototype-phase-0.md`](superpowers/plans/2026-09-11-cube-prototype-phase-0.md)
+
+It is an experiment with **no win condition** — the result screen says `TBD` —
+and it is labelled UNDER DEVELOPMENT wherever it is reachable. It deploys to
+production on purpose so it can be played, and it must never look finished.
+
+The two variants are `main` (today's game) and `prototype`. Both names are
+placeholders.
+
+Read the spec before touching any of this. Two decisions in it are load-bearing
+and cheap to get wrong by accident:
+
+- **`ENGINE_REVISION` stays at 2.** The cube rides in `GameConfig`, exactly as
+  board size does, and a `main` match resolves identically. A golden test pins
+  `main`'s topology; if it fails, the revision must be bumped instead.
+- **Face unlocking is shared, not per player.** Either player's corner pair
+  opens a face for both. This is what stops uncontested territory from being
+  free points and is why the map needs no hidden state.
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 0 | Mode plumbing: config variant, mode selection on the online and practice screens, matchmaking segregation, history gate, `TBD` result, UNDER DEVELOPMENT labelling. Still a single 3x3 face. | Done 2026-09-11 |
+| 1 | The open cube: split `game-core` into modules, 54-location topology, face adjacency, unfolded cross map, arrow/WASD navigation, explicit `BoardGrid` layout, 12 rounds. All six faces open from turn 1; the locked arrow treatment is previewable on a client-side debug toggle that changes presentation only. | Not started |
+| 2 | The expansion mechanic: start locked to `home`, matching corner pair on an edge unlocks the face across it, shared and permanent. Deletes the Phase 1 debug button. | Not started |
+| 3 | Fork to a race/cooldown or refined turn-based model. Decided by playing 1 and 2, not in advance. | Not started |
+
+Cooldown / real-time play is deliberately **not** in any of these phases. It
+deletes `activeSeat` and most of the turn machinery in both the engine and the
+coordinator, and it collides with "Next up 1" below. The reason to defer it is
+not cost — it is that changing what a board is and what a turn is at the same
+time makes the outcome unfalsifiable.
+
 ## Next up
 
 ### 1. Simultaneous conflict resolution
@@ -161,9 +199,13 @@ opaque payload. Never reuse another project's bucket or credentials.
 
 ## Deferred experiments
 
-Non-square and irregular topologies (hex, Tetris-shaped, Catan-like). The
-config shape leaves room for them: `createTopology` is the only thing that
-assumes a square board. Not worth building until a square variant is fun.
+Hex, Tetris-shaped, and Catan-like topologies. The config shape leaves room for
+them: `createTopology` is the only thing that assumes a square board.
+
+The cube prototype under "Active work" is the first claim on this. It is still a
+square board per face, so it does not settle whether irregular topologies are
+worth building — the reading of `createTopology` as the single seam held up
+exactly as this section predicted.
 
 ## Codebase debt
 
