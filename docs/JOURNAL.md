@@ -4,6 +4,40 @@ Newest first. One entry per stretch of work. Keep entries short — the git log
 holds the detail, and this file exists so nobody has to read a 1,600-line plan
 to learn what happened.
 
+## 2026-09-12 — Cube prototype mode, phase 0
+
+A second game variant is selectable and playable end to end. It is still a
+single 3x3 face, so this is plumbing rather than gameplay: the point was to get
+`prototype` through every seam before any cube geometry exists.
+
+- `GameConfig.variant: 'main' | 'prototype'`, defaulting to `main`, with
+  `defaultConfigForVariant` separate from the clamp. The clamp is tolerant and
+  cannot tell "the host chose 6 rounds" from "rounds were missing", so
+  per-variant defaults there would silently overwrite deliberate choices.
+- `ENGINE_REVISION` stays at 2. A `main` match resolves identically — same
+  topology, pattern order, and RNG draw — so this is a config change, which a
+  match already carries verbatim. A golden test pins `main`'s topology.
+- Quick match queues segregate by variant. Prototype matches are never written
+  to match history: the v1 record stores a board as `columns` plus a flat cell
+  list, which a cube would misreport.
+- Mode selection on the online menu and practice card, a lobby badge, an
+  in-match banner, and a `TBD` result that declares no winner. Selecting the
+  prototype turns the control red rather than the system's yellow, because
+  yellow everywhere else means "selected, and fine".
+
+`gameHandler.updateMatchmaking` discarded the whole proposed config for
+non-admins, so the variant never reached `enqueueQuickMatch` and a guest who
+picked the prototype was silently queued for `main` — queue segregation was dead
+code on the real path. The coordinator tests missed it by calling
+`enqueueQuickMatch` directly, past the handler. Two browser tabs caught it in
+seconds. Rules stay admin-only, since quick match binds a stranger; the variant
+is honoured for everyone, because it is which queue you stand in, not a rule.
+
+Also corrected: merging to `main` does not deploy. The push webhook answers 200
+but queues nothing, because the Coolify application has `source_id = 0`. Phase 0
+reached production via an explicit manual release, verified by the served bundle
+hash changing rather than by `/healthz`.
+
 ## 2026-08-09 — Durable static match history
 
 Completed online matches now survive deploys without committing the project to
