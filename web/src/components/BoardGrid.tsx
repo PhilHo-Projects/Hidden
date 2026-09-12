@@ -8,7 +8,7 @@ import { COLOR_BY_SYMBOL } from '../game/constants'
 import { CELL_MOTION_OUT_MS, EMPTY_TONE, TONE_SEPARATOR, inkTone, useCellInk } from './cellInk'
 import type { GridState } from '../game/types'
 import type { ClassicSymbol } from '@hidden/game-core'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 export interface CellDestructionEffect {
   id: number
@@ -30,6 +30,21 @@ interface BoardGridProps {
   title: string
   subtitle: string
   grid: GridState
+  /**
+   * How many columns to draw. Passed rather than derived: a cube face is a
+   * nine-cell slice of a fifty-four-cell board, and `sqrt(cellCount)` cannot
+   * tell a board from a window onto one.
+   */
+  columns: number
+  /**
+   * The location ID of `grid.cells[0]`. Zero for a whole board; `faceIndex * 9`
+   * for a cube face. Everything a caller keys by location — `onSelect`,
+   * destruction effects, score labels — speaks absolute IDs, so the renderer
+   * adds the offset back rather than making five call sites subtract it.
+   */
+  indexOffset?: number
+  /** The face arrows, when this board is one face of a cube. */
+  navigation?: ReactNode
   hidden?: boolean
   compact?: boolean
   interactive?: boolean
@@ -42,21 +57,15 @@ interface BoardGridProps {
   onSelect?: (index: number) => void
 }
 
-// Boards are always square, so the column count is recoverable from the cell
-// count. Deriving it here avoids threading board size through every call site.
-function boardColumns(cellCount: number) {
-  if (cellCount <= 0) return 3
-  return Math.round(Math.sqrt(cellCount))
-}
-
 // Hand-cut edges come from a handful of clip-path variants rather than one
-// shape stamped nine times. Deriving the variant from the index keeps a cell
+// shape stamped nine times. Deriving the variant from the location keeps a cell
 // looking the same across every render, and the stride guarantees neighbours
-// never draw the same cut.
+// never draw the same cut. Taking the location rather than the array position
+// also means no two faces of a cube cut their nine squares in the same order.
 const CELL_VARIANTS = 4
 
-function cellVariant(index: number) {
-  return (index * 3 + 1) % CELL_VARIANTS
+function cellVariant(locationId: number) {
+  return (locationId * 3 + 1) % CELL_VARIANTS
 }
 
 /**
@@ -105,6 +114,9 @@ export function BoardGrid({
   title,
   subtitle,
   grid,
+  columns,
+  indexOffset = 0,
+  navigation,
   hidden = false,
   compact = false,
   interactive = false,
@@ -123,6 +135,136 @@ export function BoardGrid({
     .map((cell) => (cell.occupied ? inkTone(cell.symbol, hidden) : ''))
     .join(TONE_SEPARATOR)
   const { filling, draining } = useCellInk(toneKey)
+
+  const gridElement = (
+    <div
+      className="hidden-board-grid"
+      style={
+        {
+          '--board-size': String(columns),
+        } as CSSProperties
+      }
+    >
+      {grid.cells.map((cell, index) => {
+        // `index` is a position in what is being drawn; `locationId` is what the
+        // engine calls it. They are the same number for a whole board and differ
+        // by a face offset for a cube slice, and every caller speaks the latter.
+        const locationId = indexOffset + index
+        const isClickable = interactive && typeof onSelect === 'function'
+        const destructionEffect = destructionEffects[locationId]
+        const scoreCount = scoreCountLabels[locationId]
+        const desecrated = showDesecration && cell.desecrated && !cell.occupied
+        const isReleasing = !desecrated && releasing.has(index)
+        const drainTone = cell.occupied ? undefined : draining.get(index)
+
+        return (
+          <button
+            key={index}
+            type="button"
+            onClick={() => onSelect?.(locationId)}
+            disabled={!isClickable}
+            aria-label={
+              scoreCount
+                ? `Cell ${locationId + 1}, Point ${scoreCount}`
+                : `Cell ${locationId + 1}`
+            }
+            className={`hidden-cell ${cell.occupied ? 'hidden-cell-occupied' : ''} ${
+              hidden && cell.occupied ? 'hidden-cell-hidden' : ''
+            } ${desecrated ? 'hidden-cell-desecrated' : ''} ${
+              isClickable ? 'hidden-cell-clickable' : ''
+            } ${
+              destructionEffect ? `hidden-cell-destroying-${destructionEffect.tone}` : ''
+            } ${scoreCount ? 'hidden-cell-score-counted' : ''} hidden-cell-v${cellVariant(locationId)}`}
+            style={{
+              background: EMPTY_TONE,
+              '--score-order': scoreCount ?? 0,
+              '--score-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_CELL_OFFSET_MS : 0}ms`,
+              '--score-badge-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_BADGE_OFFSET_MS : 0}ms`,
+            } as CSSProperties}
+          >
+            {/* The two ink layers are separate slots on purpose. A cell that
+              * is destroyed and later reclaimed unmounts the first and mounts
+              * it again, and a remount is the only thing that reliably
+              * restarts a CSS animation. */}
+            {cell.occupied ? (
+              <span
+                className={`cell-ink ${filling.has(index) ? 'cell-ink-fill' : ''}`}
+                style={{ background: inkTone(cell.symbol, hidden) }}
+                aria-hidden="true"
+              />
+            ) : null}
+
+            {drainTone ? (
+              <span
+                className="cell-ink cell-ink-drain"
+                style={{ background: drainTone }}
+                aria-hidden="true"
+              />
+            ) : null}
+
+            {/* The result walk's lift. A layer rather than a `filter` on the
+              * cell, because the cell's outline and drop stack *are* its
+              * filter and a keyframe would replace the whole chain. Sits here
+              * so the markers below it keep painting on top. */}
+            {scoreCount ? <span className="score-count-flash" aria-hidden="true" /> : null}
+
+            {/* The cell index is carried by `aria-label` above rather than
+              * printed. On the board it read as clutter; screen readers still
+              * need it to tell one cell from another. */}
+            {cell.occupied && hidden ? (
+              <span className="hidden-marker">
+                <span />
+              </span>
+            ) : null}
+
+            {desecrated || isReleasing ? (
+              <span
+                className={`cell-desecration ${
+                  isReleasing ? 'cell-desecration-releasing' : ''
+                }`}
+                aria-hidden="true"
+              />
+            ) : null}
+
+            {cell.immune ? (
+              <span className="immune-marker">
+                <img src={shieldIcon} alt="" />
+              </span>
+            ) : null}
+
+            {scoreCount ? (
+              <span className="score-count-badge" aria-hidden="true">
+                {scoreCount}
+              </span>
+            ) : null}
+
+            {destructionEffect ? (
+              <span
+                key={destructionEffect.id}
+                className={`cell-destruction cell-destruction-${destructionEffect.tone}`}
+                aria-hidden="true"
+              >
+                <span className="cell-destruction__ring" />
+                <span className="cell-destruction__core" />
+                {Array.from({ length: 6 }, (_, shardIndex) => (
+                  <span
+                    key={shardIndex}
+                    className="cell-destruction__shard"
+                    style={
+                      {
+                        '--shard-index': shardIndex,
+                        '--shard-angle': `${shardIndex * 60}deg`,
+                      } as CSSProperties
+                    }
+                  />
+                ))}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
+    </div>
+  )
 
   return (
     <section
@@ -146,129 +288,17 @@ export function BoardGrid({
         ) : null}
       </header>
 
-      <div
-        className="hidden-board-grid"
-        style={
-          {
-            '--board-size': String(boardColumns(grid.cells.length)),
-          } as CSSProperties
-        }
-      >
-        {grid.cells.map((cell, index) => {
-          const isClickable = interactive && typeof onSelect === 'function'
-          const destructionEffect = destructionEffects[index]
-          const scoreCount = scoreCountLabels[index]
-          const desecrated = showDesecration && cell.desecrated && !cell.occupied
-          const isReleasing = !desecrated && releasing.has(index)
-          const drainTone = cell.occupied ? undefined : draining.get(index)
-
-          return (
-            <button
-              key={index}
-              type="button"
-              onClick={() => onSelect?.(index)}
-              disabled={!isClickable}
-              aria-label={
-                scoreCount
-                  ? `Cell ${index + 1}, Point ${scoreCount}`
-                  : `Cell ${index + 1}`
-              }
-              className={`hidden-cell ${cell.occupied ? 'hidden-cell-occupied' : ''} ${
-                hidden && cell.occupied ? 'hidden-cell-hidden' : ''
-              } ${desecrated ? 'hidden-cell-desecrated' : ''} ${
-                isClickable ? 'hidden-cell-clickable' : ''
-              } ${
-                destructionEffect ? `hidden-cell-destroying-${destructionEffect.tone}` : ''
-              } ${scoreCount ? 'hidden-cell-score-counted' : ''} hidden-cell-v${cellVariant(index)}`}
-              style={{
-                background: EMPTY_TONE,
-                '--score-order': scoreCount ?? 0,
-                '--score-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_CELL_OFFSET_MS : 0}ms`,
-                '--score-badge-delay': `${scoreCount ? (scoreCount - 1) * SCORE_STEP_MS + SCORE_BADGE_OFFSET_MS : 0}ms`,
-              } as CSSProperties}
-            >
-              {/* The two ink layers are separate slots on purpose. A cell that
-                * is destroyed and later reclaimed unmounts the first and mounts
-                * it again, and a remount is the only thing that reliably
-                * restarts a CSS animation. */}
-              {cell.occupied ? (
-                <span
-                  className={`cell-ink ${filling.has(index) ? 'cell-ink-fill' : ''}`}
-                  style={{ background: inkTone(cell.symbol, hidden) }}
-                  aria-hidden="true"
-                />
-              ) : null}
-
-              {drainTone ? (
-                <span
-                  className="cell-ink cell-ink-drain"
-                  style={{ background: drainTone }}
-                  aria-hidden="true"
-                />
-              ) : null}
-
-              {/* The result walk's lift. A layer rather than a `filter` on the
-                * cell, because the cell's outline and drop stack *are* its
-                * filter and a keyframe would replace the whole chain. Sits here
-                * so the markers below it keep painting on top. */}
-              {scoreCount ? <span className="score-count-flash" aria-hidden="true" /> : null}
-
-              {/* The cell index is carried by `aria-label` above rather than
-                * printed. On the board it read as clutter; screen readers still
-                * need it to tell one cell from another. */}
-              {cell.occupied && hidden ? (
-                <span className="hidden-marker">
-                  <span />
-                </span>
-              ) : null}
-
-              {desecrated || isReleasing ? (
-                <span
-                  className={`cell-desecration ${
-                    isReleasing ? 'cell-desecration-releasing' : ''
-                  }`}
-                  aria-hidden="true"
-                />
-              ) : null}
-
-              {cell.immune ? (
-                <span className="immune-marker">
-                  <img src={shieldIcon} alt="" />
-                </span>
-              ) : null}
-
-              {scoreCount ? (
-                <span className="score-count-badge" aria-hidden="true">
-                  {scoreCount}
-                </span>
-              ) : null}
-
-              {destructionEffect ? (
-                <span
-                  key={destructionEffect.id}
-                  className={`cell-destruction cell-destruction-${destructionEffect.tone}`}
-                  aria-hidden="true"
-                >
-                  <span className="cell-destruction__ring" />
-                  <span className="cell-destruction__core" />
-                  {Array.from({ length: 6 }, (_, shardIndex) => (
-                    <span
-                      key={shardIndex}
-                      className="cell-destruction__shard"
-                      style={
-                        {
-                          '--shard-index': shardIndex,
-                          '--shard-angle': `${shardIndex * 60}deg`,
-                        } as CSSProperties
-                      }
-                    />
-                  ))}
-                </span>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
+      {/* The frame is the cube's four exits, and it only exists for a cube.
+        * `main` keeps the grid as a direct child of `.hidden-board`, because
+        * that is the chain the arena sizes and measures it through. */}
+      {navigation ? (
+        <div className="face-frame">
+          {navigation}
+          {gridElement}
+        </div>
+      ) : (
+        gridElement
+      )}
     </section>
   )
 }

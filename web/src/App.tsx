@@ -812,6 +812,7 @@ function App({ initialAuthIntent = null }: AppProps) {
                 title="Player Board"
                 subtitle={username.trim() || 'Player'}
                 grid={match.playerGrid}
+                columns={match.config.boardSize}
                 interactive={
                   match.isMyTurn &&
                   (!match.config.isOnline || !onlineInputPending)
@@ -829,6 +830,7 @@ function App({ initialAuthIntent = null }: AppProps) {
                     title="Opponent Board"
                     subtitle={opponentName}
                     grid={match.opponentGrid}
+                    columns={match.config.boardSize}
                     compact
                   />
                 </aside>
@@ -838,6 +840,7 @@ function App({ initialAuthIntent = null }: AppProps) {
                 open={revealOpen}
                 opponentName={opponentName}
                 grid={match.opponentGrid}
+                columns={match.config.boardSize}
                 seconds={match.config.revealSeconds}
                 onClose={onEndReveal}
               />
@@ -921,6 +924,7 @@ function App({ initialAuthIntent = null }: AppProps) {
               title=""
               subtitle={username.trim() || 'Player'}
               grid={match.playerGrid}
+              columns={match.config.boardSize}
               showDesecration={false}
               destructionEffects={playerDestructionEffects}
               scoreCountLabels={playerScoreCountLabels}
@@ -929,6 +933,7 @@ function App({ initialAuthIntent = null }: AppProps) {
               title=""
               subtitle={opponentName}
               grid={match.opponentGrid}
+              columns={match.config.boardSize}
               showDesecration={false}
               scoreCountLabels={opponentScoreCountLabels}
             />
