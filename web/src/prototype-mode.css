@@ -219,19 +219,23 @@
 /*
  * The played face, framed by its four exits.
  *
- * A three-by-three frame with the board in the middle cell, rather than arrows
- * floated over the arena. The board is sized from leftover height, so anything
- * positioned against it would have to be measured first; giving the arrows real
- * tracks lets the board shrink by exactly the room they take, and nothing has to
- * know anyone's pixel width.
+ * Two jobs, and they need different mechanisms. The *room* for the arrows is
+ * padding, so the board shrinks by exactly the space they take and the arena
+ * never has to know anyone's pixel width. Their *positions* are anchored to the
+ * measured board edge, because the arena is far wider than the board and grid
+ * tracks would pin them to the screen edges half a metre away from the thing
+ * they belong to.
+ *
+ * The frame's centre is the board's centre -- the padding is symmetric and the
+ * board is centred in what is left -- which is what lets all four arrows anchor
+ * off one measurement.
  */
 .face-frame {
   --face-arrow: clamp(2.25rem, 7vmin, 3rem);
   --face-arrow-gap: clamp(0.25rem, 1vmin, 0.5rem);
+  position: relative;
   display: grid;
-  grid-template-columns: var(--face-arrow) minmax(0, 1fr) var(--face-arrow);
-  grid-template-rows: var(--face-arrow) minmax(0, 1fr) var(--face-arrow);
-  gap: var(--face-arrow-gap);
+  padding-block: calc(var(--face-arrow) + var(--face-arrow-gap));
   place-items: center;
 }
 
@@ -244,7 +248,6 @@
 }
 
 .face-frame > .hidden-board-grid {
-  grid-area: 2 / 2;
   height: 100%;
   max-height: 29rem;
   min-height: 0;
@@ -255,6 +258,7 @@
 }
 
 .face-arrow {
+  position: absolute;
   display: grid;
   width: var(--face-arrow);
   height: var(--face-arrow);
@@ -278,19 +282,60 @@
   fill: currentColor;
 }
 
-.face-arrow-north { grid-area: 1 / 2; rotate: -90deg; }
-.face-arrow-east  { grid-area: 2 / 3; }
-.face-arrow-south { grid-area: 3 / 2; rotate: 90deg; }
-.face-arrow-west  { grid-area: 2 / 1; rotate: 180deg; }
+/*
+ * Anchored to the board's edge, half an arrow-gap clear of it. `--board-side` is
+ * the square's measured side, published on the arena by `useBoardSideVar`, so a
+ * board that resized because the viewport did takes its arrows with it.
+ *
+ * The turn lives on the glyph rather than on the button, which leaves the
+ * button's own `transform` free for the centring these need.
+ */
+.face-arrow-north {
+  top: calc(50% - var(--board-side, 0px) / 2 - var(--face-arrow-gap) - var(--face-arrow));
+  left: 50%;
+  transform: translateX(-50%);
+}
 
-/* The nudge goes the way the arrow points. `rotate` already turned the box, so
- * the movement is always +x in the rotated frame -- every arrow points east
- * before it is turned. */
+.face-arrow-south {
+  top: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.face-arrow-east {
+  top: 50%;
+  left: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+  transform: translateY(-50%);
+}
+
+.face-arrow-west {
+  top: 50%;
+  right: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+  transform: translateY(-50%);
+}
+
+.face-arrow-north svg { rotate: -90deg; }
+.face-arrow-south svg { rotate: 90deg; }
+.face-arrow-west svg { rotate: 180deg; }
+
+/* The nudge goes the way the arrow points, so it is a different axis and sign
+ * per side rather than one rule -- the glyph turned, the button did not. */
 .face-arrow:hover:not(:disabled),
 .face-arrow:focus-visible {
   color: #c9c9c9;
-  translate: 2px 0;
 }
+
+.face-arrow-north:hover:not(:disabled),
+.face-arrow-north:focus-visible { translate: 0 -2px; }
+
+.face-arrow-south:hover:not(:disabled),
+.face-arrow-south:focus-visible { translate: 0 2px; }
+
+.face-arrow-east:hover:not(:disabled),
+.face-arrow-east:focus-visible { translate: 2px 0; }
+
+.face-arrow-west:hover:not(:disabled),
+.face-arrow-west:focus-visible { translate: -2px 0; }
 
 .face-arrow:active:not(:disabled) {
   color: var(--hidden-white);
@@ -316,7 +361,15 @@
   }
 
   .face-arrow:hover:not(:disabled),
-  .face-arrow:focus-visible {
+  .face-arrow:focus-visible,
+  .face-arrow-north:hover:not(:disabled),
+  .face-arrow-north:focus-visible,
+  .face-arrow-south:hover:not(:disabled),
+  .face-arrow-south:focus-visible,
+  .face-arrow-east:hover:not(:disabled),
+  .face-arrow-east:focus-visible,
+  .face-arrow-west:hover:not(:disabled),
+  .face-arrow-west:focus-visible {
     translate: none;
   }
 }
@@ -327,12 +380,32 @@
  * Flat on purpose. The braces already carry this mode's one visual idea, and a
  * second hand-cut surface next to the board would compete with the board.
  */
+/*
+ * Anchored to the board's left edge rather than placed in the controls column.
+ *
+ * `.battle-stage` is `minmax(0, 1fr) auto`: the controls keep their content
+ * height and the board takes what is left. A map in that column would be paid
+ * for out of the board, so on a screen wide enough it floats in the arena
+ * instead and costs it nothing — the same trick, and the same anchor, as
+ * `.opponent-peek` on the other side.
+ *
+ * The extra term past `--board-side / 2` clears the west arrow, whose track is
+ * outside the measured grid. It repeats `.face-frame`'s clamp because a custom
+ * property does not reach across to a sibling subtree.
+ */
 .cube-map {
   --map-tile: clamp(2.2rem, 8vw, 2.9rem);
+  position: absolute;
+  top: 50%;
+  right: calc(
+    50% + var(--board-side, 0px) / 2 + clamp(2.25rem, 7vmin, 3rem) +
+      clamp(0.6rem, 1.6vw, 1.2rem)
+  );
+  z-index: 4;
   display: grid;
   justify-items: center;
   gap: 0.4rem;
-  width: 100%;
+  transform: translateY(-50%);
 }
 
 .cube-map-header {
@@ -478,5 +551,40 @@
   .cube-map-face,
   .padlock {
     transition: none;
+  }
+}
+
+/*
+ * Below this there is no room beside the board, so the arena splits and the
+ * board pays for the map after all -- but only here, and by exactly the map's
+ * height rather than by the controls column's whole growth.
+ */
+@media (max-width: 900px) {
+  .battle-arena {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0.4rem;
+  }
+
+  .cube-map {
+    position: static;
+    transform: none;
+    justify-self: center;
+  }
+
+  /* Six tiles in a row rather than a four-row cross: the cross is the right
+   * picture and the wrong shape for a budget measured in vertical pixels. The
+   * blanks go, and the reading order stays the cross's own. */
+  .cube-map-grid {
+    --map-tile: clamp(1.9rem, 11vw, 2.4rem);
+    grid-template-columns: repeat(6, var(--map-tile));
+  }
+
+  .cube-map-blank {
+    display: none;
+  }
+
+  .cube-map-note {
+    display: none;
   }
 }

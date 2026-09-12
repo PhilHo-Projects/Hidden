@@ -14,6 +14,17 @@ import { useEffect, type RefObject } from 'react'
  * which rendered the board invisible on iOS. Measuring once and handing the
  * result back to CSS is the construct that behaves the same in every engine.
  */
+/**
+ * The played board's grid, and nothing else in the arena.
+ *
+ * A descendant chain rather than a direct-child one, because the cube's face
+ * arrows frame the grid and would otherwise break the measurement — and with it
+ * the caption alignment this hook exists to provide. It stays unambiguous: the
+ * opponent peek and the reveal snapshot are siblings of the played board, not
+ * descendants of it, so neither can be matched here.
+ */
+export const PLAYED_BOARD_GRID_SELECTOR = ':scope > .hidden-board .hidden-board-grid'
+
 export function useBoardSideVar(
   arenaRef: RefObject<HTMLElement | null>,
   active: boolean,
@@ -25,7 +36,7 @@ export function useBoardSideVar(
     // Re-queried on every callback rather than captured once: the board remounts
     // between rounds, and a captured node would go stale and freeze the variable.
     const publish = () => {
-      const grid = arena.querySelector(':scope > .hidden-board > .hidden-board-grid')
+      const grid = arena.querySelector(PLAYED_BOARD_GRID_SELECTOR)
       if (!grid) return
       arena.style.setProperty(
         '--board-side',

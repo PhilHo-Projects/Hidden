@@ -36,11 +36,16 @@ function isTypingTarget(target: EventTarget | null) {
  */
 export function useFaceCamera(active: boolean): FaceCameraControls {
   const [camera, setCamera] = useState<FaceCamera>(INITIAL_FACE_CAMERA)
+  const [wasActive, setWasActive] = useState(active)
 
-  useEffect(() => {
-    if (!active) return
-    setCamera(INITIAL_FACE_CAMERA)
-  }, [active])
+  // Adjusted during render rather than in an effect, the same way
+  // `useDesecrationRelease` and `RevealSnapshot` do it: this is derived from a
+  // prop change, and from an effect it would commit one frame of the previous
+  // match's last face before snapping back to `home`.
+  if (wasActive !== active) {
+    setWasActive(active)
+    if (active) setCamera(INITIAL_FACE_CAMERA)
+  }
 
   const move = useCallback((direction: FaceDirection) => {
     setCamera((current) => moveCamera(current, direction))
