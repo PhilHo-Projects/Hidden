@@ -19,9 +19,14 @@ const gridWith = (symbol: ClassicSymbol): GridState => ({
   cells: [{ occupied: true, symbol, immune: false, desecrated: false }],
 })
 
-const markupFor = (count: number) =>
+const markupFor = (count: number, columns: number) =>
   renderToStaticMarkup(
-    createElement(BoardGrid, { title: '', subtitle: 'Board', grid: gridOf(count) }),
+    createElement(BoardGrid, {
+      title: '',
+      subtitle: 'Board',
+      grid: gridOf(count),
+      columns,
+    }),
   )
 
 describe('desecrated cells', () => {
@@ -38,6 +43,7 @@ describe('desecrated cells', () => {
         title: '',
         subtitle: 'Board',
         grid: desecratedGrid,
+        columns: 3,
         ...(showDesecration === undefined ? {} : { showDesecration }),
       }),
     )
@@ -61,16 +67,71 @@ describe('desecrated cells', () => {
 
 describe('board grid sizing', () => {
   it.each([
-    [9, '3'],
-    [16, '4'],
-    [25, '5'],
-  ])('renders %i cells as a %s-column grid', (count, columns) => {
-    expect(markupFor(count)).toContain(`--board-size:${columns}`)
+    [9, 3],
+    [16, 4],
+    [25, 5],
+  ])('renders %i cells in the %i columns it was given', (count, columns) => {
+    expect(markupFor(count, columns)).toContain(`--board-size:${columns}`)
   })
 
-  it('falls back to three columns for an empty setup-phase grid', () => {
-    // Setup renders before the core has built a board, so cells is empty.
-    expect(markupFor(0)).toContain('--board-size:3')
+  it('does not infer a column count from the cell count', () => {
+    // A cube face is nine cells out of fifty-four. Inferring would have drawn a
+    // whole cube as a seven-column rectangle the moment a board became a slice.
+    expect(markupFor(9, 3)).toContain('--board-size:3')
+  })
+
+  it('still lays out an empty setup-phase grid', () => {
+    // Setup renders before the core has built a board, so cells is empty. The
+    // column count comes from the config, which exists well before the board.
+    expect(markupFor(0, 3)).toContain('--board-size:3')
+  })
+})
+
+describe('index offset', () => {
+  const render = (indexOffset: number) =>
+    renderToStaticMarkup(
+      createElement(BoardGrid, {
+        title: '',
+        subtitle: 'Board',
+        grid: gridOf(9),
+        columns: 3,
+        indexOffset,
+      }),
+    )
+
+  it('numbers cells from the offset so a face reports true location ids', () => {
+    const markup = render(45)
+
+    expect(markup).toContain('aria-label="Cell 46"')
+    expect(markup).toContain('aria-label="Cell 54"')
+    expect(markup).not.toContain('aria-label="Cell 1"')
+  })
+
+  it('starts at one when there is no offset', () => {
+    expect(render(0)).toContain('aria-label="Cell 1"')
+  })
+})
+
+describe('navigation slot', () => {
+  it('frames the grid when navigation is supplied', () => {
+    const markup = renderToStaticMarkup(
+      createElement(BoardGrid, {
+        title: '',
+        subtitle: 'Board',
+        grid: gridOf(9),
+        columns: 3,
+        navigation: createElement('b', { className: 'probe' }),
+      }),
+    )
+
+    expect(markup).toContain('face-frame')
+    expect(markup).toContain('probe')
+  })
+
+  it('leaves the grid unframed otherwise', () => {
+    // `main` has to come out of this task pixel-identical, and the arena's CSS
+    // reaches the grid as a direct child of `.hidden-board`.
+    expect(markupFor(9, 3)).not.toContain('face-frame')
   })
 })
 
@@ -90,6 +151,7 @@ describe('board grid symbol colours', () => {
         title: '',
         subtitle: 'Board',
         grid: gridWith(symbol),
+        columns: 3,
       }),
     )
 
@@ -102,6 +164,7 @@ describe('board grid symbol colours', () => {
         title: '',
         subtitle: 'Board',
         grid: gridWith('rock'),
+        columns: 3,
         hidden: true,
       }),
     )
@@ -120,6 +183,7 @@ describe('board grid symbol colours', () => {
         title: '',
         subtitle: 'Board',
         grid: gridWith('rock'),
+        columns: 3,
       }),
     )
 
@@ -136,6 +200,7 @@ describe('board grid symbol colours', () => {
         title: '',
         subtitle: 'Board',
         grid: gridWith('rock'),
+        columns: 3,
       }),
     )
 
@@ -220,6 +285,7 @@ describe('result score walk', () => {
         title: '',
         subtitle: 'Board',
         grid: scoredGrid,
+        columns: 3,
         scoreCountLabels: { 0: 1 },
       }),
     )
@@ -250,6 +316,7 @@ describe('result score walk', () => {
             desecrated: false,
           })),
         },
+        columns: 3,
         scoreCountLabels: { 0: 1, 1: 2, 2: 3 },
       }),
     )

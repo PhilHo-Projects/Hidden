@@ -1,5 +1,12 @@
 {
   "compilerOptions": {
+    // `node --test` runs these files as TypeScript, and its CommonJS resolver
+    // does not try a `.ts` extension for an extensionless relative import. So
+    // sources import each other as "./config.ts", and these two flags are what
+    // make that legal while still emitting real CommonJS: the second rewrites
+    // the specifier to "./config.js" on the way out.
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "declaration": true,
     "module": "CommonJS",
     "outDir": "dist",

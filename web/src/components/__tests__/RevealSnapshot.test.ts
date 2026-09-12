@@ -19,6 +19,7 @@ const render = (open: boolean) =>
       open,
       opponentName: 'Guest#0427',
       grid: opponentGrid,
+      columns: 3,
       seconds: 1.5,
       onClose: () => undefined,
     }),

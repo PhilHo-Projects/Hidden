@@ -8,6 +8,14 @@ interface RevealSnapshotProps {
   open: boolean
   opponentName: string
   grid: GridState
+  /** Passed through to the board. See `BoardGridProps` for why it is not derived. */
+  columns: number
+  /**
+   * The location ID of `grid.cells[0]`, for the cube variant. The snapshot shows
+   * one face — the one the revealing player is standing on — because fifty-four
+   * cells is not something anyone memorises in a second and a half.
+   */
+  indexOffset?: number
   /** Window length in seconds, so the bulbs run out with the authority's timer. */
   seconds: number
   onClose: () => void
@@ -64,6 +72,8 @@ export function RevealSnapshot({
   open,
   opponentName,
   grid,
+  columns,
+  indexOffset,
   seconds,
   onClose,
 }: RevealSnapshotProps) {
@@ -142,7 +152,14 @@ export function RevealSnapshot({
             OPPONENT&apos;S BOARD
           </p>
           <p className="reveal-who">{opponentName} · memorise it</p>
-          <BoardGrid title="" subtitle="" grid={grid} showDesecration={false} />
+          <BoardGrid
+            title=""
+            subtitle=""
+            grid={grid}
+            columns={columns}
+            indexOffset={indexOffset}
+            showDesecration={false}
+          />
         </div>
 
         <div className="reveal-bulbs" aria-hidden="true">

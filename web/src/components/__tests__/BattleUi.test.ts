@@ -41,6 +41,7 @@ describe('battle UI', () => {
         title: 'Player Board',
         subtitle: 'Guest#1234',
         grid: emptyGrid,
+        columns: 3,
         destructionEffects: {
           4: { id: 12, tone: 'loss' },
         },
@@ -64,6 +65,7 @@ describe('battle UI', () => {
         title: '',
         subtitle: 'Guest#1234',
         grid: scoredGrid,
+        columns: 3,
         scoreCountLabels: { 1: 1, 7: 2 },
       }),
     )
@@ -89,6 +91,7 @@ describe('battle UI', () => {
         title: '',
         subtitle: 'Guest#1234',
         grid: scoredGrid,
+        columns: 3,
         scoreCountLabels: { 0: 1, 4: 2 },
       }),
     )
@@ -105,6 +108,7 @@ describe('battle UI', () => {
         title: '',
         subtitle: 'Guest#1234',
         grid: emptyGrid,
+        columns: 3,
       }),
     )
 

@@ -12,6 +12,9 @@ import type { AccountMode } from './auth/accountValidation'
 import { AccountForm } from './components/AccountForm'
 import { AdminPanel } from './components/AdminPanel'
 import { BoardGrid } from './components/BoardGrid'
+import { CubeMap } from './components/CubeMap'
+import { CubeNet } from './components/CubeNet'
+import { FaceArrows } from './components/FaceArrows'
 import { RevealSnapshot } from './components/RevealSnapshot'
 import { HowToPlayModal, HowToPlayTrigger } from './components/HowToPlayModal'
 import { MatchHistoryScreen } from './components/MatchHistory'
@@ -31,12 +34,14 @@ import {
 } from './components/PregameUi'
 import { ModeSelect } from './components/ModeSelect'
 import { COLOR_BY_SYMBOL } from './game/constants'
+import { faceCellCounts, faceCells } from './game/faceNavigation'
 import { createMatchHistoryClient } from './history/historyClient'
 import {
   clampGameConfig,
   clampOnlineGameConfig,
   defaultConfigForVariant,
   DEFAULT_GAME_CONFIG,
+  firstLocationOfFace,
   type ClassicSymbol,
   type GameConfig,
   type GameVariant,
@@ -44,6 +49,7 @@ import {
 import { useAccountSession } from './hooks/useAccountSession'
 import { useBoardSideVar } from './hooks/useBoardSideVar'
 import { useDestructionEffects } from './hooks/useDestructionEffects'
+import { useFaceCamera } from './hooks/useFaceCamera'
 import { useLobbyBrowser } from './hooks/useLobbyBrowser'
 import { useMatchSession } from './hooks/useMatchSession'
 import {
@@ -229,6 +235,13 @@ function App({ initialAuthIntent = null }: AppProps) {
   }, [screen])
 
   useBoardSideVar(battleArenaRef, screen === 'battle')
+
+  // `isPrototypeMatch` is the only thing that turns any of the cube on. `main`
+  // renders exactly as it did before, down to the unframed board.
+  const isCubeMatch = isPrototypeMatch(match)
+  const faceCamera = useFaceCamera(screen === 'battle' && isCubeMatch)
+  const activeFace = faceCamera.camera.face
+  const faceOffset = isCubeMatch ? firstLocationOfFace(activeFace) : 0
 
   const openAccount = useCallback((mode: AccountMode) => {
     resetForAccountChange()
@@ -809,9 +822,25 @@ function App({ initialAuthIntent = null }: AppProps) {
           <div className="battle-stage">
             <div className="battle-arena" ref={battleArenaRef}>
               <BoardGrid
+                // Remounts on a face change. `useCellInk` treats a prop change
+                // as ink arriving and a mount as ink already down, so without
+                // this key every piece on the face you walk onto would replay
+                // its fill as though it had just been placed.
+                key={isCubeMatch ? activeFace : 'played'}
                 title="Player Board"
                 subtitle={username.trim() || 'Player'}
-                grid={match.playerGrid}
+                grid={isCubeMatch ? faceCells(match.playerGrid, activeFace) : match.playerGrid}
+                columns={match.config.boardSize}
+                indexOffset={faceOffset}
+                navigation={
+                  isCubeMatch ? (
+                    <FaceArrows
+                      face={activeFace}
+                      locked={faceCamera.camera.locked}
+                      onMove={faceCamera.move}
+                    />
+                  ) : undefined
+                }
                 interactive={
                   match.isMyTurn &&
                   (!match.config.isOnline || !onlineInputPending)
@@ -828,7 +857,11 @@ function App({ initialAuthIntent = null }: AppProps) {
                   <BoardGrid
                     title="Opponent Board"
                     subtitle={opponentName}
-                    grid={match.opponentGrid}
+                    grid={
+                      isCubeMatch ? faceCells(match.opponentGrid, activeFace) : match.opponentGrid
+                    }
+                    columns={match.config.boardSize}
+                    indexOffset={faceOffset}
                     compact
                   />
                 </aside>
@@ -837,10 +870,27 @@ function App({ initialAuthIntent = null }: AppProps) {
               <RevealSnapshot
                 open={revealOpen}
                 opponentName={opponentName}
-                grid={match.opponentGrid}
+                grid={isCubeMatch ? faceCells(match.opponentGrid, activeFace) : match.opponentGrid}
+                columns={match.config.boardSize}
+                indexOffset={faceOffset}
                 seconds={match.config.revealSeconds}
                 onClose={onEndReveal}
               />
+
+              {/* In the arena rather than the controls column, because
+                * `.battle-stage` gives the controls their content height and
+                * hands the board whatever is left. Anything added below would
+                * be paid for out of the board. Wide screens float this beside
+                * the board for nothing, exactly as the opponent peek does. */}
+              {isCubeMatch ? (
+                <CubeMap
+                  face={activeFace}
+                  locked={faceCamera.camera.locked}
+                  cellCounts={faceCellCounts(match.playerGrid)}
+                  onJump={faceCamera.jump}
+                  onToggleLock={faceCamera.toggleLock}
+                />
+              ) : null}
             </div>
             <div className="battle-controls">
               {/* Hidden entirely when the variant has no power-ups, so a
@@ -916,22 +966,42 @@ function App({ initialAuthIntent = null }: AppProps) {
           </div>
           {/* The final boards are a score audit. Desecration constrains the next
             * move, and there is no next move, so it would only be noise here. */}
-          <div className="final-boards">
-            <BoardGrid
-              title=""
-              subtitle={username.trim() || 'Player'}
-              grid={match.playerGrid}
-              showDesecration={false}
-              destructionEffects={playerDestructionEffects}
-              scoreCountLabels={playerScoreCountLabels}
-            />
-            <BoardGrid
-              title=""
-              subtitle={opponentName}
-              grid={match.opponentGrid}
-              showDesecration={false}
-              scoreCountLabels={opponentScoreCountLabels}
-            />
+          <div className={`final-boards ${isCubeMatch ? 'final-boards-net' : ''}`}>
+            {isCubeMatch ? (
+              <>
+                <CubeNet
+                  subtitle={username.trim() || 'Player'}
+                  grid={match.playerGrid}
+                  scoreCountLabels={playerScoreCountLabels}
+                  destructionEffects={playerDestructionEffects}
+                />
+                <CubeNet
+                  subtitle={opponentName}
+                  grid={match.opponentGrid}
+                  scoreCountLabels={opponentScoreCountLabels}
+                />
+              </>
+            ) : (
+              <>
+                <BoardGrid
+                  title=""
+                  subtitle={username.trim() || 'Player'}
+                  grid={match.playerGrid}
+                  columns={match.config.boardSize}
+                  showDesecration={false}
+                  destructionEffects={playerDestructionEffects}
+                  scoreCountLabels={playerScoreCountLabels}
+                />
+                <BoardGrid
+                  title=""
+                  subtitle={opponentName}
+                  grid={match.opponentGrid}
+                  columns={match.config.boardSize}
+                  showDesecration={false}
+                  scoreCountLabels={opponentScoreCountLabels}
+                />
+              </>
+            )}
           </div>
         </section>
       ) : null}

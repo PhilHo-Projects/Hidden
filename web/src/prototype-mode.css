@@ -215,3 +215,418 @@
     transition: none;
   }
 }
+
+/*
+ * The played face, framed by its four exits.
+ *
+ * Two jobs, and they need different mechanisms. The *room* for the arrows is
+ * padding, so the board shrinks by exactly the space they take and the arena
+ * never has to know anyone's pixel width. Their *positions* are anchored to the
+ * measured board edge, because the arena is far wider than the board and grid
+ * tracks would pin them to the screen edges half a metre away from the thing
+ * they belong to.
+ *
+ * The frame's centre is the board's centre -- the padding is symmetric and the
+ * board is centred in what is left -- which is what lets all four arrows anchor
+ * off one measurement.
+ */
+.face-frame {
+  --face-arrow: clamp(2.25rem, 7vmin, 3rem);
+  --face-arrow-gap: clamp(0.25rem, 1vmin, 0.5rem);
+  position: relative;
+  display: grid;
+  padding-block: calc(var(--face-arrow) + var(--face-arrow-gap));
+  place-items: center;
+}
+
+/* Reproduces the rules the arena applies to an unframed board, which reach it as
+ * a direct child and stop matching once the frame is between them. */
+.battle-arena > .hidden-board > .face-frame {
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.face-frame > .hidden-board-grid {
+  height: 100%;
+  max-height: 29rem;
+  min-height: 0;
+  width: auto;
+  max-width: 100%;
+  aspect-ratio: 1;
+  grid-template-rows: repeat(var(--board-size, 3), minmax(0, 1fr));
+}
+
+.face-arrow {
+  position: absolute;
+  display: grid;
+  width: var(--face-arrow);
+  height: var(--face-arrow);
+  padding: 0;
+  border: 0;
+  background: none;
+  /* Dark grey, not white. These sit around the board, and the board's own cells
+   * have to stay the brightest thing on screen. */
+  color: #5e5e5e;
+  cursor: pointer;
+  place-items: center;
+  transition:
+    color 140ms ease,
+    opacity 140ms ease,
+    translate 140ms ease;
+}
+
+.face-arrow svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+/*
+ * Anchored to the board's edge, half an arrow-gap clear of it. `--board-side` is
+ * the square's measured side, published on the arena by `useBoardSideVar`, so a
+ * board that resized because the viewport did takes its arrows with it.
+ *
+ * The turn lives on the glyph rather than on the button, which leaves the
+ * button's own `transform` free for the centring these need.
+ */
+.face-arrow-north {
+  top: calc(50% - var(--board-side, 0px) / 2 - var(--face-arrow-gap) - var(--face-arrow));
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.face-arrow-south {
+  top: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.face-arrow-east {
+  top: 50%;
+  left: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+  transform: translateY(-50%);
+}
+
+.face-arrow-west {
+  top: 50%;
+  right: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+  transform: translateY(-50%);
+}
+
+.face-arrow-north svg { rotate: -90deg; }
+.face-arrow-south svg { rotate: 90deg; }
+.face-arrow-west svg { rotate: 180deg; }
+
+/* The nudge goes the way the arrow points, so it is a different axis and sign
+ * per side rather than one rule -- the glyph turned, the button did not. */
+.face-arrow:hover:not(:disabled),
+.face-arrow:focus-visible {
+  color: #c9c9c9;
+}
+
+.face-arrow-north:hover:not(:disabled),
+.face-arrow-north:focus-visible { translate: 0 -2px; }
+
+.face-arrow-south:hover:not(:disabled),
+.face-arrow-south:focus-visible { translate: 0 2px; }
+
+.face-arrow-east:hover:not(:disabled),
+.face-arrow-east:focus-visible { translate: 2px 0; }
+
+.face-arrow-west:hover:not(:disabled),
+.face-arrow-west:focus-visible { translate: -2px 0; }
+
+.face-arrow:active:not(:disabled) {
+  color: var(--hidden-white);
+}
+
+.face-arrow:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+/*
+ * Locked is the same mark at lower alpha, never a missing one. Every face on a
+ * cube has four neighbours, so an absent arrow would say something false.
+ */
+.face-arrow-locked {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .face-arrow {
+    transition: color 140ms ease;
+  }
+
+  .face-arrow:hover:not(:disabled),
+  .face-arrow:focus-visible,
+  .face-arrow-north:hover:not(:disabled),
+  .face-arrow-north:focus-visible,
+  .face-arrow-south:hover:not(:disabled),
+  .face-arrow-south:focus-visible,
+  .face-arrow-east:hover:not(:disabled),
+  .face-arrow-east:focus-visible,
+  .face-arrow-west:hover:not(:disabled),
+  .face-arrow-west:focus-visible {
+    translate: none;
+  }
+}
+
+/*
+ * The unfolded cube, sitting above the power-up tray.
+ *
+ * Flat on purpose. The braces already carry this mode's one visual idea, and a
+ * second hand-cut surface next to the board would compete with the board.
+ */
+/*
+ * Anchored to the board's left edge rather than placed in the controls column.
+ *
+ * `.battle-stage` is `minmax(0, 1fr) auto`: the controls keep their content
+ * height and the board takes what is left. A map in that column would be paid
+ * for out of the board, so on a screen wide enough it floats in the arena
+ * instead and costs it nothing — the same trick, and the same anchor, as
+ * `.opponent-peek` on the other side.
+ *
+ * The extra term past `--board-side / 2` clears the west arrow, whose track is
+ * outside the measured grid. It repeats `.face-frame`'s clamp because a custom
+ * property does not reach across to a sibling subtree.
+ */
+.cube-map {
+  --map-tile: clamp(2.2rem, 8vw, 2.9rem);
+  position: absolute;
+  top: 50%;
+  right: calc(
+    50% + var(--board-side, 0px) / 2 + clamp(2.25rem, 7vmin, 3rem) +
+      clamp(0.6rem, 1.6vw, 1.2rem)
+  );
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  transform: translateY(-50%);
+}
+
+.cube-map-header {
+  display: flex;
+  width: calc(var(--map-tile) * 3 + 0.6rem);
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cube-map-header p {
+  margin: 0;
+  color: var(--hidden-muted);
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+}
+
+.cube-map-grid {
+  display: grid;
+  grid-template-columns: repeat(3, var(--map-tile));
+  gap: 0.3rem;
+}
+
+.cube-map-blank {
+  display: block;
+}
+
+.cube-map-face {
+  display: grid;
+  aspect-ratio: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 0.1rem;
+  padding: 0;
+  border: 1px solid #3a3a3a;
+  background: #0d0d0d;
+  color: #8a8a8a;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.cube-map-face:hover:not(:disabled) {
+  border-color: #565656;
+  background: #1c1c1c;
+  color: var(--hidden-white);
+}
+
+.cube-map-face:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+/* Yellow, not red. Where you are standing is a selection, and selection is
+ * yellow everywhere in Hidden; the red in this mode means "not finished". */
+.cube-map-face-current {
+  border-color: var(--hidden-yellow);
+  background: #171308;
+  color: var(--hidden-white);
+}
+
+.cube-map-label {
+  font-size: 0.45rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.cube-map-count {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.cube-map-locked .cube-map-face {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.cube-map-note {
+  margin: 0;
+  max-width: calc(var(--map-tile) * 3 + 0.6rem);
+  color: var(--hidden-muted);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/*
+ * The one piece of colour in the whole frame. It has to survive without hue as
+ * well: the body fills when locked, and the word says which it is.
+ */
+.padlock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid currentColor;
+  background: none;
+  color: var(--hidden-green);
+  cursor: pointer;
+  font-family: var(--font-block);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.padlock svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.padlock-shackle,
+.padlock-body {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.padlock-locked {
+  color: var(--hidden-red);
+}
+
+.padlock-locked .padlock-body {
+  fill: currentColor;
+}
+
+.padlock:hover {
+  background: #1c1c1c;
+}
+
+.padlock:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cube-map-face,
+  .padlock {
+    transition: none;
+  }
+}
+
+/*
+ * Below this there is no room beside the board, so the arena splits and the
+ * board pays for the map after all -- but only here, and by exactly the map's
+ * height rather than by the controls column's whole growth.
+ */
+@media (max-width: 900px) {
+  .battle-arena {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0.4rem;
+  }
+
+  .cube-map {
+    position: static;
+    transform: none;
+    justify-self: center;
+  }
+
+  /* Six tiles in a row rather than a four-row cross: the cross is the right
+   * picture and the wrong shape for a budget measured in vertical pixels. The
+   * blanks go, and the reading order stays the cross's own. */
+  .cube-map-grid {
+    --map-tile: clamp(1.9rem, 11vw, 2.4rem);
+    grid-template-columns: repeat(6, var(--map-tile));
+  }
+
+  .cube-map-blank {
+    display: none;
+  }
+
+  .cube-map-note {
+    display: none;
+  }
+}
+
+/*
+ * The finished cube, unfolded. Same cross as the in-match map, because a second
+ * arrangement would be a second thing to learn for no gain.
+ */
+.cube-net {
+  --net-face: clamp(3.4rem, 17vw, 5.25rem);
+  display: grid;
+  grid-template-columns: repeat(3, var(--net-face));
+  gap: 0.45rem;
+  justify-content: center;
+}
+
+.cube-net-blank {
+  display: block;
+}
+
+/* The face name is the only label a net tile needs, and six brush-set player
+ * names stacked down a column would be six copies of the same word. */
+.cube-net .hidden-board {
+  gap: 0.2rem;
+}
+
+.cube-net .hidden-board-header {
+  min-height: 0;
+}
+
+.cube-net .hidden-board-header h3 {
+  color: var(--hidden-muted);
+  font-family: var(--font-block);
+  font-size: 0.45rem;
+  letter-spacing: 0.1em;
+  text-shadow: none;
+}
+
+/* Two nets do not fit side by side on a phone, and being able to read the audit
+ * is worth more than being able to compare the two at a glance. */
+@media (max-width: 900px) {
+  .final-boards-net {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

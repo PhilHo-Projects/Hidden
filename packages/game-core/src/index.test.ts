@@ -921,3 +921,73 @@ describe('game variant', () => {
     assert.equal(state.mode.topology.winningPatterns.length, 8)
   })
 })
+
+describe('public surface', () => {
+  it('exports exactly the documented runtime names', async () => {
+    const surface = await import('./index.ts')
+
+    // Sorted so the list reads as a set rather than as a file order. Adding a
+    // name here is a deliberate act: everything in this list is something a
+    // stored match, the server, or the client may already depend on.
+    assert.deepEqual(Object.keys(surface).sort(), [
+      'CUBE_ADJACENCY',
+      'CUBE_FACES',
+      'CUBE_FACE_CELLS',
+      'CUBE_LOCATION_COUNT',
+      'DEFAULT_GAME_CONFIG',
+      'ENGINE_ID',
+      'ENGINE_REVISION',
+      'GAME_CORE_VERSION',
+      'MAX_REVEAL_SECONDS',
+      'MAX_TURN_SECONDS',
+      'MIN_REVEAL_SECONDS',
+      'MIN_TURN_SECONDS',
+      'ONLINE_MIN_TURN_SECONDS',
+      'PROTOTYPE_BOARD_SIZE',
+      'PROTOTYPE_ROUNDS',
+      'applyCommand',
+      'applyTimeout',
+      'cellOf',
+      'clampGameConfig',
+      'clampOnlineGameConfig',
+      'createCubeTopology',
+      'createGame',
+      'createTopology',
+      'decodeGameConfig',
+      'defaultConfigForVariant',
+      'faceIndex',
+      'faceOf',
+      'firstLocationOfFace',
+      'neighbourFace',
+      'topologyForConfig',
+    ])
+  })
+})
+
+describe('a prototype match runs on a cube', () => {
+  it('gives each seat 54 locations', () => {
+    const state = createGame(baseSpec({ config: defaultConfigForVariant('prototype') }))
+
+    assert.equal(state.boards[0].locations.length, 54)
+    assert.equal(state.boards[1].locations.length, 54)
+    assert.equal(state.boards[0].locations[53].locationId, 53)
+  })
+
+  it('accepts a placement on the far face', () => {
+    const state = createGame(baseSpec({ config: defaultConfigForVariant('prototype') }))
+    const result = applyCommand(state, state.activeSeat, {
+      type: 'place',
+      locationId: 53,
+      symbol: 'rock',
+    })
+
+    assert.equal(result.accepted, true)
+    assert.equal(result.state.boards[state.activeSeat].locations[53].symbol, 'rock')
+  })
+
+  it('leaves a main match on nine', () => {
+    const state = createGame(baseSpec())
+
+    assert.equal(state.boards[0].locations.length, 9)
+  })
+})
