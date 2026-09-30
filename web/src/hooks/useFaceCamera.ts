@@ -21,7 +21,7 @@ export interface FaceCameraControls {
  * should not have to click a cell before the arrow keys work. That reach is also
  * why it has to stand down for anything being typed into.
  */
-function isTypingTarget(target: EventTarget | null) {
+export function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
   if (target.isContentEditable) return true
   return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
