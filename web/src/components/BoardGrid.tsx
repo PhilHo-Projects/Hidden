@@ -54,6 +54,12 @@ interface BoardGridProps {
   selectedSymbol?: ClassicSymbol | null
   destructionEffects?: Partial<Record<number, CellDestructionEffect>>
   scoreCountLabels?: Partial<Record<number, number>>
+  /**
+   * Degrees clockwise to turn the grid. The 3D view can show a face rolled, and
+   * a flat copy of that face -- the opponent peek, the reveal snapshot -- has to
+   * be turned the same way or the two cannot be compared at a glance.
+   */
+  rotation?: number
   onSelect?: (index: number) => void
 }
 
@@ -124,6 +130,7 @@ export function BoardGrid({
   selectedSymbol,
   destructionEffects = {},
   scoreCountLabels = {},
+  rotation = 0,
   onSelect,
 }: BoardGridProps) {
   const desecrationKey = grid.cells
@@ -138,10 +145,12 @@ export function BoardGrid({
 
   const gridElement = (
     <div
-      className="hidden-board-grid"
+      // Exact class when unrotated: the arena and its tests match it verbatim.
+      className={rotation ? 'hidden-board-grid hidden-board-grid-rotated' : 'hidden-board-grid'}
       style={
         {
           '--board-size': String(columns),
+          ...(rotation ? { '--grid-rotation': `${rotation}deg` } : {}),
         } as CSSProperties
       }
     >

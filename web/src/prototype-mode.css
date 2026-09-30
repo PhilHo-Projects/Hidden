@@ -703,3 +703,11 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/*
+ * A flat copy of a face the 3D cube is showing rolled. `rotate` rather than
+ * `transform`, so it composes with anything else that transforms the grid.
+ */
+.hidden-board-grid-rotated {
+  rotate: var(--grid-rotation);
+}

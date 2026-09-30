@@ -103,3 +103,21 @@ describe('tapping an arrow', () => {
     expect(moves).toEqual([])
   })
 })
+
+describe('arrows on a rolled face', () => {
+  it('names what is on screen that way when told', () => {
+    // In the 3D view the front face can arrive turned, so screen-north is not
+    // the adjacency table's north. The caller says what is actually there.
+    const markup = renderToStaticMarkup(
+      createElement(FaceArrows, {
+        face: 'up' as const,
+        locked: false,
+        onMove: () => {},
+        neighbours: { north: 'left', east: 'back', south: 'right', west: 'home' },
+      }),
+    )
+    const labels = [...markup.matchAll(/aria-label="Move to ([A-Z]+)"/g)].map((match) => match[1])
+
+    expect(labels).toEqual(['LEFT', 'BACK', 'RIGHT', 'HOME'])
+  })
+})

@@ -24,6 +24,11 @@ interface FaceArrowsProps {
   face: CubeFace
   locked: boolean
   onMove: (direction: FaceDirection) => void
+  /**
+   * What lies each way on screen, when that is not `CUBE_ADJACENCY`'s answer --
+   * a face the 3D cube has arrived on rolled. Absent, the table decides.
+   */
+  neighbours?: Readonly<Record<FaceDirection, CubeFace>>
 }
 
 /**
@@ -32,7 +37,7 @@ interface FaceArrowsProps {
  * Drawn from `CUBE_ADJACENCY`, not from the map, so west from `up` offers
  * `left` even though the cross draws the two apart.
  */
-export function FaceArrows({ face, locked, onMove }: FaceArrowsProps) {
+export function FaceArrows({ face, locked, neighbours, onMove }: FaceArrowsProps) {
   return (
     <>
       {DIRECTIONS.map((direction) => (
@@ -42,7 +47,7 @@ export function FaceArrows({ face, locked, onMove }: FaceArrowsProps) {
           className={`face-arrow face-arrow-${direction} ${locked ? 'face-arrow-locked' : ''}`}
           disabled={locked}
           onClick={() => onMove(direction)}
-          aria-label={`Move to ${FACE_LABELS[neighbourFace(face, direction)]}`}
+          aria-label={`Move to ${FACE_LABELS[neighbours?.[direction] ?? neighbourFace(face, direction)]}`}
         >
           <svg viewBox="0 0 24 64" aria-hidden="true" focusable="false">
             <path d={BRACE_PATH} />
