@@ -92,6 +92,7 @@ onto adjacent faces.
 - Design: [`superpowers/specs/2026-09-11-cube-prototype-mode-design.md`](superpowers/specs/2026-09-11-cube-prototype-mode-design.md)
 - Phase 0 plan: [`superpowers/plans/2026-09-11-cube-prototype-phase-0.md`](superpowers/plans/2026-09-11-cube-prototype-phase-0.md)
 - Phase 1 plan: [`superpowers/plans/2026-09-12-cube-prototype-phase-1.md`](superpowers/plans/2026-09-12-cube-prototype-phase-1.md)
+- **3D view** — design [`superpowers/specs/2026-09-30-cube-3d-view-design.md`](superpowers/specs/2026-09-30-cube-3d-view-design.md), plan [`superpowers/plans/2026-09-30-cube-3d-view.md`](superpowers/plans/2026-09-30-cube-3d-view.md). PROTOTYPES in the mode picker now offers CUBE · FLAT and CUBE · 3D over the same `prototype` match; the view is client-only, so flat and 3D players can meet online. three.js loads lazily, only for the 3D view. The open question it exists to answer: whether arriving on a face rolled feels natural or disorienting. The model is built by `art/lab/cube-3d/blender/build_cube.py`.
 
 The cube is open and navigable. All six faces are playable from turn 1, the
 board shows one face at a time, and four brace arrows plus arrow keys, WASD, and

@@ -1,7 +1,8 @@
 # Cube 3D view design
 
 Date: 2026-09-30
-Status: approved in brainstorm; not started.
+Status: built on branch `cube-3d-prototype`. Plan:
+[`../plans/2026-09-30-cube-3d-view.md`](../plans/2026-09-30-cube-3d-view.md).
 
 ## Purpose
 
@@ -70,20 +71,29 @@ the match starts.
 
 ## Architecture
 
-Everything 3D lives in `web/src/cube3d/`. Only two files there are imported by
-the main chunk; the rest load through one `React.lazy` boundary.
+Everything 3D lives in `web/src/cube3d/`. The frames are ordinary DOM in the
+main chunk; only the two canvases, and everything that imports three.js, load
+through `lazy.ts`. (As built. The design first put the whole frame behind the
+lazy boundary; keeping the frame eager means the board lays out and its arrows
+work before three.js arrives, and the Suspense fallback needs no placeholder.)
 
 | File | Chunk | What it is |
 | --- | --- | --- |
 | `orientation.ts` | main | Pure. The 24 orientations and quarter turns. No three.js import. |
 | `useCubeOrientation.ts` | main | The 3D counterpart of `useFaceCamera`: holds an orientation, binds the keys. |
-| `CubeBoard3D.tsx` | lazy | React wrapper for the main cube. |
-| `MiniCube.tsx` | lazy | React wrapper for the mini cube. |
+| `CubeBoard3D.tsx` | main | The board's frame: header, arrows, roll buttons, the square. |
+| `MiniCube.tsx` | main | The mini cube's panel. |
+| `Cube3DBoundary.tsx` | main | Error boundary and the `USE FLAT VIEW` fallback. |
+| `lazy.ts` | main | The only door to three.js: `React.lazy` wrappers and `preloadCube3D`. |
+| `cube3d.css` | main | Stage, canvas overhang, roll buttons, mini panel, fallback. |
+| `BoardCanvas.tsx` | lazy | The main cube's canvas, bound to a `CubeScene`. |
+| `MiniCanvas.tsx` | lazy | The mini cube's canvas. |
 | `scene.ts` | lazy | Imperative three.js: renderer, lights, model, tiles, picking, tweens. |
+| `model.ts` | lazy | Loads and caches the `.glb` and the shield texture. |
 | `tileVisuals.ts` | lazy | Pure. `CellState` → what a tile should look like. |
 
 `App.tsx` owns `cubeView` and, for a prototype match, renders either today's
-flat board or the lazy 3D pair. Both views read the same `match`, call the same
+flat board or the 3D pair. Both views read the same `match`, call the same
 `onCellSelect`, and use the same `useDestructionEffects` output.
 
 ### Data flow
@@ -93,7 +103,7 @@ useCubeOrientation ── orientation ──► CubeBoard3D ──► scene.setO
         │                                  │
         └── frontFace(orientation) ──► activeFace ──► opponent peek, reveal snapshot
                                            │
-match.playerGrid (54 cells) ───────────────┴──► scene.setCells ──► tiles
+match.playerGrid (54 cells) ───────────────┴──► scene.setTiles ──► tiles
 scene pick (idle only) ──► onCellSelect(locationId)          (same path as BoardGrid)
 MiniCube tap ──► orientation.jumpTo(face) ──► CubeBoard3D animates
 ```
@@ -129,7 +139,9 @@ mean equality is exact and repeated turns cannot drift.
   reached by the smallest rotation from `o`. An adjacent face is therefore one
   quarter turn; the opposite face is a half turn about the screen's vertical
   axis. Ties are broken by a fixed order, so it is deterministic.
-- `toQuaternion(o)`: `[x, y, z, w]` for the scene.
+
+The module stays free of three.js; the scene turns an orientation into a
+quaternion with three's own `Matrix4`.
 
 The flat view's `CUBE_ADJACENCY` navigation is untouched. The two models agree
 whenever the front face is upright, and a test asserts exactly that.
@@ -222,12 +234,16 @@ in that face's frame — is asserted by a test that parses the `.glb` directly.
 - `three` becomes a runtime dependency of `web`, with `@types/three` as a dev
   dependency. The scene imports `GLTFLoader` and `RoomEnvironment` from
   `three/examples/jsm/`.
-- `CubeBoard3D` and `MiniCube` are loaded with `React.lazy` behind one
-  `Suspense` boundary. The fallback holds the board slot's size, so nothing
-  reflows when the chunk arrives.
+- The two canvases are loaded with `React.lazy`, each behind its own `Suspense`
+  inside the frame's already-sized square, so nothing reflows when the chunk
+  arrives.
 - Budget: the main entry chunk grows by no more than 4 KB gzipped. The lazy 3D
-  chunk is expected at roughly 130–150 KB gzipped. Both numbers are measured from
-  `npm run build` output and recorded in the PR.
+  chunk was expected at roughly 130–150 KB gzipped.
+- Measured (gzip of `npm run build` output): main chunk 117,145 → 119,901 bytes,
+  +2.7 KB, inside the budget. The lazy 3D chunk is 162,424 bytes plus two ~0.6 KB
+  canvas chunks -- about 14 KB over the estimate, because three.js's
+  `WebGLRenderer` barely tree-shakes. Only players who choose the 3D view fetch
+  it. The model adds a 62 KB `.glb`, fetched the same way.
 
 ## Failure handling
 
