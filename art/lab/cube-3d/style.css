@@ -1,0 +1,203 @@
+@font-face {
+  font-family: "Edo SZ";
+  src: url("/game/fonts/edosz.woff2") format("woff2");
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/game/fonts/jetbrains-mono-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: block;
+}
+
+:root {
+  --yellow: #d7af13;
+  --ink: #e9e9ea;
+  --panel: rgba(3, 3, 3, 0.82);
+  --line: rgba(255, 255, 255, 0.12);
+  /* Set by main.js to the on-screen size of the front face, so the turn
+     buttons sit just outside it at any window size. */
+  --face: 360px;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at center, rgba(3, 3, 3, 0.35), rgba(3, 3, 3, 0.9) 70%),
+    #030303 url("/game/backgrounds/hidden-landscape.webp") center / cover no-repeat;
+  color: var(--ink);
+  font: 700 13px/1.5 "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+
+@media (orientation: portrait) {
+  body { background-image:
+    radial-gradient(ellipse at center, rgba(3, 3, 3, 0.35), rgba(3, 3, 3, 0.9) 70%),
+    url("/game/backgrounds/hidden-portrait.webp"); }
+}
+
+/* ── stage ─────────────────────────────────────────────── */
+
+.stage {
+  position: fixed;
+  inset: 0;
+}
+
+#scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+#scene.can-paint { cursor: pointer; }
+
+.status {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+.status:empty { display: none; }
+.status.error { color: #ff6b6b; }
+
+/* ── turn buttons ──────────────────────────────────────── */
+
+.turn {
+  --gap: 34px;
+  --dx: 0px;
+  --dy: 0px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  transform: translate(-50%, -50%) translate(var(--dx), var(--dy));
+  border: 2px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.turn:hover { border-color: var(--yellow); color: var(--yellow); }
+.turn:active { background: rgba(215, 175, 19, 0.18); }
+.turn:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+
+.turn[data-turn="north"] { --dy: calc(var(--face) / -2 - var(--gap)); }
+.turn[data-turn="south"] { --dy: calc(var(--face) / 2 + var(--gap)); }
+.turn[data-turn="west"]  { --dx: calc(var(--face) / -2 - var(--gap)); }
+.turn[data-turn="east"]  { --dx: calc(var(--face) / 2 + var(--gap)); }
+.turn[data-turn="ccw"]   { --dx: calc(var(--face) / -2 - var(--gap)); --dy: calc(var(--face) / 2 + var(--gap)); }
+.turn[data-turn="cw"]    { --dx: calc(var(--face) / 2 + var(--gap));  --dy: calc(var(--face) / 2 + var(--gap)); }
+.roll { font-size: 20px; }
+
+/* ── HUD ───────────────────────────────────────────────── */
+
+.hud {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  pointer-events: none;
+}
+.hud > * { pointer-events: auto; }
+
+.hud-top { top: 16px; align-items: flex-start; }
+.hud-bottom { bottom: 16px; flex-wrap: wrap; }
+
+.back {
+  padding: 8px 12px;
+  border: 2px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  text-decoration: none;
+}
+.back:hover { border-color: var(--yellow); color: var(--yellow); }
+
+.facing {
+  display: grid;
+  padding: 8px 14px 10px;
+  border-left: 4px solid var(--yellow);
+  background: var(--panel);
+  min-width: 11rem;
+}
+.eyebrow {
+  color: var(--yellow);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+#front-face {
+  font-family: "Edo SZ", Impact, sans-serif;
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.05;
+  text-shadow: 3px 3px 0 #000;
+}
+.roll-state { color: rgba(255, 255, 255, 0.55); font-size: 11px; font-weight: 400; }
+.roll-state.rolled { color: var(--yellow); }
+
+.readout {
+  margin: 0 0 0 auto;
+  padding: 8px 12px;
+  background: var(--panel);
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+}
+
+.swatches { display: flex; gap: 8px; }
+.swatch {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 3px solid transparent;
+  outline: 2px solid var(--line);
+  background: var(--color);
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.7);
+  font: inherit;
+}
+.swatch[aria-pressed="true"] { border-color: #030303; outline-color: var(--yellow); }
+
+.tools { display: flex; gap: 8px; }
+.tools button {
+  padding: 9px 12px;
+  border: 2px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.tools button:hover { border-color: var(--yellow); color: var(--yellow); }
+
+.keys {
+  margin: 0 0 0 auto;
+  padding: 8px 12px;
+  background: var(--panel);
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 400;
+  font-size: 11px;
+}
+kbd {
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .keys, .readout { display: none; }
+}
