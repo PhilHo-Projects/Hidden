@@ -72,7 +72,8 @@
  * but the input is what a keyboard actually drives, so it has to stay in the
  * accessibility tree and stay focusable.
  */
-.mode-select-option input {
+.mode-select-option input,
+.mode-select-view input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -160,6 +161,77 @@
 }
 
 /*
+ * The prototypes, as a second row under the first. Indented behind a red rule
+ * so it reads as belonging to PROTOTYPES rather than as two more modes; the
+ * same box language as the options above, one step smaller. `flex-basis` does
+ * the stacking on a narrow screen.
+ */
+.mode-select-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-left: 0.55rem;
+  border-left: 3px solid var(--hidden-red);
+  padding-left: 0.6rem;
+}
+
+.mode-select-view {
+  position: relative;
+  display: inline-flex;
+  min-height: 2.6rem;
+  flex: 1 1 12rem;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #2e2e2e;
+  background: #0d0d0d;
+  color: #b5b5b5;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.mode-select-view:hover {
+  border-color: #565656;
+  background: #1c1c1c;
+  color: #fff;
+}
+
+.mode-select-view-active {
+  border-color: var(--mode-accent);
+  background: var(--mode-accent-fill);
+  color: var(--hidden-white);
+}
+
+.mode-select-view .mode-select-label {
+  font-size: 0.68rem;
+}
+
+.mode-select-view-active .mode-select-description {
+  color: #b9b9b9;
+}
+
+/* A smaller cousin of UNDER DEVELOPMENT: outlined rather than filled, so the
+ * filled tag above stays the loudest thing in the picker. */
+.mode-select-view-tag {
+  margin-left: auto;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid var(--hidden-red);
+  color: #e0a3a3;
+  font-size: 0.48rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.25;
+}
+
+.mode-select-view:focus-within {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+/*
  * A running match cannot change variant, so this never appears or disappears
  * mid-play. Scoped under `.battle-header` because that selector styles its own
  * `p` elements at higher specificity than a bare class -- without the parent
@@ -211,7 +283,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mode-select-option {
+  .mode-select-option,
+  .mode-select-view {
     transition: none;
   }
 }
