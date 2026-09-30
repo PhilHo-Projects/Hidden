@@ -33,6 +33,12 @@ import {
   type UiStatus,
 } from './components/PregameUi'
 import { ModeSelect } from './components/ModeSelect'
+import { CubeBoard3D } from './cube3d/CubeBoard3D'
+import { MiniCube } from './cube3d/MiniCube'
+import { preloadCube3D } from './cube3d/lazy'
+import { frontFace, rollDegrees } from './cube3d/orientation'
+import { useCubeOrientation } from './cube3d/useCubeOrientation'
+import { readCubeView, writeCubeView, type CubeView } from './game/cubeView'
 import { COLOR_BY_SYMBOL } from './game/constants'
 import { faceCellCounts, faceCells } from './game/faceNavigation'
 import { createMatchHistoryClient } from './history/historyClient'
@@ -116,6 +122,13 @@ function App({ initialAuthIntent = null }: AppProps) {
   // One config object rather than one state hook per knob: the knob count grows
   // with every rule experiment, the call sites should not.
   const [config, setConfig] = useState<GameConfig>(DEFAULT_GAME_CONFIG)
+  // How the cube prototype is drawn. Client-only: both views play the same
+  // `prototype` match, so this never reaches the config or the wire.
+  const [cubeView, setCubeView] = useState<CubeView>(readCubeView)
+  const chooseCubeView = useCallback((view: CubeView) => {
+    setCubeView(view)
+    writeCubeView(view)
+  }, [])
   const {
     lobbyGames,
     hostedCode,
@@ -236,12 +249,24 @@ function App({ initialAuthIntent = null }: AppProps) {
 
   useBoardSideVar(battleArenaRef, screen === 'battle')
 
+  // Start three.js downloading as soon as a 3D match is possible, so the match
+  // does not wait for it.
+  useEffect(() => {
+    if (config.variant === 'prototype' && cubeView === '3d') preloadCube3D()
+  }, [config.variant, cubeView])
+
   // `isPrototypeMatch` is the only thing that turns any of the cube on. `main`
   // renders exactly as it did before, down to the unframed board.
   const isCubeMatch = isPrototypeMatch(match)
-  const faceCamera = useFaceCamera(screen === 'battle' && isCubeMatch)
-  const activeFace = faceCamera.camera.face
+  const isCube3d = isCubeMatch && cubeView === '3d'
+  const faceCamera = useFaceCamera(screen === 'battle' && isCubeMatch && !isCube3d)
+  const cubeOrientation = useCubeOrientation(screen === 'battle' && isCube3d)
+  // Whichever view is on, the face in front drives the opponent peek and the
+  // reveal snapshot. In 3D that face may be rolled, and the flat copies turn to
+  // match it.
+  const activeFace = isCube3d ? frontFace(cubeOrientation.orientation) : faceCamera.camera.face
   const faceOffset = isCubeMatch ? firstLocationOfFace(activeFace) : 0
+  const faceRotation = isCube3d ? rollDegrees(cubeOrientation.orientation) : 0
 
   const openAccount = useCallback((mode: AccountMode) => {
     resetForAccountChange()
@@ -579,7 +604,12 @@ function App({ initialAuthIntent = null }: AppProps) {
           <GameMasthead compact />
           <GuestIdentity name={username} />
           <HowToPlayTrigger onClick={() => setHowToPlayOpen(true)} />
-          <ModeSelect value={config.variant} onChange={applyVariant} />
+          <ModeSelect
+            value={config.variant}
+            view={cubeView}
+            onChange={applyVariant}
+            onViewChange={chooseCubeView}
+          />
           <div className="action-grid online-action-grid">
             <ActionChoice
               label="QUICK MATCH"
@@ -743,7 +773,12 @@ function App({ initialAuthIntent = null }: AppProps) {
             <p className="panel-description">
               Learn the board or tune the rules before going online.
             </p>
-            <ModeSelect value={config.variant} onChange={applyVariant} />
+            <ModeSelect
+              value={config.variant}
+              view={cubeView}
+              onChange={applyVariant}
+              onViewChange={chooseCubeView}
+            />
             <BrushButton
               className="big-action"
               onClick={() => void startOffline(config)}
@@ -804,7 +839,7 @@ function App({ initialAuthIntent = null }: AppProps) {
               * mode this is, so it stays one short line that cannot wrap. */}
             {isPrototypeMatch(match) ? (
               <p className="prototype-banner" role="note">
-                Prototype · under development
+                {isCube3d ? 'Prototype · 3D · under development' : 'Prototype · under development'}
               </p>
             ) : null}
             <p>{statusText}</p>
@@ -821,34 +856,51 @@ function App({ initialAuthIntent = null }: AppProps) {
 
           <div className="battle-stage">
             <div className="battle-arena" ref={battleArenaRef}>
-              <BoardGrid
-                // Remounts on a face change. `useCellInk` treats a prop change
-                // as ink arriving and a mount as ink already down, so without
-                // this key every piece on the face you walk onto would replay
-                // its fill as though it had just been placed.
-                key={isCubeMatch ? activeFace : 'played'}
-                title="Player Board"
-                subtitle={username.trim() || 'Player'}
-                grid={isCubeMatch ? faceCells(match.playerGrid, activeFace) : match.playerGrid}
-                columns={match.config.boardSize}
-                indexOffset={faceOffset}
-                navigation={
-                  isCubeMatch ? (
-                    <FaceArrows
-                      face={activeFace}
-                      locked={faceCamera.camera.locked}
-                      onMove={faceCamera.move}
-                    />
-                  ) : undefined
-                }
-                interactive={
-                  match.isMyTurn &&
-                  (!match.config.isOnline || !onlineInputPending)
-                }
-                selectedSymbol={match.selectedSymbol}
-                destructionEffects={playerDestructionEffects}
-                onSelect={onCellSelect}
-              />
+              {isCube3d ? (
+                <CubeBoard3D
+                  subtitle={username.trim() || 'Player'}
+                  grid={match.playerGrid}
+                  orientation={cubeOrientation.orientation}
+                  interactive={
+                    match.isMyTurn &&
+                    (!match.config.isOnline || !onlineInputPending)
+                  }
+                  selectedSymbol={match.selectedSymbol}
+                  destructionEffects={playerDestructionEffects}
+                  onSelect={onCellSelect}
+                  onTurn={cubeOrientation.turn}
+                  onUseFlat={() => chooseCubeView('flat')}
+                />
+              ) : (
+                <BoardGrid
+                  // Remounts on a face change. `useCellInk` treats a prop change
+                  // as ink arriving and a mount as ink already down, so without
+                  // this key every piece on the face you walk onto would replay
+                  // its fill as though it had just been placed.
+                  key={isCubeMatch ? activeFace : 'played'}
+                  title="Player Board"
+                  subtitle={username.trim() || 'Player'}
+                  grid={isCubeMatch ? faceCells(match.playerGrid, activeFace) : match.playerGrid}
+                  columns={match.config.boardSize}
+                  indexOffset={faceOffset}
+                  navigation={
+                    isCubeMatch ? (
+                      <FaceArrows
+                        face={activeFace}
+                        locked={faceCamera.camera.locked}
+                        onMove={faceCamera.move}
+                      />
+                    ) : undefined
+                  }
+                  interactive={
+                    match.isMyTurn &&
+                    (!match.config.isOnline || !onlineInputPending)
+                  }
+                  selectedSymbol={match.selectedSymbol}
+                  destructionEffects={playerDestructionEffects}
+                  onSelect={onCellSelect}
+                />
+              )}
               {/* The variant that never hid the board keeps its standing panel.
                 * Only the reveal power-up opens the timed snapshot below. */}
               {showOpponentPanel ? (
@@ -862,6 +914,7 @@ function App({ initialAuthIntent = null }: AppProps) {
                     }
                     columns={match.config.boardSize}
                     indexOffset={faceOffset}
+                    rotation={faceRotation}
                     compact
                   />
                 </aside>
@@ -874,6 +927,7 @@ function App({ initialAuthIntent = null }: AppProps) {
                 columns={match.config.boardSize}
                 indexOffset={faceOffset}
                 seconds={match.config.revealSeconds}
+                rotation={faceRotation}
                 onClose={onEndReveal}
               />
 
@@ -882,7 +936,13 @@ function App({ initialAuthIntent = null }: AppProps) {
                 * hands the board whatever is left. Anything added below would
                 * be paid for out of the board. Wide screens float this beside
                 * the board for nothing, exactly as the opponent peek does. */}
-              {isCubeMatch ? (
+              {isCube3d ? (
+                <MiniCube
+                  grid={match.playerGrid}
+                  activeFace={activeFace}
+                  onJump={cubeOrientation.jump}
+                />
+              ) : isCubeMatch ? (
                 <CubeMap
                   face={activeFace}
                   locked={faceCamera.camera.locked}
