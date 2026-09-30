@@ -397,7 +397,7 @@ canvas.addEventListener('click', (event) => {
 // ── load ────────────────────────────────────────────────────────────────────
 
 new GLTFLoader().load(
-  'assets/cube.glb',
+  '/game/models/cube.glb',
   (gltf) => {
     let body = null
     gltf.scene.traverse((object) => {
@@ -421,7 +421,7 @@ new GLTFLoader().load(
   },
   undefined,
   (error) => {
-    statusEl.textContent = `Could not load assets/cube.glb — ${error.message ?? error}`
+    statusEl.textContent = `Could not load /game/models/cube.glb — ${error.message ?? error}`
     statusEl.classList.add('error')
   },
 )

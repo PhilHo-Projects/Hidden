@@ -1,12 +1,12 @@
 """
 Builds the cube for the cube-3d lab prototype: `cube.blend` next to this file,
-and `../assets/cube.glb`, which is what the page loads.
+and `web/src/assets/models/cube.glb`, which the game and the lab page both load.
 
     "F:/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python build_cube.py
 
 This script is the source of truth. Tweak the constants and re-run rather than
 hand-editing the .blend, or the next run will overwrite your edits. If you do
-sculpt something by hand, export it to ../assets/cube.glb yourself and stop
+sculpt something by hand, export it to web/src/assets/models/cube.glb yourself and stop
 running this.
 
 What the page relies on (anything else is fair game):
@@ -28,7 +28,9 @@ from mathutils import Matrix, Vector
 
 HERE = Path(__file__).resolve().parent
 BLEND_PATH = HERE / "cube.blend"
-GLB_PATH = HERE.parent / "assets" / "cube.glb"
+# The app’s copy is the only copy. The lab page reads it through the lab
+# server’s /game/ mapping, so the prototype and the game can never disagree.
+GLB_PATH = HERE.parents[3] / "web" / "src" / "assets" / "models" / "cube.glb"
 
 HALF = 1.0            # the body spans -1..1
 BODY_BEVEL = 0.10
