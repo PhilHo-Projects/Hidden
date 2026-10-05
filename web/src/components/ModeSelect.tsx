@@ -40,6 +40,11 @@ interface ModeSelectProps {
  * usual yellow. Yellow everywhere else in Hidden means "selected, and fine";
  * this mode is not fine, and making the control itself carry the hazard is what
  * stops it being entered by accident.
+ *
+ * The two modes stack rather than sitting side by side, and the views open
+ * nested under PROTOTYPES rather than beside it. Side by side claimed the two
+ * were the same kind of choice; they are not. MAIN is a game, PROTOTYPES is a
+ * drawer, and what is in the drawer belongs to it.
  */
 export function ModeSelect({ value, view, onChange, onViewChange }: ModeSelectProps) {
   const hazard = value === 'prototype'
@@ -53,7 +58,7 @@ export function ModeSelect({ value, view, onChange, onViewChange }: ModeSelectPr
         {VARIANTS.map((variant) => (
           <label
             key={variant}
-            className={`mode-select-option ${
+            className={`mode-select-option mode-select-option-${variant} ${
               value === variant ? 'mode-select-option-active' : ''
             }`}
           >
@@ -78,7 +83,7 @@ export function ModeSelect({ value, view, onChange, onViewChange }: ModeSelectPr
         ))}
       </div>
       {hazard ? (
-        <>
+        <div className="mode-select-nest">
           <div className="mode-select-views" role="radiogroup" aria-label="Prototype">
             {CUBE_VIEWS.map((option) => (
               <label
@@ -105,7 +110,7 @@ export function ModeSelect({ value, view, onChange, onViewChange }: ModeSelectPr
           <p className="mode-select-warning" role="note">
             {PROTOTYPE_WARNING}
           </p>
-        </>
+        </div>
       ) : null}
     </section>
   )

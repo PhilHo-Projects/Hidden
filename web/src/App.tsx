@@ -785,10 +785,16 @@ function App({ initialAuthIntent = null }: AppProps) {
             >
               START PRACTICE
             </BrushButton>
-            <AdvancedSettings
-              config={config}
-              onConfigChange={applyConfigPatch}
-            />
+            {/* MAIN only, for now. The panel's knobs — board size, streak,
+              * rounds — are the shipped game's, and `prototype` clamps most of
+              * them away. Each prototype gets its own panel further down when
+              * there is something on it worth tuning. */}
+            {config.variant === 'main' ? (
+              <AdvancedSettings
+                config={config}
+                onConfigChange={applyConfigPatch}
+              />
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -940,6 +946,7 @@ function App({ initialAuthIntent = null }: AppProps) {
                 <MiniCube
                   grid={match.playerGrid}
                   activeFace={activeFace}
+                  orientation={cubeOrientation.orientation}
                   onJump={cubeOrientation.jump}
                 />
               ) : isCubeMatch ? (

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CubeFace } from '@hidden/game-core'
 import type { GridState } from '../game/types'
+import type { Orientation } from './orientation'
 import { CubeScene } from './scene'
 import { tileVisual } from './tileVisuals'
 
@@ -10,10 +11,11 @@ const MINI_FACE_FILL = 0.5
 interface MiniCanvasProps {
   grid: GridState
   activeFace: CubeFace
+  orientation: Orientation
   onJump: (face: CubeFace) => void
 }
 
-export function MiniCanvas({ grid, activeFace, onJump }: MiniCanvasProps) {
+export function MiniCanvas({ grid, activeFace, orientation, onJump }: MiniCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [scene, setScene] = useState<CubeScene | null>(null)
   const [failed, setFailed] = useState(false)
@@ -72,6 +74,15 @@ export function MiniCanvas({ grid, activeFace, onJump }: MiniCanvasProps) {
   useEffect(() => {
     scene?.setHighlightFace(activeFace)
   }, [scene, activeFace])
+
+  /*
+   * Follows the main cube. `turn` hands back a fresh matrix every time, so a
+   * turn always re-runs this and pulls the mini cube back into step even when
+   * a drag had already left it facing the right way.
+   */
+  useEffect(() => {
+    scene?.setOrientation(orientation)
+  }, [scene, orientation])
 
   if (failed) return null
   return <canvas ref={canvasRef} className="cube3d-mini-canvas" aria-hidden="true" />
