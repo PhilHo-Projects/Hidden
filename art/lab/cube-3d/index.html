@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hidden — cube 3D</title>
+<link rel="stylesheet" href="style.css" />
+<!-- three.js straight off the CDN, pinned. Nothing to install. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="main.js"></script>
+</head>
+<body>
+  <main class="stage" id="stage">
+    <canvas id="scene" aria-label="Cube board"></canvas>
+
+    <button class="turn" data-turn="north" aria-label="Bring the top face to the front">▲</button>
+    <button class="turn" data-turn="south" aria-label="Bring the bottom face to the front">▼</button>
+    <button class="turn" data-turn="west" aria-label="Bring the left face to the front">◀</button>
+    <button class="turn" data-turn="east" aria-label="Bring the right face to the front">▶</button>
+    <button class="turn roll" data-turn="ccw" aria-label="Roll counter-clockwise">⟲</button>
+    <button class="turn roll" data-turn="cw" aria-label="Roll clockwise">⟳</button>
+
+    <p class="status" id="status">Loading cube…</p>
+  </main>
+
+  <header class="hud hud-top">
+    <a class="back" href="/">← lab</a>
+    <div class="facing">
+      <span class="eyebrow">Front</span>
+      <strong id="front-face">—</strong>
+      <span id="front-roll" class="roll-state"></span>
+    </div>
+    <p class="readout" id="readout">Click a cell on the front face.</p>
+  </header>
+
+  <footer class="hud hud-bottom">
+    <div class="swatches" id="swatches" role="group" aria-label="Paint colour"></div>
+    <div class="tools">
+      <button id="camera-toggle" type="button">Perspective</button>
+      <button id="reset" type="button">Reset</button>
+      <button id="clear" type="button">Clear</button>
+    </div>
+    <p class="keys">
+      <kbd>WASD</kbd>/<kbd>arrows</kbd> turn · <kbd>Q</kbd><kbd>E</kbd> roll ·
+      <kbd>1</kbd>–<kbd>3</kbd> colour · <kbd>P</kbd> camera · <kbd>R</kbd> reset · <kbd>C</kbd> clear
+    </p>
+  </footer>
+</body>
+</html>

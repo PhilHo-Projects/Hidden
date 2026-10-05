@@ -18,6 +18,8 @@ interface RevealSnapshotProps {
   indexOffset?: number
   /** Window length in seconds, so the bulbs run out with the authority's timer. */
   seconds: number
+  /** Degrees clockwise, passed to the board. See `BoardGridProps.rotation`. */
+  rotation?: number
   onClose: () => void
 }
 
@@ -75,6 +77,7 @@ export function RevealSnapshot({
   columns,
   indexOffset,
   seconds,
+  rotation,
   onClose,
 }: RevealSnapshotProps) {
   const titleId = useId()
@@ -158,6 +161,7 @@ export function RevealSnapshot({
             grid={grid}
             columns={columns}
             indexOffset={indexOffset}
+            rotation={rotation}
             showDesecration={false}
           />
         </div>

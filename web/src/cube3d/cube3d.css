@@ -1,0 +1,200 @@
+/*
+ * Chrome for the 3D view of the cube prototype.
+ *
+ * Everything here borrows the flat view's language -- `.face-arrow` for the
+ * roll buttons, `.cube-map` for the mini cube's slot and type -- so the two
+ * views read as one mode drawn two ways. The cube itself is the only new thing
+ * on screen, and it should stay the loudest.
+ */
+
+/* The board's square. It keeps `.face-frame > .hidden-board-grid`'s sizing
+ * (height-driven, aspect 1) but holds a canvas instead of a grid of cells. */
+.cube3d-stage {
+  position: relative;
+  display: block;
+}
+
+.cube3d-stage.cube3d-can-place {
+  cursor: pointer;
+}
+
+/* 150% of the square, centred on it: a turning cube sweeps past its face.
+ * Must match CANVAS_SCALE in BoardCanvas.tsx. The pointer is read from the
+ * square, so the overhang never steals a click from the arrows. */
+.cube3d-canvas {
+  position: absolute;
+  inset: -25%;
+  width: 150%;
+  height: 150%;
+  pointer-events: none;
+}
+
+/* Beside the south arrow, at the board's lower corners: a roll turns the face
+ * you are looking at, so the control sits against that face. */
+.cube3d-roll {
+  position: absolute;
+  top: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+  display: grid;
+  width: var(--face-arrow);
+  height: var(--face-arrow);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #5e5e5e;
+  cursor: pointer;
+  place-items: center;
+  transition:
+    color 140ms ease,
+    translate 140ms ease;
+}
+
+.cube3d-roll svg {
+  width: 62%;
+  height: 62%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+}
+
+.cube3d-roll-ccw {
+  right: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+}
+
+.cube3d-roll-cw {
+  left: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
+}
+
+.cube3d-roll-cw svg {
+  scale: -1 1;
+}
+
+.cube3d-roll:hover,
+.cube3d-roll:focus-visible {
+  color: var(--hidden-white);
+}
+
+.cube3d-roll:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+.cube3d-roll:active {
+  translate: 0 1px;
+}
+
+.cube3d-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.8rem;
+  text-align: center;
+}
+
+.cube3d-fallback p {
+  margin: 0;
+  max-width: 16rem;
+  color: #e0a3a3;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+
+.cube3d-fallback button {
+  padding: 0.55rem 0.9rem;
+  border: 2px solid var(--hidden-yellow);
+  background: #171308;
+  color: var(--hidden-white);
+  cursor: pointer;
+  font-family: var(--font-block);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.cube3d-fallback button:hover {
+  background: #2a220b;
+}
+
+.cube3d-fallback button:focus-visible {
+  outline: 3px solid var(--hidden-yellow);
+  outline-offset: 2px;
+}
+
+/* The mini cube takes the unfolded map's slot, anchored the same way. */
+.cube3d-mini {
+  --mini-cube: clamp(7rem, 16vmin, 9.5rem);
+  position: absolute;
+  top: 50%;
+  right: calc(
+    50% + var(--board-side, 0px) / 2 + clamp(2.25rem, 7vmin, 3rem) +
+      clamp(0.6rem, 1.6vw, 1.2rem)
+  );
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  transform: translateY(-50%);
+}
+
+.cube3d-mini-title {
+  margin: 0;
+  color: var(--hidden-muted);
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+}
+
+.cube3d-mini-stage {
+  width: var(--mini-cube);
+  height: var(--mini-cube);
+}
+
+.cube3d-mini-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.cube3d-mini-canvas:active {
+  cursor: grabbing;
+}
+
+.cube3d-mini-note {
+  margin: 0;
+  max-width: var(--mini-cube);
+  color: var(--hidden-muted);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .cube3d-mini {
+    --mini-cube: clamp(5.5rem, 22vw, 7rem);
+    position: static;
+    transform: none;
+    justify-self: center;
+  }
+
+  .cube3d-mini-note {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cube3d-roll {
+    transition: none;
+  }
+
+  .cube3d-roll:active {
+    translate: none;
+  }
+}

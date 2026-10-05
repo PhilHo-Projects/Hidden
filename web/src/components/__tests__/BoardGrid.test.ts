@@ -326,3 +326,23 @@ describe('result score walk', () => {
     expect(markup).toContain('--score-delay:1180ms')
   })
 })
+
+describe('a turned grid', () => {
+  it('turns when asked, so a flat copy matches a rolled cube face', () => {
+    const turned = renderToStaticMarkup(
+      createElement(BoardGrid, { title: '', subtitle: '', grid: gridOf(9), columns: 3, rotation: 90 }),
+    )
+
+    expect(turned).toContain('hidden-board-grid hidden-board-grid-rotated')
+    expect(turned).toContain('--grid-rotation:90deg')
+  })
+
+  it('stays exactly as it was when not turned', () => {
+    // The arena and its tests match the bare class, so no trailing space and no
+    // stray custom property may appear.
+    const square = markupFor(9, 3)
+
+    expect(square).toContain('class="hidden-board-grid"')
+    expect(square).not.toContain('--grid-rotation')
+  })
+})

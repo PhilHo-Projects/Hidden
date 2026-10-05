@@ -33,6 +33,7 @@ const CONTENT_TYPES = {
   '.webp': 'image/webp',
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
+  '.glb': 'model/gltf-binary',
 }
 
 /*

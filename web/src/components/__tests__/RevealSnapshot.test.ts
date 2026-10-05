@@ -72,3 +72,21 @@ describe('reveal snapshot', () => {
     expect(render(true)).not.toContain('cell-desecration')
   })
 })
+
+describe('reveal snapshot on a rolled face', () => {
+  it('turns its board to match the face the player is looking at', () => {
+    const markup = renderToStaticMarkup(
+      createElement(RevealSnapshot, {
+        open: true,
+        opponentName: 'Guest#0427',
+        grid: opponentGrid,
+        columns: 3,
+        seconds: 1.5,
+        rotation: 180,
+        onClose: () => undefined,
+      }),
+    )
+
+    expect(markup).toContain('--grid-rotation:180deg')
+  })
+})
