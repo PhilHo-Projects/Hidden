@@ -29,61 +29,6 @@
   pointer-events: none;
 }
 
-/* Beside the south arrow, at the board's lower corners: a roll turns the face
- * you are looking at, so the control sits against that face. */
-.cube3d-roll {
-  position: absolute;
-  top: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
-  display: grid;
-  width: var(--face-arrow);
-  height: var(--face-arrow);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: #5e5e5e;
-  cursor: pointer;
-  place-items: center;
-  transition:
-    color 140ms ease,
-    translate 140ms ease;
-}
-
-.cube3d-roll svg {
-  width: 62%;
-  height: 62%;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.4;
-}
-
-.cube3d-roll-ccw {
-  right: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
-}
-
-.cube3d-roll-cw {
-  left: calc(50% + var(--board-side, 0px) / 2 + var(--face-arrow-gap));
-}
-
-.cube3d-roll-cw svg {
-  scale: -1 1;
-}
-
-.cube3d-roll:hover,
-.cube3d-roll:focus-visible {
-  color: var(--hidden-white);
-}
-
-.cube3d-roll:focus-visible {
-  outline: 3px solid var(--hidden-yellow);
-  outline-offset: 2px;
-}
-
-.cube3d-roll:active {
-  translate: 0 1px;
-}
-
 .cube3d-fallback {
   position: absolute;
   inset: 0;
@@ -189,12 +134,3 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .cube3d-roll {
-    transition: none;
-  }
-
-  .cube3d-roll:active {
-    translate: none;
-  }
-}

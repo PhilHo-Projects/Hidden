@@ -53,10 +53,11 @@ describe('the 3D board frame', () => {
     expect(labels).toEqual(['LEFT', 'BACK', 'RIGHT', 'HOME'])
   })
 
-  it('offers both rolls', () => {
+  it('offers no roll control', () => {
+    // Straightening a face by hand undid the one thing this view tests.
     const markup = render(IDENTITY)
-    expect(markup).toContain('aria-label="Roll the cube counter-clockwise"')
-    expect(markup).toContain('aria-label="Roll the cube clockwise"')
+    expect(markup).not.toContain('Roll the cube')
+    expect(markup).not.toContain('cube3d-roll')
   })
 
   it('shows the loaded move, like the flat board', () => {

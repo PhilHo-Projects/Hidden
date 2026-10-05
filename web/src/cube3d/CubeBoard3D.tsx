@@ -10,9 +10,6 @@ import { Cube3DBoundary, Cube3DFallback } from './Cube3DBoundary'
 import { LazyBoardCanvas } from './lazy'
 import { frontFace, screenNeighbours, type CubeMove, type Orientation } from './orientation'
 
-// A quarter arc with an arrowhead, drawn once and mirrored for clockwise.
-const ROLL_PATH = 'M6 15a8 8 0 1 0 2.3-9.6M6 3v5h5'
-
 interface CubeBoard3DProps {
   subtitle: string
   grid: GridState
@@ -28,8 +25,8 @@ interface CubeBoard3DProps {
 /**
  * The played board, as a cube.
  *
- * Everything here is ordinary DOM in the main chunk: header, arrows, roll
- * buttons and the board's square. Only the canvas inside the square is lazy,
+ * Everything here is ordinary DOM in the main chunk: header, arrows and the
+ * board's square. Only the canvas inside the square is lazy,
  * so the frame lays out and the arrows work before three.js has arrived, and
  * the arena sizes this exactly as it sizes `BoardGrid`.
  */
@@ -77,27 +74,6 @@ export function CubeBoard3D({
           neighbours={screenNeighbours(orientation)}
           onMove={onTurn}
         />
-        <button
-          type="button"
-          className="cube3d-roll cube3d-roll-ccw"
-          onClick={() => onTurn('ccw')}
-          aria-label="Roll the cube counter-clockwise"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d={ROLL_PATH} />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="cube3d-roll cube3d-roll-cw"
-          onClick={() => onTurn('cw')}
-          aria-label="Roll the cube clockwise"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d={ROLL_PATH} />
-          </svg>
-        </button>
-
         <div className="hidden-board-grid cube3d-stage" ref={setStage}>
           {failed ? (
             fallback
