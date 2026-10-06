@@ -4,10 +4,12 @@ import { directionForKey } from '../game/faceNavigation'
 import { isTypingTarget } from '../hooks/useFaceCamera'
 import { IDENTITY, jumpTo, turn, type CubeMove, type Orientation } from './orientation'
 
-const ROLL_KEYS: Readonly<Record<string, CubeMove>> = { q: 'ccw', e: 'cw' }
-
+/**
+ * The same four directions the flat view uses, and nothing else. `Q`/`E` once
+ * rolled the cube in place; see `CubeMove` for why that went.
+ */
 export function moveForKey(key: string): CubeMove | null {
-  return directionForKey(key) ?? ROLL_KEYS[key] ?? ROLL_KEYS[key.toLowerCase()] ?? null
+  return directionForKey(key)
 }
 
 export interface CubeOrientationControls {

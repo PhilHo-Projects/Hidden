@@ -150,6 +150,14 @@ export class CubeScene {
   private readonly cube = new Group()
   private readonly raycaster = new Raycaster()
   private readonly pointer = new Vector2()
+  /*
+   * A fixed angle the mini cube is looked at from, composed on top of whatever
+   * orientation it is mirroring. Without it, following the main cube exactly
+   * would present the same single face square-on and the preview would stop
+   * reading as a cube at all. Identity for the board, which is square-on by
+   * design.
+   */
+  private readonly viewTilt = new Quaternion()
   private readonly tiles: Tile[] = []
   private readonly byLocation = new Map<number, Tile>()
   private readonly byMesh = new Map<Object3D, Tile>()
@@ -224,7 +232,7 @@ export class CubeScene {
   // ── public ────────────────────────────────────────────────────────────────
 
   setOrientation(orientation: Orientation): void {
-    const target = quaternionOf(orientation)
+    const target = quaternionOf(orientation).premultiply(this.viewTilt)
     if (this.turnTween) {
       this.turnTween.cancelled = true
       this.turnTween = null
@@ -353,8 +361,9 @@ export class CubeScene {
     })
 
     if (this.options.mode === 'mini') {
-      // Starts at a three-quarter view showing home, up and right.
-      this.cube.quaternion.setFromEuler(new Euler(0.45, -0.6, 0))
+      // A three-quarter view showing home, up and right.
+      this.viewTilt.setFromEuler(new Euler(0.45, -0.6, 0))
+      this.cube.quaternion.copy(this.viewTilt)
       this.oriented = true
       this.highlight = this.buildHighlight()
       this.cube.add(this.highlight)

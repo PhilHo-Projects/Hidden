@@ -49,12 +49,13 @@ afterEach(() => {
 })
 
 describe('moveForKey', () => {
-  it('maps arrows, WASD and the two roll keys', () => {
+  it('maps arrows and WASD, and nothing else', () => {
     expect(moveForKey('ArrowUp')).toBe('north')
     expect(moveForKey('d')).toBe('east')
     expect(moveForKey('S')).toBe('south')
-    expect(moveForKey('q')).toBe('ccw')
-    expect(moveForKey('E')).toBe('cw')
+    // Q and E rolled the cube in place. Both are free keys again.
+    expect(moveForKey('q')).toBeNull()
+    expect(moveForKey('E')).toBeNull()
     expect(moveForKey('x')).toBeNull()
   })
 })
@@ -76,13 +77,12 @@ describe('useCubeOrientation', () => {
     expect(frontFace(controls().orientation)).toBe('right')
   })
 
-  it('rolls on Q and E without changing the front face', () => {
+  it('leaves Q and E alone', () => {
     const { controls } = mount(true)
 
     press('e')
-    expect(frontFace(controls().orientation)).toBe('home')
-    expect(rollDegrees(controls().orientation)).toBe(90)
     press('q')
+    expect(frontFace(controls().orientation)).toBe('home')
     expect(rollDegrees(controls().orientation)).toBe(0)
   })
 

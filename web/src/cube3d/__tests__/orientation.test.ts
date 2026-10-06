@@ -78,8 +78,6 @@ describe('cube orientation', () => {
     expect(frontFace(turn(IDENTITY, 'south'))).toBe('down')
     expect(frontFace(turn(IDENTITY, 'east'))).toBe('right')
     expect(frontFace(turn(IDENTITY, 'west'))).toBe('left')
-    expect(frontFace(turn(IDENTITY, 'ccw'))).toBe('home')
-    expect(frontFace(turn(IDENTITY, 'cw'))).toBe('home')
   })
 
   it('arrives on a face rolled, the way a real cube does', () => {
@@ -93,9 +91,35 @@ describe('cube orientation', () => {
 
   it('reads a roll clockwise, the way CSS rotate does', () => {
     expect(rollDegrees(IDENTITY)).toBe(0)
-    expect(rollDegrees(turn(IDENTITY, 'cw'))).toBe(90)
-    expect(rollDegrees(turn(turn(IDENTITY, 'cw'), 'cw'))).toBe(180)
-    expect(rollDegrees(turn(IDENTITY, 'ccw'))).toBe(270)
+    expect(rollDegrees(turn(turn(IDENTITY, 'east'), 'north'))).toBe(90)
+  })
+
+  /*
+   * The roll buttons are gone, so this is what guarantees nothing went with
+   * them: all 24 orientations are still reachable from the four directions
+   * alone. A player who lands on a face turned the wrong way can still
+   * straighten it -- by walking a loop, which is a move in the game, rather
+   * than by pressing a button that only exists to undo the geometry.
+   */
+  it('reaches every orientation of the cube from the four directions', () => {
+    const seen = new Map<string, Orientation>([[IDENTITY.join(), IDENTITY]])
+    const queue: Orientation[] = [IDENTITY]
+
+    while (queue.length > 0) {
+      const current = queue.shift() as Orientation
+      for (const move of CUBE_MOVES) {
+        const next = turn(current, move)
+        const key = next.join()
+        if (seen.has(key)) continue
+        seen.set(key, next)
+        queue.push(next)
+      }
+    }
+
+    expect(seen.size).toBe(24)
+    for (const orientation of seen.values()) {
+      expect([0, 90, 180, 270]).toContain(rollDegrees(orientation))
+    }
   })
 
   it('has exactly one upright orientation per face', () => {

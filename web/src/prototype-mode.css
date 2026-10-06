@@ -22,7 +22,7 @@
   max-width: min(50rem, 92vw);
   margin-inline: auto;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.35rem;
 }
 
 .mode-select-hazard {
@@ -30,9 +30,14 @@
   --mode-accent-fill: #1a0b0b;
 }
 
+/*
+ * Stacked, not side by side. MAIN and PROTOTYPES are not two of a kind: one is
+ * the game, the other is a drawer of experiments with its own contents. A row
+ * gave them equal weight and left the sub-options floating under the gap
+ * between two cards, belonging to neither.
+ */
 .mode-select-options {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 0.5rem;
 }
 
@@ -41,7 +46,6 @@
   position: relative;
   display: inline-flex;
   min-height: 3rem;
-  flex: 1 1 9rem;
   align-items: center;
   gap: 0.55rem;
   padding: 0.6rem 0.85rem;
@@ -59,6 +63,19 @@
   border-color: #565656;
   background: #1c1c1c;
   color: #fff;
+}
+
+/*
+ * Warmer than the neutral grey MAIN wears, so the two read as different kinds
+ * of thing before either is chosen. Not the full hazard red -- that is reserved
+ * for having actually picked it.
+ */
+.mode-select-option-prototype {
+  border-color: #4a2f2f;
+}
+
+.mode-select-option-prototype:hover {
+  border-color: #6d4242;
 }
 
 .mode-select-option-active {
@@ -145,8 +162,8 @@
 
 .mode-select-warning {
   margin: 0;
-  border-left: 3px solid var(--hidden-red);
-  padding-left: 0.6rem;
+  max-width: calc(100% - 2.2rem);
+  text-align: center;
   color: #e0a3a3;
   font-size: 0.66rem;
   font-weight: 700;
@@ -166,20 +183,41 @@
  * same box language as the options above, one step smaller. `flex-basis` does
  * the stacking on a narrow screen.
  */
+/*
+ * What is inside PROTOTYPES, drawn as inside it without knocking it off centre.
+ *
+ * A rule down the left said so plainly and cost the thing it was explaining:
+ * the indent pushed the group off the axis every other control sits on. The
+ * same hierarchy now comes from proximity -- these hug the card above more
+ * tightly than the two modes hug each other -- and from being inset on both
+ * sides, which reads as subordinate while staying centred.
+ */
+.mode-select-nest {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  animation: mode-select-nest-in 140ms ease-out both;
+}
+
+@keyframes mode-select-nest-in {
+  from {
+    opacity: 0;
+    translate: 0 -0.25rem;
+  }
+}
+
 .mode-select-views {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-left: 0.55rem;
-  border-left: 3px solid var(--hidden-red);
-  padding-left: 0.6rem;
+  display: grid;
+  gap: 0.35rem;
+  /* Narrower on both sides than the modes above, which is what says "inside"
+   * now that nothing is drawn down the left. */
+  width: calc(100% - 2.2rem);
 }
 
 .mode-select-view {
   position: relative;
   display: inline-flex;
-  min-height: 2.6rem;
-  flex: 1 1 12rem;
+  min-height: 2.4rem;
   align-items: center;
   gap: 0.55rem;
   padding: 0.5rem 0.75rem;
@@ -286,6 +324,10 @@
   .mode-select-option,
   .mode-select-view {
     transition: none;
+  }
+
+  .mode-select-nest {
+    animation: none;
   }
 }
 

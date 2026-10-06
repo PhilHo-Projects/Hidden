@@ -23,8 +23,15 @@ export type Orientation = readonly [
   number, number, number,
 ]
 
-/** A quarter turn about a screen axis. A direction brings that side's face to the front. */
-export type CubeMove = FaceDirection | 'ccw' | 'cw'
+/**
+ * A quarter turn about a screen axis, bringing that side's face to the front.
+ *
+ * Only the four directions. Rolling the cube in place about Z was offered as a
+ * pair of buttons and removed: it let a player straighten a face by hand, which
+ * turned the one thing this view exists to test -- that a face can arrive
+ * rolled -- into a chore to undo.
+ */
+export type CubeMove = FaceDirection
 
 /** Degrees clockwise, the way CSS `rotate` reads an angle. */
 export type Roll = 0 | 90 | 180 | 270
@@ -58,19 +65,15 @@ const MOVE_MATRICES: Readonly<Record<CubeMove, Orientation>> = {
   south: [1, 0, 0, 0, 0, 1, 0, -1, 0], // -90° about X
   east: [0, 0, -1, 0, 1, 0, 1, 0, 0], // -90° about Y: the right face comes forward
   west: [0, 0, 1, 0, 1, 0, -1, 0, 0], // +90° about Y
-  ccw: [0, -1, 0, 1, 0, 0, 0, 0, 1], // +90° about Z
-  cw: [0, 1, 0, -1, 0, 0, 0, 0, 1], // -90° about Z
 }
 
-export const CUBE_MOVES: readonly CubeMove[] = ['north', 'east', 'south', 'west', 'ccw', 'cw']
+export const CUBE_MOVES: readonly CubeMove[] = ['north', 'east', 'south', 'west']
 
 export const INVERSE_MOVE: Readonly<Record<CubeMove, CubeMove>> = {
   north: 'south',
   south: 'north',
   east: 'west',
   west: 'east',
-  ccw: 'cw',
-  cw: 'ccw',
 }
 
 // `+ 0` turns a -0 into 0, so `toEqual` and `===` never disagree.
